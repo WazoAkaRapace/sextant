@@ -230,8 +230,6 @@ def test_sextant_sensors_are_pushed_not_polled():
 def test_location_sensor_restores_last_state_over_a_restart():
     """Leela read Unknown for 10 s after every HA restart: the sensor was
     added with its seed state and only the first cycle gave it a room."""
-    import asyncio
-    import types
 
     loc = sn.CustomDistanceSensor("leela Sextant Location", "sextant_location_leela",
                                   "sensor.leela_sextant_location", "leela",
@@ -241,14 +239,16 @@ def test_location_sensor_restores_last_state_over_a_restart():
     assert loc.state == "Box Room"
     assert loc.extra_state_attributes["room"] == "Box Room"
 
-    # A cycle that ran before the add wins over the recorded value; an
-    # unavailable record is not worth restoring.
-    fresh = sn.CustomDistanceSensor("x", "sextant_location_x", "sensor.x_sextant_location", "x",
-                                    attrs=sn.INITIAL_ATTRS["sextant_location"])
-    fresh._state = "Kitchen"
-    fresh._test_last_state = types.SimpleNamespace(state="Box Room", attributes={})
-    asyncio.run(fresh.async_added_to_hass())
-    assert fresh.state == "Kitchen"
+    # A cycle that ran before the add wins over the recorded value, even
+    # when it found nothing; an unavailable record is not worth restoring.
+    for found in ("Kitchen", "unknown"):
+        fresh = sn.CustomDistanceSensor("x", "sextant_location_x", "sensor.x_sextant_location", "x",
+                                        attrs=sn.INITIAL_ATTRS["sextant_location"])
+        hass = types.SimpleNamespace(data={"sextant_sensors": {"sensor.x_sextant_location": fresh}})
+        sextant.update_sextant_sensor_state(hass, "sensor.x_sextant_location", found)
+        fresh._test_last_state = types.SimpleNamespace(state="Box Room", attributes={})
+        asyncio.run(fresh.async_added_to_hass())
+        assert fresh.state == found
     stale = sn.CustomDistanceSensor("y", "sextant_location_y", "sensor.y_sextant_location", "y")
     stale._test_last_state = types.SimpleNamespace(state="unavailable", attributes={})
     asyncio.run(stale.async_added_to_hass())

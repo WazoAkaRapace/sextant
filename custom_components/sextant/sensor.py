@@ -290,6 +290,10 @@ class CustomDistanceSensor(SensorEntity, RestoreEntity):
     # the one automations and history care about.
     _unrecorded_attributes = frozenset({"last_heard", *FIT_ATTRIBUTES})
 
+    # Set by update_sextant_sensor_state: "unknown" alone cannot tell a seed
+    # state from a cycle that found nothing.
+    _updated = False
+
     """A representation of a custom sensor"""
     def __init__(self, name, unique_id, entity_id, device_key=None, via_device=None, attrs=None, device_name=None, model=None):
         self._name = name
@@ -318,8 +322,8 @@ class CustomDistanceSensor(SensorEntity, RestoreEntity):
         """Keep the last known state over a restart instead of reading
         unknown until the first positioning cycle (about 10 s)."""
         await super().async_added_to_hass()
-        if self._state != "unknown":
-            return  # a cycle already ran while the entity was disabled or pending
+        if self._updated:
+            return  # a cycle already ran while the entity was pending; its result (even unknown) wins
         last = await self.async_get_last_state()
         if last is not None and last.state not in ("unknown", "unavailable"):
             self._state = last.state

@@ -3265,6 +3265,7 @@ def update_sextant_sensor_state(hass, entity_id, state, attributes=None, now=Non
         # Only the location sensor says when the thing was last heard; on the
         # room, spot, floor and nearest-room sensors it only cost writes.
         attributes = _without_last_heard(attributes)
+    sensor._updated = True
     if getattr(sensor, "hass", None) is None:
         # Not added to HA (disabled in the registry, or not yet added). The
         # value is kept on the object so it is current if the entity is
