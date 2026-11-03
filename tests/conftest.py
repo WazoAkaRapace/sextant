@@ -291,11 +291,20 @@ def _install_homeassistant_stubs():
     _module("homeassistant.loader", async_get_integration=_async_get_integration)
     # Enough of the sensor platform for sensor.py to import (sensor tests
     # exercise the cache/creation logic, never HA's entity machinery).
-    _module("homeassistant.components.sensor", SensorEntity=object,
+    _module("homeassistant.components.sensor", SensorEntity=type("SensorEntity", (), {}),  # a class, so RestoreEntity can follow it in an MRO
             SensorStateClass=types.SimpleNamespace(MEASUREMENT="measurement"))
     _module("homeassistant.components.binary_sensor", BinarySensorEntity=object,
             BinarySensorDeviceClass=types.SimpleNamespace(OCCUPANCY="occupancy"))
     _module("homeassistant.helpers.entity", DeviceInfo=dict)
+
+    class _RestoreEntity:
+        async def async_added_to_hass(self):
+            pass
+
+        async def async_get_last_state(self):
+            return getattr(self, "_test_last_state", None)
+
+    _module("homeassistant.helpers.restore_state", RestoreEntity=_RestoreEntity)
 
     # Config-entry flows: just enough of ConfigFlow/OptionsFlow for the
     # integration's flow module to import and for tests to drive its steps.

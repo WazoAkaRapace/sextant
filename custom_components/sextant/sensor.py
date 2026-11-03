@@ -6,6 +6,7 @@ from homeassistant.helpers.entity import DeviceInfo
 import logging
 
 from homeassistant.helpers.event import async_call_later
+from homeassistant.helpers.restore_state import RestoreEntity
 
 from .const import ACCURACY_ENTITY_ID, FIT_ATTRIBUTES, GLOBAL_ENTITY_IDS, PEOPLE_HOME_ENTITY_ID, UNTRACKED_ENTITY_ID  # single source of truth (shared with __init__)
 from . import bermuda_source
@@ -278,7 +279,7 @@ def get_filtered_entities(hass):
         filtered.add(eid.replace("sensor.", "").split("_distance_to_")[0])
     return list(filtered)
 
-class CustomDistanceSensor(SensorEntity):
+class CustomDistanceSensor(SensorEntity, RestoreEntity):
     # Pushed by the positioning cycle; there is nothing for Home Assistant to poll.
     _attr_should_poll = False
 
@@ -312,6 +313,17 @@ class CustomDistanceSensor(SensorEntity):
             if via_device:
                 info["via_device"] = via_device
             self._attr_device_info = info
+
+    async def async_added_to_hass(self):
+        """Keep the last known state over a restart instead of reading
+        unknown until the first positioning cycle (about 10 s)."""
+        await super().async_added_to_hass()
+        if self._state != "unknown":
+            return  # a cycle already ran while the entity was disabled or pending
+        last = await self.async_get_last_state()
+        if last is not None and last.state not in ("unknown", "unavailable"):
+            self._state = last.state
+            self._attrs = dict(last.attributes)
 
     @property
     def name(self):
