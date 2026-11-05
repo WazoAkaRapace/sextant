@@ -1052,6 +1052,24 @@ def _elect3(entity, x, t, layout=None):
     return sextant._elect_zone(entity, "F", instant, Point(x, 50.0), _kf(x, 50.0, sigma_px=5.0), _three_rooms(), 100.0, layout, now=t)[0]
 
 
+def test_a_floor_challenge_holds_the_room_but_not_its_clock():
+    """On the way from the bedroom to the office below, the room election on
+    the old floor switched to the landing 16 s before the floor flipped: a
+    room the thing was about to lose anyway."""
+    sextant._zone_state.clear()
+    layout = {"tuning": {"zone_lock_warmup_secs": 0.0, "zone_prob_smoothing": 0.0}}
+
+    def elect(x, t, hold):
+        instant = "Kitchen" if x < 100 else "Hall"
+        return sextant._elect_zone("e", "F", instant, Point(x, 50.0), _kf(x, 50.0, sigma_px=5.0), _three_rooms(), 100.0,
+                                   layout, now=t, hold=hold)[0]
+
+    assert elect(50, 0.0, False) == "Kitchen"
+    for t in (1.0, 21.0, 60.0):           # dwell long passed, floor under challenge: held
+        assert elect(250, t, True) == "Kitchen"
+    assert elect(250, 61.0, False) == "Hall"  # challenge lapsed: the clock had run, no new dwell
+
+
 def test_far_move_detection_uses_the_kpi_reach():
     polys = _three_rooms()
     assert sextant._far_move(polys, "Kitchen", "Office", 100.0)

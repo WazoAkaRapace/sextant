@@ -2856,6 +2856,7 @@ async def update_trilateration_and_zone(hass, new_global_data, entity):
         zone, zone_locked, zone_speed = _elect_zone(
             entity, lowest_floor_name, instant_zone, test_point,
             kf_for_election, zone_polys, scale, layout, now=now,
+            hold=_floor_challenge.get(entity) is not None,
         )
         # Sub-zone: only the elected zone's own sub-zones are eligible, with
         # membership smoothing, exit hysteresis, dwell and the zone lock (see
@@ -5171,7 +5172,7 @@ def _zone_membership(zone_polys, samples):
     return {z: s / total for z, s in shares.items()} if total > 0 else {}
 
 
-def _elect_zone(entity, floor_name, instant_zone, point, kf_state, zone_polys, scale, layout, now=None):
+def _elect_zone(entity, floor_name, instant_zone, point, kf_state, zone_polys, scale, layout, now=None, hold=False):
     """The zone to PUBLISH for a thing this cycle. Returns
     (zone, locked, speed_m_s).
 
@@ -5323,9 +5324,13 @@ def _elect_zone(entity, floor_name, instant_zone, point, kf_state, zone_polys, s
         since = ch["since"]
     else:
         since = challenge_since if challenge_since is not None else now
-    if now - since >= dwell:
+    if now - since >= dwell and not hold:
         st.update(zone=best, since=now, challenge=None)
         return best, False, speed
+    # hold: a floor challenge is running, so a switch here can only name a
+    # room on a floor the thing is about to lose (the 16 s of "Catwalk" seen
+    # on the way from the bedroom to the office below). The challenge keeps
+    # its clock, so a challenge that lapses costs the room switch nothing.
     st["challenge"] = {"zone": best, "since": since}
     return incumbent, False, speed
 
