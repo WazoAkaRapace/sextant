@@ -1625,6 +1625,25 @@ def test_subzone_holds_while_the_zone_is_locked_and_follows_the_zone():
     assert _sub("e", (300, 250), t + 310, zone="Kitchen") == ("unknown", "Kitchen")
 
 
+def test_a_locked_spot_gives_way_to_a_neighbour_the_fix_sits_in():
+    """Two bedside tables 1.8 m apart are both inside subzone_lock_release_m,
+    so a fix that settles on the other table must still move the spot."""
+    from shapely.geometry import Point, Polygon
+    sextant._subzone_state.clear()
+    polys = [("David", "Bed", Polygon([(463, 461), (533, 461), (533, 511), (463, 511)]), frozenset()),
+             ("Michelle", "Bed", Polygon([(217, 460), (287, 460), (287, 510), (217, 510)]), frozenset())]
+    layout = {"tuning": {"subzone_switch_secs": 20.0, "zone_prob_smoothing": 0.6}}
+    sub = lambda point, now, locked: sextant._elect_subzone("e", "F", "Bed", locked, Point(*point), None, polys, 100.0, layout, now=now)
+    t = 1000.0
+    for dt in (0, 10, 30, 31):
+        sub((500, 480), t + dt, False)
+    assert sub((500, 480), t + 40, True) == ("David", "Bed")
+    # Wandering between the tables keeps the spot, as before.
+    assert sub((380, 480), t + 60, True) == ("David", "Bed")
+    seen = [sub((250, 470), t + 100 + dt, True)[0] for dt in range(0, 80, 10)]
+    assert seen[0] == "David" and seen[-1] == "Michelle"
+
+
 def test_subzone_switches_to_a_clearly_better_neighbour():
     sextant._subzone_state.clear()
     t = 1000.0

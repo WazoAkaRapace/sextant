@@ -5666,7 +5666,11 @@ def _elect_subzone(entity, floor_name, zone, zone_locked, point, kf_state, sub_p
     away_px = cur_poly.distance(Point(*center)) if cur_poly is not None else None
     still_near = away_px is not None and away_px <= margin_px
     release_px = _tuning(layout, "subzone_lock_release_m") * (scale if isinstance(scale, (int, float)) and scale > 0 else 0.0)
-    if current != "unknown" and zone_locked and away_px is not None and away_px <= release_px:
+    # A fix sitting inside ANOTHER spot is not a wander: two bedside tables
+    # 1.8 m apart are both within the release distance, so Michelle's phone
+    # stayed on David's table all night (2026-11-06).
+    on_other = any(poly.contains(Point(*center)) for sid, _p, poly in polys if sid != current)
+    if current != "unknown" and zone_locked and away_px is not None and away_px <= release_px and not on_other:
         st["pending"] = None
         # A still thing stays on its couch / table / hook: its fix wanders
         # about while it lies there and the spot is often smaller than that
