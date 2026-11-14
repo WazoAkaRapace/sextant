@@ -21,7 +21,7 @@ _NAME = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}Z\.jsonl$")
 
 def row(person, now, source, presence, state, home, wifi_raw, wifi_used, ble_age, gps_zone, ap=None, **inputs):
     """(line, key) for one person's cycle; ``key`` is what a change of result looks like."""
-    key = (source, presence, bool(home), bool(wifi_raw), bool(wifi_used), gps_zone)
+    key = (source, presence, state, bool(home), bool(wifi_raw), bool(wifi_used), gps_zone)
     line = {"t": round(now, 1), "p": person, "src": source, "pres": presence, "state": state, "home": bool(home),
             "wifi": bool(wifi_raw), "wifi_used": bool(wifi_used), "ble_age": None if ble_age is None else round(ble_age),
             "gps": gps_zone, "ap": ap, **inputs}

@@ -408,3 +408,10 @@ def test_the_person_log_keeps_hours_and_drops_older(tmp_path):
     assert len(os.listdir(d)) == 2
     person_log.append(d, [c], 48, now=1000.0 + 49 * 3600)
     assert len(os.listdir(d)) == 2 and "1970-01-01T00Z.jsonl" not in os.listdir(d)
+
+
+def test_a_room_change_is_a_change_in_the_person_log():
+    from custom_components.sextant import person_log
+    _, a = person_log.row("jo", 1.0, "ble", "here", "Kitchen", True, None, None, 5, None)
+    _, b = person_log.row("jo", 2.0, "ble", "here", "Bedroom", True, None, None, 5, None)
+    assert a != b
