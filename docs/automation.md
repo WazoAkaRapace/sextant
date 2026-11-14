@@ -72,8 +72,8 @@ what that access point has been learned to mean, the
 attribute `access_point` names it, and `via` is the Wi-Fi tracker. Wi-Fi that
 would start a new visit (an arrival) must read home for `wifi_confirm_secs`
 (5 minutes) first; a visit already under way is carried on at once.
-Every change of source, presence, home/away or Wi-Fi word is written to
-`config/sextant_person_log/YYYYMMDD.jsonl` (30 days) to measure how often Wi-Fi misleads. A router
+Every cycle, each person's result and inputs are written to
+`config/sextant_person_log` (hourly files, `person_log_hours`, 48 h) to measure how often Wi-Fi misleads. A router
 holds a client home for minutes after it last saw it, so a GPS fix that far
 from home, made over a minute after the access point last saw the phone
 (UniFi), overrules it. After

@@ -97,6 +97,7 @@ distances in metres.
 | `away_after_secs` | 900 | when the Live list stops waiting for a thing and calls it away |
 | `gps_leave_m` | 200 | a person gone quiet is held in their last room until `away_after_secs` runs out, unless a GPS fix made since the last sighting puts them outside the home zone and at least this far from home (past its own accuracy), when they are away now. The same fix, made over a minute after the access point last saw their phone, overrules a Wi-Fi tracker that still reads home; 0 turns both off |
 | `wifi_confirm_secs` | 300 | a Wi-Fi tracker reading home must stand this long before it starts a visit for someone BLE has lost (a router holds a client for minutes after it left); a visit already under way is carried on at once; 0 turns it off |
+| `person_log_hours` | 48 | keep a per-person line every cycle (result and inputs) in `config/sextant_person_log` for this many hours, to find out why a location or arrival was wrong; 0 = off |
 | `fingerprint_marks_scope` | `class` | whose location pins place a thing: `own`, `class` (also things of its class) or `all` |
 | `history_hours` | 6 | hours of position history kept (scrubber, timeline, Activity), 1 to 168 |
 | `stale_after_secs` | 120 | unheard this long, a thing is drawn as a ghost on Live (display only) |

@@ -396,14 +396,15 @@ def test_a_visit_under_way_is_carried_on_by_wifi_at_once():
     assert persons.wifi_gate(w, None, None, 1000.0, 300.0)[1] is None            # no visit yet counts as away
 
 
-def test_the_person_log_writes_only_on_a_change_and_prunes(tmp_path):
-    from custom_components.sextant import person_log
-    a, ka = person_log.row("jo", 1000.0, "wifi", "away", "home", True, {"ap": "x"}, {"ap": "x"}, 1200.4, "not_home", "Garage")
-    b, kb = person_log.row("jo", 1015.0, "wifi", "away", "home", True, {"ap": "x"}, {"ap": "x"}, 1215.0, "not_home", "Garage")
-    c, kc = person_log.row("jo", 1030.0, "gps", "away", "away", False, None, None, 1230.0, "not_home")
-    assert ka == kb != kc and a["ble_age"] == 1200 and a["wifi_used"] is True
-    d = str(tmp_path / "log")
-    person_log.append(d, [a, c], now=1000.0)
-    person_log.append(d, [b], now=1000.0 + 40 * 86400)
+def test_the_person_log_keeps_hours_and_drops_older(tmp_path):
     import os
-    assert os.listdir(d) == ["19700210.jsonl"]                  # the 40-day-old file went
+    from custom_components.sextant import person_log
+    a, ka = person_log.row("jo", 1000.0, "wifi", "away", "home", True, {"ap": "x"}, {"ap": "x"}, 1200.4, "not_home", "Garage", best=None, things=[{"e": "p"}])
+    c, kc = person_log.row("jo", 1030.0, "gps", "away", "away", False, None, None, 1230.0, "not_home")
+    assert ka != kc and a["ble_age"] == 1200 and a["wifi_used"] is True and a["things"] == [{"e": "p"}]
+    d = str(tmp_path / "log")
+    person_log.append(d, [a, c], 48, now=1000.0)
+    person_log.append(d, [a], 48, now=1000.0 + 47 * 3600)       # 47 h later: the first hour is still inside 48 h
+    assert len(os.listdir(d)) == 2
+    person_log.append(d, [c], 48, now=1000.0 + 49 * 3600)
+    assert len(os.listdir(d)) == 2 and "1970-01-01T00Z.jsonl" not in os.listdir(d)

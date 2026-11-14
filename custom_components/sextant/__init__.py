@@ -821,6 +821,10 @@ TUNING_SPEC = {
     # visit for someone BLE has lost (persons.wifi_gate): a router holds a
     # client minutes after it left, which made false arrivals. 0 = off.
     "wifi_confirm_secs": (300.0, float, 0.0, 3600.0),
+    # Keep a per-person line every cycle (result and inputs: who was heard,
+    # what Wi-Fi said) in config/sextant_person_log for this many hours, to
+    # find out why a location or an arrival was wrong. 0 = off. See person_log.py.
+    "person_log_hours": (48.0, float, 0.0, 720.0),
     # Keep every floor election (each cycle's per-floor candidates, the odds
     # and the winner, per thing) for this many hours in
     # config/sextant_election_log, for tools/replay_floors.py. 0 = off. About
@@ -5253,17 +5257,36 @@ def _update_person_sensors(hass):
             if suffix == "sextant_person_location":
                 logged = (state, attrs.get("source"))
         _person_visits[person] = persons_mod.visit(_person_visits.get(person), persons_mod.home_via(presence, gps, wifi_home), last_heard, now)
-        line, key = person_log_mod.row(
-            person, now, logged[1], presence, logged[0], _person_visits[person].get("arrived") is not None, wifi_raw, wifi_home,
-            None if last_heard is None else now - last_heard, (gps or {}).get("zone"), (wifi_raw or {}).get("ap_name") or (wifi_raw or {}).get("ap"))
-        if _person_log_key.get(person) != key:
-            _person_log_key[person] = key
-            log_rows.append(line)
+        try:
+            if _tuning(layout, "person_log_hours") > 0:
+                cand = {c["ent"]: c for c in candidates}
+                trackers_in = [
+                    {"e": a["entity"], "home": c.get("home"), "ap": c.get("ap"),
+                     "seen_age": None if not isinstance(seen_at, (int, float)) else round(now - seen_at)}
+                    for a in (view.get("assigned") or {}).get(person) or []
+                    for c in [(view.get("candidates") or {}).get(a["entity"]) or {}]
+                    for seen_at in [(wifi_clients.get(c.get("mac")) or {}).get("last_seen")]
+                ]
+                line, key = person_log_mod.row(
+                    person, now, logged[1], presence, logged[0], _person_visits[person].get("arrived") is not None, wifi_raw, wifi_home,
+                    None if last_heard is None else now - last_heard, (gps or {}).get("zone"),
+                    (wifi_raw or {}).get("ap_name") or (wifi_raw or {}).get("ap"),
+                    best=(best or {}).get("ent"), held=bool(held), left_behind=sorted(c["ent"] for c in left_behind),
+                    things=[{"e": e, "cls": classes.get(e), "pres": pr, "zone": (cand.get(e) or {}).get("zone"),
+                             "age": None if not cand.get(e) or cand[e].get("updated") is None else round(now - cand[e]["updated"])}
+                            for e, pr in presence_by_ent.items()],
+                    trk=trackers_in)
+                line["chg"] = _person_log_key.get(person) != key
+                _person_log_key[person] = key
+                log_rows.append(line)
+        except Exception as e:  # noqa: BLE001 - the log is a record, never a stop
+            _LOGGER.debug("Person log line not made: %s", e)
         tracker = trackers.get(slug)
         if tracker is not None:
             tracker.set_fix(persons_mod.tracker_fix(presence, gps, _person_visits[person], wifi_home))
     if log_rows:
-        hass.async_add_executor_job(person_log_mod.append, hass.config.path(person_log_mod.LOG_DIRNAME), log_rows)
+        hass.async_add_executor_job(person_log_mod.append, hass.config.path(person_log_mod.LOG_DIRNAME), log_rows,
+                                    _tuning(layout, "person_log_hours"))
     if now >= _events_from:
         for event, data in persons_mod.visit_events(_event_visits, _person_visits, pets):
             hass.bus.async_fire(event, data)
