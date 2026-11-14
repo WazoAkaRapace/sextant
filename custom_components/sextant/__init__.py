@@ -5222,8 +5222,10 @@ def _update_person_sensors(hass):
                 wifi_home = _wifi_for(person, view, outrun)
         wifi_raw = wifi_home
         _wifi_since[person], wifi_home = persons_mod.wifi_gate(
-            wifi_home if presence == "away" else None, _wifi_since.get(person), _person_visits.get(person), now,
-            _tuning(layout, "wifi_confirm_secs"))
+            wifi_home, _wifi_since.get(person), _person_visits.get(person), now,
+            # Not while the events settle after a start: the baseline must see Wi-Fi's word, or the
+            # hold ends after it and fires an arrival for someone who never left.
+            0.0 if now < _events_from else _tuning(layout, "wifi_confirm_secs"))
         # Learning, from BLE's word: the access point each of their trackers
         # is on gets this floor and room in its footprint, and every candidate
         # tracker is scored against this person by whether its access point's
