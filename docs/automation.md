@@ -67,8 +67,13 @@ two minutes) Sextant asks their Home Assistant companion app (`notify.mobile_app
 location, once per quiet spell. It is skipped when `gps_leave_m` is 0.
 Once Sextant has lost them (`presence: away`), a phone or watch of theirs still joined to one
 of the house's Wi-Fi access points keeps them home (`source: wifi`): the
-room and floor are what that access point has been learned to mean, the
-attribute `access_point` names it, and `via` is the Wi-Fi tracker. A router
+location is `home` (an access point's room is a guess, so no room), the floor is
+what that access point has been learned to mean, the
+attribute `access_point` names it, and `via` is the Wi-Fi tracker. Wi-Fi that
+would start a new visit (an arrival) must read home for `wifi_confirm_secs`
+(5 minutes) first; a visit already under way is carried on at once.
+Every cycle, each person's result and inputs are written to
+`config/sextant_person_log` (hourly files, `person_log_hours`, 48 h) to measure how often Wi-Fi misleads. A router
 holds a client home for minutes after it last saw it, so a GPS fix that far
 from home, made over a minute after the access point last saw the phone
 (UniFi), overrules it. After

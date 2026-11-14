@@ -89,6 +89,7 @@ from . import truth as truth_mod
 from . import persons as persons_mod
 from . import kpi
 from . import wifi as wifi_mod
+from . import person_log as person_log_mod
 from . import heat as heat_mod
 from . import rooms as rooms_mod
 from . import runtime as runtime_mod
@@ -816,6 +817,14 @@ TUNING_SPEC = {
     # its own accuracy), when they are away now (persons.gps_left). Far enough
     # that a fix wandering about the property line never counts. 0 = off.
     "gps_leave_m": (200.0, float, 0.0, 100000.0),
+    # A Wi-Fi tracker reading home must stand this long before it starts a
+    # visit for someone BLE has lost (persons.wifi_gate): a router holds a
+    # client minutes after it left, which made false arrivals. 0 = off.
+    "wifi_confirm_secs": (300.0, float, 0.0, 3600.0),
+    # Keep a per-person line every cycle (result and inputs: who was heard,
+    # what Wi-Fi said) in config/sextant_person_log for this many hours, to
+    # find out why a location or an arrival was wrong. 0 = off. See person_log.py.
+    "person_log_hours": (48.0, float, 0.0, 720.0),
     # Keep every floor election (each cycle's per-floor candidates, the odds
     # and the winner, per thing) for this many hours in
     # config/sextant_election_log, for tools/replay_floors.py. 0 = off. About
@@ -4244,6 +4253,10 @@ _person_last = {}
 _gps_asked = {}
 # Each person's visit (persons.visit): {person: {"arrived", "departed"}}; saved with the runtime.
 _person_visits = {}
+# person -> when Wi-Fi first read them home in an unbroken run (persons.wifi_gate);
+# person -> the key of the last row written to the person log (person_log.row).
+_wifi_since = {}
+_person_log_key = {}
 # The visits the events were last told from (persons.visit_events), and when
 # telling starts: a restart's first minutes, with GPS and Wi-Fi not loaded yet,
 # can read someone away who never moved, and that must not run a routine.
@@ -5091,6 +5104,10 @@ def _update_person_sensors(hass):
         del _arrivals[ent]
     for person in [p for p in _person_visits if p not in by_person]:
         del _person_visits[person]
+    for person in [p for p in _person_log_key if p not in by_person]:
+        _person_log_key.pop(person, None)
+        _wifi_since.pop(person, None)
+    log_rows = []
     if not by_person:
         return
     classes = layout.get("thing_classes") or {}
@@ -5203,6 +5220,10 @@ def _update_person_sensors(hass):
             }
             if outrun:
                 wifi_home = _wifi_for(person, view, outrun)
+        wifi_raw = wifi_home
+        _wifi_since[person], wifi_home = persons_mod.wifi_gate(
+            wifi_home if presence == "away" else None, _wifi_since.get(person), _person_visits.get(person), now,
+            _tuning(layout, "wifi_confirm_secs"))
         # Learning, from BLE's word: the access point each of their trackers
         # is on gets this floor and room in its footprint, and every candidate
         # tracker is scored against this person by whether its access point's
@@ -5233,10 +5254,39 @@ def _update_person_sensors(hass):
             # What kind of thing speaks for them (phone, watch, cat...), so a card need not guess from its name.
             attrs["via_class"] = classes.get(attrs["via"]) if attrs.get("via") else None
             update_sextant_sensor_state(hass, persons_mod.sensor_entity_id(slug, suffix, person in pets), state, attrs)
+            if suffix == "sextant_person_location":
+                logged = (state, attrs.get("source"))
         _person_visits[person] = persons_mod.visit(_person_visits.get(person), persons_mod.home_via(presence, gps, wifi_home), last_heard, now)
+        try:
+            if _tuning(layout, "person_log_hours") > 0:
+                cand = {c["ent"]: c for c in candidates}
+                trackers_in = [
+                    {"e": a["entity"], "home": c.get("home"), "ap": c.get("ap"),
+                     "seen_age": None if not isinstance(seen_at, (int, float)) else round(now - seen_at)}
+                    for a in (view.get("assigned") or {}).get(person) or []
+                    for c in [(view.get("candidates") or {}).get(a["entity"]) or {}]
+                    for seen_at in [(wifi_clients.get(c.get("mac")) or {}).get("last_seen")]
+                ]
+                line, key = person_log_mod.row(
+                    person, now, logged[1], presence, logged[0], _person_visits[person].get("arrived") is not None, wifi_raw, wifi_home,
+                    None if last_heard is None else now - last_heard, (gps or {}).get("zone"),
+                    (wifi_raw or {}).get("ap_name") or (wifi_raw or {}).get("ap"),
+                    best=(best or {}).get("ent"), held=bool(held), left_behind=sorted(c["ent"] for c in left_behind),
+                    things=[{"e": e, "cls": classes.get(e), "pres": pr, "zone": (cand.get(e) or {}).get("zone"),
+                             "age": None if not cand.get(e) or cand[e].get("updated") is None else round(now - cand[e]["updated"])}
+                            for e, pr in presence_by_ent.items()],
+                    trk=trackers_in)
+                line["chg"] = _person_log_key.get(person) != key
+                _person_log_key[person] = key
+                log_rows.append(line)
+        except Exception as e:  # noqa: BLE001 - the log is a record, never a stop
+            _LOGGER.debug("Person log line not made: %s", e)
         tracker = trackers.get(slug)
         if tracker is not None:
             tracker.set_fix(persons_mod.tracker_fix(presence, gps, _person_visits[person], wifi_home))
+    if log_rows:
+        hass.async_add_executor_job(person_log_mod.append, hass.config.path(person_log_mod.LOG_DIRNAME), log_rows,
+                                    _tuning(layout, "person_log_hours"))
     if now >= _events_from:
         for event, data in persons_mod.visit_events(_event_visits, _person_visits, pets):
             hass.bus.async_fire(event, data)

@@ -113,9 +113,9 @@ def test_wifi_keeps_a_person_home_between_ble_and_gps():
     assert fix["location_name"] == "home" and fix["source_type"] == "router" and fix["source"] == "wifi" and fix["tracker"] == "device_tracker.iphone"
     out = persons.fuse(None, [], "away", None, gps_away, [], None, w)
     state, attrs = out["sextant_person_location"]
-    assert state == "Kitchen" and attrs["source"] == "wifi" and attrs["kind"] == "room" and attrs["access_point"] == "Kitchen E7"
+    assert state == "home" and attrs["source"] == "wifi" and attrs["kind"] == "room" and attrs["access_point"] == "Kitchen E7"
     assert attrs["zone"] == "Hill College Dorm"                              # the GPS side still rides along
-    assert out["sextant_person_room"][0] == "Kitchen" and out["sextant_person_floor"][0] == "Ground Floor"
+    assert out["sextant_person_room"][0] == "unknown" and out["sextant_person_floor"][0] == "Ground Floor"
     # Not home on Wi-Fi: GPS as before.
     assert persons.fuse(None, [], "away", None, gps_away, [], None, {**w, "home": False})["sextant_person_location"][0] == "Hill College Dorm"
 
