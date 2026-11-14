@@ -492,12 +492,14 @@ def fuse(best, why, presence, held, gps, ignored, home=None, wifi=None):
         out["sextant_person_location"][1].update({**gps_attrs, "gps_ignored": common["gps_ignored"]})
         return out
     if wifi and wifi.get("home"):
-        room, floor = wifi.get("room") or "unknown", wifi.get("floor") or "unknown"
+        # Home, not a room: an access point's most frequent room is a guess
+        # (the garage one read as Kitchen), good enough for a floor only.
+        room, floor = "unknown", wifi.get("floor") or "unknown"
         via = wifi.get("entity")
-        where = {"kind": "room", "room": room, "spot": None, "floor": floor, "area_id": wifi.get("area_id"), "floor_id": wifi.get("floor_id"), "via": via}
+        where = {"kind": "room", "room": room, "spot": None, "floor": floor, "area_id": None, "floor_id": wifi.get("floor_id"), "via": via}
         return {
-            "sextant_person_location": (room if room != "unknown" else "home", {**where, "source": "wifi", "access_point": wifi.get("ap_name") or wifi.get("ap"), **common, **gps_attrs, "considered": why or []}),
-            "sextant_person_room": (room, {"area_id": wifi.get("area_id"), "via": via, "source": "wifi", "presence": presence}),
+            "sextant_person_location": ("home", {**where, "source": "wifi", "access_point": wifi.get("ap_name") or wifi.get("ap"), **common, **gps_attrs, "considered": why or []}),
+            "sextant_person_room": (room, {"area_id": None, "via": via, "source": "wifi", "presence": presence}),
             "sextant_person_floor": (floor, {"via": via, "source": "wifi", "presence": presence}),
         }
     if gps:
@@ -511,6 +513,24 @@ def fuse(best, why, presence, held, gps, ignored, home=None, wifi=None):
         "sextant_person_room": ("unknown", {"area_id": None, "via": None, "source": source, "presence": presence}),
         "sextant_person_floor": ("unknown", {"via": None, "source": source, "presence": presence}),
     }
+
+
+def wifi_gate(wifi, since, prev_visit, now, confirm_secs):
+    """(since, wifi): Wi-Fi's home word, held back until it has stood for
+    confirm_secs when it would START a visit. A router keeps a client "home"
+    for minutes after the phone left the garage and a quiet BLE spell can end
+    on it, which made a false arrival minutes before the real departure. A
+    visit already under way is carried on at once (BLE lost in a dead zone,
+    a flat watch), so is a word with nothing to start. ``since`` is when the
+    unbroken run began, None while there is no word."""
+    if not wifi:
+        return None, None
+    since = valid_time(since)
+    since = now if since is None else since
+    prev = prev_visit if isinstance(prev_visit, dict) else {}
+    if confirm_secs <= 0 or valid_time(prev.get("arrived")) is not None or now - since >= confirm_secs:
+        return since, wifi
+    return since, None
 
 
 def valid_time(t):

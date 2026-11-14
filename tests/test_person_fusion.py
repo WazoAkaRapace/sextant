@@ -376,3 +376,34 @@ def test_a_phone_still_heard_at_home_means_gps_is_not_believed():
     assert persons.without_left_behind([watch, phone], _fix(), NOW, 120, HOME) == ([watch, phone], [])
     phone["updated"] = NOW - 900  # not heard for 15 minutes: now they agree
     assert persons.without_left_behind([watch, phone], _fix(), NOW, 120, HOME) == ([], [watch, phone])
+
+
+def test_a_wifi_word_must_stand_before_it_starts_a_visit():
+    w = {"entity": "device_tracker.iphone", "home": True}
+    away = {"arrived": None, "departed": 900.0}
+    since, got = persons.wifi_gate(w, None, away, 1000.0, 300.0)
+    assert (since, got) == (1000.0, None)                      # first sight: held back
+    assert persons.wifi_gate(w, since, away, 1299.0, 300.0)[1] is None
+    assert persons.wifi_gate(w, since, away, 1300.0, 300.0)[1] is w
+    assert persons.wifi_gate(None, since, away, 1400.0, 300.0) == (None, None)   # a gap restarts the run
+    assert persons.wifi_gate(w, None, away, 1000.0, 0.0)[1] is w                 # 0 = off
+
+
+def test_a_visit_under_way_is_carried_on_by_wifi_at_once():
+    w = {"entity": "device_tracker.iphone", "home": True}
+    home = {"arrived": 500.0, "departed": None, "via": "ble"}
+    assert persons.wifi_gate(w, None, home, 1000.0, 300.0)[1] is w
+    assert persons.wifi_gate(w, None, None, 1000.0, 300.0)[1] is None            # no visit yet counts as away
+
+
+def test_the_person_log_writes_only_on_a_change_and_prunes(tmp_path):
+    from custom_components.sextant import person_log
+    a, ka = person_log.row("jo", 1000.0, "wifi", "away", "home", True, {"ap": "x"}, {"ap": "x"}, 1200.4, "not_home", "Garage")
+    b, kb = person_log.row("jo", 1015.0, "wifi", "away", "home", True, {"ap": "x"}, {"ap": "x"}, 1215.0, "not_home", "Garage")
+    c, kc = person_log.row("jo", 1030.0, "gps", "away", "away", False, None, None, 1230.0, "not_home")
+    assert ka == kb != kc and a["ble_age"] == 1200 and a["wifi_used"] is True
+    d = str(tmp_path / "log")
+    person_log.append(d, [a, c], now=1000.0)
+    person_log.append(d, [b], now=1000.0 + 40 * 86400)
+    import os
+    assert os.listdir(d) == ["19700210.jsonl"]                  # the 40-day-old file went
