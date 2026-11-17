@@ -303,6 +303,7 @@ def _install_homeassistant_stubs():
             SensorStateClass=types.SimpleNamespace(MEASUREMENT="measurement"))
     _module("homeassistant.components.binary_sensor", BinarySensorEntity=object,
             BinarySensorDeviceClass=types.SimpleNamespace(OCCUPANCY="occupancy"))
+    _module("homeassistant.components.switch", SwitchEntity=type("SwitchEntity", (), {}))
     _module("homeassistant.helpers.entity", DeviceInfo=dict)
 
     class _RestoreEntity:

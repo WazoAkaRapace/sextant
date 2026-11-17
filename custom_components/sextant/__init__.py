@@ -825,6 +825,11 @@ TUNING_SPEC = {
     # what Wi-Fi said) in config/sextant_person_log for this many hours, to
     # find out why a location or an arrival was wrong. 0 = off. See person_log.py.
     "person_log_hours": (48.0, float, 0.0, 720.0),
+    # A room's occupancy stays on this long after its last reading says
+    # occupied (0 = follow the readings), and its state attribute reads
+    # "extended" once it has been occupied for room_extended_secs.
+    "room_hold_secs": (0.0, float, 0.0, 3600.0),
+    "room_extended_secs": (600.0, float, 30.0, 86400.0),
     # Keep every floor election (each cycle's per-floor candidates, the odds
     # and the winner, per thing) for this many hours in
     # config/sextant_election_log, for tools/replay_floors.py. 0 = off. About
@@ -4031,9 +4036,8 @@ async def _radar_cycle(hass, layout, now=None):
                    for f in layout["floor"] for z in (f.get("zones") or [])
                    if isinstance(z, dict) and not z.get("no_go") and isinstance(z.get("presence_entity"), str) and z["presence_entity"]}
         by_room = radars_mod.presence_rooms(by_room, sensors, _room_presence_on, now, holds, _radar_tracker.hold_s)
-    if hass.data.get("sextant_radar_rooms") != by_room:
-        hass.data["sextant_radar_rooms"] = by_room
-        _publish_rooms(hass)
+    hass.data["sextant_radar_rooms"] = by_room
+    _publish_rooms(hass)       # every reading: a hold or "extended" runs out with nothing else changing
     _radar_push(hass, tracks)
     if _tuning(layout, "mmwave_auto_pins"):
         await _radar_auto_pins(hass, layout, tracks, rows, now, seen_by)
@@ -5330,6 +5334,9 @@ def _update_room_sensors(hass):
     if hass.data.get("sextant_room_keys") != keys:
         rooms_platform.prune_room_sensors(hass, layout)
         rooms_platform.ensure_room_sensors(hass, layout)
+        rooms_platform.ensure_aggregate_sensors(hass, layout)
+        from . import switch as switch_platform  # noqa: PLC0415
+        switch_platform.ensure_room_switches(hass, layout)
         hass.data["sextant_room_keys"] = keys
     rooms_platform.link_room_areas(hass, layout)
     cache = hass.data.get("sextant_room_sensors") or {}
@@ -5384,7 +5391,12 @@ def _publish_rooms(hass):
     cache = hass.data.get("sextant_room_sensors") or {}
     answers = hass.data.get("sextant_room_answers") or {}
     radar = hass.data.get("sextant_radar_rooms") or {}
+    switches = hass.data.get("sextant_room_switches") or {}
     links = {(k["floor"], k["room"]): k for k in hass.data.get("sextant_room_keys") or []}
+    layout = get_layout(hass)
+    layout = layout if isinstance(layout, dict) else {}
+    hold, extended, now = _tuning(layout, "room_hold_secs"), _tuning(layout, "room_extended_secs"), time.time()
+    published = {}
     for key, sensor in cache.items():
         is_on, attrs = answers.get(key) or (False, None)
         if attrs is None:
@@ -5392,8 +5404,20 @@ def _publish_rooms(hass):
             attrs = {"room": key[1], "floor": key[0], "area_id": link.get("area_id"), "floor_id": link.get("floor_id"),
                      "count": 0, "people": [], "pets": [], "things": [], "spots": [], "presence": None}
         seen = radar.get(key) or {"count": 0, "held": 0}
-        attrs = {**attrs, "radar": seen["count"], "held": not is_on and seen["count"] > 0 and seen["held"] == seen["count"]}
-        sensor.set_occupancy(bool(is_on) or seen["count"] > 0, attrs)
+        forced = bool(getattr(switches.get(key), "_attr_is_on", False))
+        sensed = bool(is_on) or seen["count"] > 0
+        sensor.memory = rooms_mod.settle(getattr(sensor, "memory", None), sensed or forced, now, hold, extended)
+        m = sensor.memory
+        since = datetime.fromtimestamp(m["since"], timezone.utc).isoformat(timespec="seconds")
+        attrs = {**attrs, "radar": seen["count"], "held": not is_on and seen["count"] > 0 and seen["held"] == seen["count"],
+                 "state": m["state"], "since": since, "forced": forced, "hold_over": m["on"] and not sensed and not forced}
+        sensor.set_occupancy(m["on"], attrs)
+        published[key] = (m["on"], attrs)
+    floors, house = rooms_mod.aggregate(hass.data.get("sextant_room_keys") or [], published)
+    for (kind, floor), sensor in (hass.data.get("sextant_aggregate_sensors") or {}).items():
+        on, attrs = house if kind == "house" else floors.get(floor, (False, None))
+        if attrs is not None:
+            sensor.set_occupancy(on, attrs)
 
 
 def extract_candidate_floors(new_global_data, tmpentity):
@@ -7356,7 +7380,7 @@ async def async_unload_entry(hass: HomeAssistant, entry):
     # settings (area, name, disabled) and rewrote the whole registry twice.
 
     try: # Attempt to unload platforms
-        unload_ok = await hass.config_entries.async_unload_platforms(entry, ["sensor", "binary_sensor", "device_tracker"])
+        unload_ok = await hass.config_entries.async_unload_platforms(entry, ["sensor", "binary_sensor", "switch", "device_tracker"])
     except Exception as e:
         _LOGGER.error(f"Error during offloading of platforms for entry {entry.entry_id}: {e}")
         return False
@@ -7390,7 +7414,7 @@ async def async_unload_entry(hass: HomeAssistant, entry):
     hass.data.pop("sextant_initialized", None)
     hass.data.pop("sextant_sensors", None)
     hass.data.pop("sextant_add_entities", None)
-    for key in ("sextant_room_sensors", "sextant_room_add", "sextant_room_keys", "sextant_room_unlinked"):
+    for key in ("sextant_room_sensors", "sextant_aggregate_sensors", "sextant_room_switches", "sextant_switch_add", "sextant_room_add", "sextant_room_keys", "sextant_room_unlinked"):
         hass.data.pop(key, None)
 
     return True
@@ -7410,7 +7434,7 @@ async def async_setup_entry(hass, entry):
     _wifi_heat = heat_mod.clean(await load_wifi_heat(hass))
     await _restore_runtime(hass)
     # (the sensor platform removes legacy duplicated-name entities as it sets up)
-    await hass.config_entries.async_forward_entry_setups(entry, ["sensor", "binary_sensor", "device_tracker"])
+    await hass.config_entries.async_forward_entry_setups(entry, ["sensor", "binary_sensor", "switch", "device_tracker"])
     entry.async_on_unload(entry.add_update_listener(async_update_options))
 
     """Set up Sextant from a config entry."""

@@ -710,7 +710,7 @@ def test_the_things_answer_and_the_radars_combine(tmp_path):
                  "people": ["Ada"], "pets": [], "things": ["Ada's phone"], "spots": [], "presence": "here"}
     hass.data["sextant_room_answers"] = {("Office Floor", "Office"): (True, by_things)}
     sextant._publish_rooms(hass)
-    assert office.calls[-1] == (True, {**by_things, "radar": 0, "held": False})
+    assert office.calls[-1][0] is True and {k: v for k, v in office.calls[-1][1].items() if k in {**by_things, "radar": 0, "held": False}} == {**by_things, "radar": 0, "held": False}
     hass.data["sextant_radar_rooms"] = {("Office Floor", "Office"): {"count": 1, "held": 1}}
     sextant._publish_rooms(hass)
     assert office.calls[-1][0] is True and office.calls[-1][1]["held"] is False, "on by the things: the hold is beside the point"
