@@ -88,6 +88,19 @@ def share(store: dict, ent: str, zone: str, now: float, tz=None) -> float | None
     return None if faded < MIN_SLOT_S else row["z"].get(zone, 0.0) / total
 
 
+def gain_for(layout, ent: str, default: float, pet_classes=frozenset({"cat", "dog", "paw"})) -> float:
+    """The habit gain for a thing: its class's own setting (layout ``class_habit_gain``),
+    else ``default`` - except a pet's tag, which wanders and has no routine to
+    lean on, so it gets 0 until the class is given a value."""
+    layout = layout if isinstance(layout, dict) else {}
+    cls = (layout.get("thing_classes") or {}).get(ent) if isinstance(layout.get("thing_classes"), dict) else None
+    table = layout.get("class_habit_gain")
+    own = table.get(cls) if isinstance(table, dict) and cls else None
+    if isinstance(own, (int, float)) and not isinstance(own, bool) and math.isfinite(own) and 0.0 <= own <= 0.3:
+        return float(own)
+    return 0.0 if cls in pet_classes else default
+
+
 def prior_shift(store: dict, ent: str, incumbent: str, challenger: str, now: float, gain: float, tz=None) -> float:
     """How much to move the margin a challenger must lead by: negative when
     the challenger is the habit, positive when the incumbent is. Within

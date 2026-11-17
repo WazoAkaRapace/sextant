@@ -446,6 +446,7 @@ class SextantDevices extends LitElement {
       home_entity: w.home || null,
       // Only when the switch was touched, and only for a thing that has a class.
       ...(typeof w.classHome === "boolean" && w.thing_class ? { class_always_home: w.classHome } : {}),
+      ...(w.classHabit !== undefined && w.thing_class ? { class_habit_gain: w.classHabit === "" ? null : Math.min(0.3, Math.max(0, Number(w.classHabit) || 0)) } : {}),
       height: w.height === "" || w.height == null ? null : fromDisplayLen(w.height, this.hass),
       ref_offset_db: w.ref === "" || w.ref == null ? null : Number(w.ref),
       icon: w.icon || null,
@@ -537,6 +538,12 @@ class SextantDevices extends LitElement {
             onChange: (v) => { w.classHome = v; this.requestUpdate(); } }) : nothing}
           <span class="small muted">A thing that is always home raises a Home Assistant repair once it has not been heard for a day. A pet's tag is by default; a phone or a bag, away for days, is not. A battery at 10% or less on a thing that has gone quiet raises one either way.</span>
         </div>
+        ${w.thing_class ? html`<div class="row">
+          ${uiField({ label: `Routine pull for every ${THING_CLASSES.find((c) => c[0] === w.thing_class)?.[1] || w.thing_class} (0 to 0.3)`, type: "number", step: 0.01, min: 0, max: 0.3,
+            value: w.classHabit ?? this.data?.layout?.class_habit_gain?.[w.thing_class] ?? "", placeholder: PET_CLASSES.includes(w.thing_class) ? "0 (pets)" : String(this.data?.layout?.tuning?.habit_margin_gain ?? 0.1),
+            onChange: (v) => { w.classHabit = v; this.requestUpdate(); }, style: "width: 260px" })}
+          <span class="small muted">How far where this kind of thing usually is at this hour eases a close call between two rooms. Blank is the default: the Tuning page's value, and none for pets. 0 turns it off for the class.</span>
+        </div>` : nothing}
         <div class="row colour">
           <span class="avatar-preview" style="background: ${thingColor(w.slug, w.color || null)}" title="how this thing will look">${w.preview || w.icon ? html`<img src=${w.preview || w.icon} alt="">` : classIcon(w.thing_class) ? html`<ha-icon icon=${classIcon(w.thing_class)}></ha-icon>` : html`<span class="initials">${(w.name || w.placeholder || "?").slice(0, 2).toUpperCase()}</span>`}</span>
           <span class="small">Colour</span>

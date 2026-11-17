@@ -387,6 +387,9 @@ async def ws_tuning_set(hass, connection, msg):
     vol.Optional("always_home"): vol.Any(None, bool),
     # The same for every thing of this thing's class (layout class_always_home).
     vol.Optional("class_always_home"): bool,
+    # How far this class's usual rooms by hour ease a close room switch (layout
+    # class_habit_gain, 0..0.3); None goes back to the default.
+    vol.Optional("class_habit_gain"): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0.0, max=0.3))),
     # A tracker of the thing's own (a car's or a phone's GPS): home there while
     # away here raises the dead-thing repair.
     vol.Optional("home_entity"): vol.Any(None, str),
@@ -532,6 +535,14 @@ async def ws_thing_tune(hass, connection, msg):
             values = data.get("class_always_home")
             data["class_always_home"] = {**(values if isinstance(values, dict) else {}), cls: msg["class_always_home"]}
             changes["class_always_home"] = msg["class_always_home"]
+        if "class_habit_gain" in msg and cls:
+            values = dict(data.get("class_habit_gain") if isinstance(data.get("class_habit_gain"), dict) else {})
+            if msg["class_habit_gain"] is None:
+                values.pop(cls, None)
+            else:
+                values[cls] = msg["class_habit_gain"]
+            data["class_habit_gain"] = values
+            changes["class_habit_gain"] = msg["class_habit_gain"]
         for key in ("charging_entity", "battery_entity", "home_entity"):
             if key not in msg:
                 continue

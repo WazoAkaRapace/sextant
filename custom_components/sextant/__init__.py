@@ -5987,7 +5987,7 @@ def _elect_zone(entity, floor_name, instant_zone, point, kf_state, zone_polys, s
         # Where this thing usually is at this hour tips a close call, never a clear one.
         shifted = max(0.05, margin + habits_mod.prior_shift(
             _habits, entity, _habit_zone(floor_name, incumbent), _habit_zone(floor_name, best), now,
-            _tuning(layout, "habit_margin_gain"), _local_tz))
+            habits_mod.gain_for(layout, entity, _tuning(layout, "habit_margin_gain")), _local_tz))
         margin = min(shifted, max(margin, 0.9))   # a habit never makes a unanimous challenger unable to win
     if best == incumbent or probs[best] - probs.get(incumbent, 0.0) < margin:
         st["challenge"] = None

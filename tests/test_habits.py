@@ -52,3 +52,11 @@ def test_stale_history_fades_without_being_added_to_and_clean_caps_rows():
     raw = {"p": {"wd7": {"at": float("inf"), "z": {"A": 5}}, "wd8": {"at": 1, "z": {f"r{i}": i + 1 for i in range(500)}}}}
     out = habits.clean(raw)
     assert "wd7" not in out["p"] and len(out["p"]["wd8"]["z"]) == habits.MAX_ZONES_PER_SLOT
+
+
+def test_gain_comes_from_the_class_then_the_default_and_pets_have_none():
+    layout = {"thing_classes": {"phone1": "phone", "tag1": "dog", "tag2": "cat"}, "class_habit_gain": {"cat": 0.2, "phone": 9, "x": 1}}
+    assert habits.gain_for(layout, "phone1", 0.1) == 0.1       # 9 is out of range: ignored
+    assert habits.gain_for(layout, "tag1", 0.1) == 0.0          # a dog: no routine by default
+    assert habits.gain_for(layout, "tag2", 0.1) == 0.2          # a cat the owner gave a value
+    assert habits.gain_for({}, "unknown", 0.1) == 0.1
