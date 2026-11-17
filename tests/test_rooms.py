@@ -232,3 +232,55 @@ def test_a_room_that_gains_a_namesake_moves_to_the_floor_qualified_id(hass):
 
 def test_people_home_with_nobody_is_zero():
     assert rooms.people_home({}) == (0, {"home": [], "away": [], "pets_home": []})
+
+
+def test_settle_holds_extends_and_clears():
+    s = rooms.settle(None, True, 100.0, hold_s=60.0, extended_s=300.0)
+    assert (s["on"], s["state"], s["since"]) == (True, "occupied", 100.0)
+    s = rooms.settle(s, True, 450.0, 60.0, 300.0)
+    assert (s["state"], s["since"]) == ("extended", 100.0)
+    s = rooms.settle(s, False, 470.0, 60.0, 300.0)             # inside the hold: still on, same stay
+    assert (s["on"], s["state"], s["since"]) == (True, "extended", 100.0)
+    s = rooms.settle(s, False, 520.0, 60.0, 300.0)             # hold over (last reading at 450)
+    assert (s["on"], s["state"], s["since"]) == (False, "clear", 520.0)
+    assert rooms.settle(None, False, 5.0)["state"] == "clear"   # no hold, never seen: clear
+
+
+def test_floor_and_house_occupancy_sum_the_rooms():
+    keys = rooms.room_keys(LAYOUT)
+    answers = {("Ground Floor", "Kitchen"): (True, {"people": ["Ann"], "pets": [], "count": 1}),
+               ("Second Floor", "Master Bedroom"): (False, {"people": [], "pets": ["Meg"], "count": 0})}
+    floors, house = rooms.aggregate(keys, answers)
+    assert floors["Ground Floor"][0] is True and floors["Ground Floor"][1]["rooms"] == ["Kitchen"]
+    assert floors["Second Floor"][0] is False
+    assert house[0] is True and house[1]["people"] == ["Ann"] and house[1]["rooms"] == ["Ground Floor: Kitchen"]
+    assert rooms.aggregate(keys, {})[1][0] is False
+    assert rooms.floor_ids(keys)["Second Floor"]["entity_id"] == "binary_sensor.second_floor_sextant_floor_occupancy"
+
+
+def test_the_force_switch_sits_beside_its_room_sensor():
+    ids = rooms.ids_for(rooms.room_keys(LAYOUT))[("Ground Floor", "Kitchen")]
+    sw = rooms.switch_ids(ids)
+    assert sw["entity_id"] == "switch.kitchen_sextant_force_occupied" and sw["unique_id"] == "sextant_room_force_ground_floor_kitchen"
+    assert sw["name"] == "Kitchen Force Occupied"
+
+
+def test_publish_rooms_holds_forces_and_sums(hass):
+    from sextant import switch as sw_platform
+    added = _added(hass)
+    hass.data["sextant_room_keys"] = rooms.room_keys(LAYOUT)
+    hass.data["sextant_aggregate_sensors"] = {}
+    platform.ensure_room_sensors(hass, LAYOUT)
+    platform.ensure_aggregate_sensors(hass, LAYOUT)
+    hass.data["sextant_room_switches"], hass.data["sextant_switch_add"] = {}, lambda e, **k: None
+    sw_platform.ensure_room_switches(hass, LAYOUT)
+    kitchen = ("Ground Floor", "Kitchen")
+    hass.data["sextant_room_answers"] = {kitchen: (False, None)}
+    sextant._publish_rooms(hass)
+    assert hass.data["sextant_room_sensors"][kitchen]._attr_is_on is False
+    hass.data["sextant_room_switches"][kitchen]._attr_is_on = True        # "force occupied"
+    sextant._publish_rooms(hass)
+    sensor = hass.data["sextant_room_sensors"][kitchen]
+    assert sensor._attr_is_on is True and sensor._attr_extra_state_attributes["forced"] is True
+    house = hass.data["sextant_aggregate_sensors"][("house", None)]
+    assert house._attr_is_on is True

@@ -174,3 +174,66 @@ def people_home(presences: dict[str, str], pets=()) -> tuple[int, dict]:
     away = sorted(n for n, p in presences.items() if p not in at_home and n not in pets)
     pets_home = sorted(n for n, p in presences.items() if p in at_home and n in pets)
     return len(home), {"home": home, "away": away, "pets_home": pets_home}
+
+
+def switch_ids(ids) -> dict:
+    """The force-occupied switch of a room, from its ``ids_for`` entry. It
+    shares the room's device, so it lands in the room's area with the sensor."""
+    return {
+        "unique_id": ids["unique_id"].replace("sextant_room_occupancy_", "sextant_room_force_", 1),
+        "entity_id": ids["entity_id"].replace("binary_sensor.", "switch.", 1).replace("_sextant_occupancy", "_sextant_force_occupied"),
+        "name": ids["name"].replace("Sextant Occupancy", "Force Occupied"),
+    }
+
+
+HOUSE_ID = {"unique_id": "sextant_house_occupancy", "entity_id": "binary_sensor.sextant_house_occupancy",
+            "name": "Sextant House Occupancy"}
+
+
+def floor_ids(keys) -> dict[str, dict]:
+    """floor name -> {unique_id, entity_id, name} of its occupancy sensor."""
+    out = {}
+    for k in keys:
+        f = k["floor"]
+        out.setdefault(f, {"unique_id": f"sextant_floor_occupancy_{slug(f)}",
+                           "entity_id": f"binary_sensor.{slug(f)}_sextant_floor_occupancy",
+                           "name": f"{f} Sextant Occupancy", "floor_id": k["floor_id"]})
+    return out
+
+
+def settle(prev, raw_on, now, hold_s=0.0, extended_s=600.0) -> dict:
+    """A room's published state from this reading's ``raw_on``.
+
+    ``on`` stays up for ``hold_s`` after the last reading that said occupied
+    (Magic Areas' "clear after"), and ``state`` is ``occupied``, ``extended``
+    once occupied for ``extended_s`` (a long stay: lights and climate can
+    treat it differently) or ``clear``. ``since`` is when ``on`` last flipped.
+    """
+    prev = prev or {}
+    last_raw = now if raw_on else prev.get("last_raw")
+    on = bool(raw_on) or (hold_s > 0 and last_raw is not None and now - last_raw < hold_s)
+    since = prev.get("since") if prev.get("on") == on and prev.get("since") is not None else now
+    state = "clear" if not on else ("extended" if now - since >= extended_s else "occupied")
+    return {"on": on, "state": state, "since": since, "last_raw": last_raw}
+
+
+def aggregate(keys, answers) -> tuple[dict, tuple[bool, dict]]:
+    """(floor -> (on, attrs), (on, attrs) for the house), from the rooms' answers
+    ``{(floor, room): (on, attrs)}``: who is where, summed up for "anyone
+    upstairs?" and "anyone home?" without naming every room."""
+    floors: dict[str, dict] = {}
+    for k in keys:
+        on, attrs = (answers or {}).get((k["floor"], k["room"])) or (False, {})
+        f = floors.setdefault(k["floor"], {"rooms": [], "people": set(), "pets": set(), "count": 0, "floor_id": k["floor_id"]})
+        if on:
+            f["rooms"].append(k["room"])
+        f["people"].update(attrs.get("people") or [])
+        f["pets"].update(attrs.get("pets") or [])
+        f["count"] += attrs.get("count") or 0
+    shaped = {name: (bool(f["rooms"]), {"floor": name, "floor_id": f["floor_id"], "rooms": f["rooms"], "people": sorted(f["people"]),
+                                         "pets": sorted(f["pets"]), "count": f["count"]}) for name, f in floors.items()}
+    people = sorted({p for _on, a in shaped.values() for p in a["people"]})
+    pets = sorted({p for _on, a in shaped.values() for p in a["pets"]})
+    rooms = [f"{a['floor']}: {r}" for _on, a in shaped.values() for r in a["rooms"]]
+    return shaped, (bool(rooms), {"rooms": rooms, "people": people, "pets": pets,
+                                  "count": sum(a["count"] for _on, a in shaped.values())})

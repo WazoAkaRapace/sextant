@@ -17,7 +17,8 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import DeviceInfo
 
-from .rooms import ids_for, room_keys
+from .assist import expose
+from .rooms import HOUSE_ID, floor_ids, ids_for, room_keys
 from .storage import get_layout
 
 _LOGGER = logging.getLogger(__name__)
@@ -37,11 +38,15 @@ class SextantRoomOccupancy(BinarySensorEntity):
         self._attr_unique_id = ids["unique_id"]
         self.entity_id = ids["entity_id"]
         self._attr_is_on = False
+        self.memory = None                  # rooms.settle's state between readings
         self._attr_extra_state_attributes = {"room": key[1], "floor": key[0], "count": 0, "people": [], "pets": [], "things": []}
         self._attr_device_info = DeviceInfo(
             identifiers={("sextant", f"room_{ids['unique_id'][len(UNIQUE_PREFIX):]}")},
             name=f"{key[1]} (Sextant)", manufacturer="Sextant", model="Room",
         )
+
+    async def async_added_to_hass(self):
+        expose(self.hass, self.entity_id)
 
     def set_occupancy(self, is_on, attrs):
         """Push one cycle's answer; written only when something changed."""
@@ -51,6 +56,47 @@ class SextantRoomOccupancy(BinarySensorEntity):
         self._attr_extra_state_attributes = attrs
         if getattr(self, "hass", None) is not None:
             self.async_write_ha_state()
+
+
+class SextantAggregateOccupancy(SextantRoomOccupancy):
+    """Whether anyone is on one floor, or in the house, and who: the rooms' answers summed up."""
+
+    def __init__(self, key, ids, device_name):
+        self.key = key
+        self._attr_name = ids["name"]
+        self._attr_unique_id = ids["unique_id"]
+        self.entity_id = ids["entity_id"]
+        self._attr_is_on = False
+        self._attr_extra_state_attributes = {"rooms": [], "people": [], "pets": [], "count": 0}
+        self._attr_device_info = DeviceInfo(identifiers={("sextant", ids["unique_id"])}, name=device_name,
+                                            manufacturer="Sextant", model="Occupancy")
+
+
+@callback
+def ensure_aggregate_sensors(hass, layout):
+    """A sensor per floor and one for the house, created once, dropped with the floor."""
+    cache = hass.data.get("sextant_aggregate_sensors")
+    add_entities = hass.data.get("sextant_room_add")
+    if cache is None or add_entities is None:
+        return
+    wanted = {("house", None): (HOUSE_ID, "Sextant House")}
+    for floor, ids in floor_ids(room_keys(layout)).items():
+        wanted[("floor", floor)] = (ids, f"{floor} (Sextant)")
+    new = []
+    for key, (ids, device) in wanted.items():
+        if key not in cache:
+            cache[key] = SextantAggregateOccupancy(key, ids, device)
+            new.append(cache[key])
+    for key in [k for k in cache if k not in wanted]:
+        del cache[key]
+    ent_reg = er.async_get(hass)
+    uids = {ids["unique_id"] for ids, _d in wanted.values()}
+    for entry in list(ent_reg.entities.values()):
+        if (entry.platform == "sextant" and isinstance(entry.unique_id, str) and entry.unique_id not in uids
+                and entry.unique_id.startswith(("sextant_floor_occupancy_", "sextant_house_occupancy"))):
+            ent_reg.async_remove(entry.entity_id)
+    if new:
+        add_entities(new, update_before_add=False)
 
 
 @callback
@@ -158,9 +204,11 @@ def _device(hass, dev_reg, identifier):
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
     hass.data.setdefault("sextant_room_sensors", {})
+    hass.data.setdefault("sextant_aggregate_sensors", {})
     hass.data["sextant_room_add"] = async_add_entities
     layout = get_layout(hass)
     layout = layout if isinstance(layout, dict) else {}
     prune_room_sensors(hass, layout)
     ensure_room_sensors(hass, layout)
+    ensure_aggregate_sensors(hass, layout)
     return True
