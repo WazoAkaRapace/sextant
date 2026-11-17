@@ -63,12 +63,14 @@ from .storage import (
     get_layout_for_edit,
     get_layout_version,
     load_fp_gains,
+    load_habits,
     load_wifi_heat,
     load_layout,
     load_runtime,
     load_truth,
     save_truth,
     save_fp_gains,
+    save_habits,
     save_wifi_heat,
     save_runtime,
     migrate_from_bps,
@@ -77,6 +79,7 @@ from .storage import (
 )
 from .const import ACCURACY_ENTITY_ID, PEOPLE_HOME_ENTITY_ID, UNTRACKED_ENTITY_ID
 from . import history as history_mod
+from . import habits as habits_mod
 from . import bermuda_source
 from . import layout_check
 from . import election_log
@@ -536,6 +539,10 @@ _kf_position_state = {}
 # sub-zone's dwell state (see _elect_subzone). Reset on floor change and
 # on prune, like the Kalman state.
 _zone_state = {}
+_habits = habits_mod.new_store()   # where each thing usually is, by day type and hour (habits.py)
+_habits_last = {}                   # entity -> when it was last counted into _habits
+_local_tz = None                    # the house's time zone, for the hour of the day
+HABIT_CONFIDENT_SHARE = 0.8         # an election counts toward the habits only when this sure
 _subzone_state = {}
 # thing -> {"out_since", "in_since", "outside"}: the outside-the-house election.
 _outside_state = {}
@@ -830,6 +837,13 @@ TUNING_SPEC = {
     # "extended" once it has been occupied for room_extended_secs.
     "room_hold_secs": (0.0, float, 0.0, 3600.0),
     "room_extended_secs": (600.0, float, 30.0, 86400.0),
+    # Time-of-day prior (habits.py): how far a thing's usual room at this hour moves the margin a
+    # challenger room must lead by. 0 turns it off.
+    "habit_margin_gain": (0.10, float, 0.0, 0.3),
+    # A room held for a closed door (room "door") lets go after this long even if the door never opens.
+    "door_hold_max_secs": (28800.0, float, 60.0, 172800.0),
+    # How long someone must keep reading in a room after its door closed to count as shut in.
+    "door_settle_secs": (90.0, float, 0.0, 600.0),
     # Keep every floor election (each cycle's per-floor candidates, the odds
     # and the winner, per thing) for this many hours in
     # config/sextant_election_log, for tools/replay_floors.py. 0 = off. About
@@ -4604,6 +4618,11 @@ async def _save_runtime(hass, final=False):
     global _wifi_heat_saved_at
     now = time.time()
     if final or now - _wifi_heat_saved_at >= WIFI_HEAT_SAVE_EVERY_S:
+        try:
+            await save_habits(hass, _habits)
+        except Exception as e:  # noqa: BLE001
+            _LOGGER.warning("Could not save the room habits: %s", e)
+    if final or now - _wifi_heat_saved_at >= WIFI_HEAT_SAVE_EVERY_S:
         _wifi_heat_saved_at = now
         try:
             await save_wifi_heat(hass, _wifi_heat)
@@ -5396,6 +5415,11 @@ def _publish_rooms(hass):
     layout = get_layout(hass)
     layout = layout if isinstance(layout, dict) else {}
     hold, extended, now = _tuning(layout, "room_hold_secs"), _tuning(layout, "room_extended_secs"), time.time()
+    door_settle, door_max = _tuning(layout, "door_settle_secs"), _tuning(layout, "door_hold_max_secs")
+
+    def state_of(entity_id):
+        st = hass.states.get(entity_id)
+        return st.state if st is not None else None
     published = {}
     for key, sensor in cache.items():
         is_on, attrs = answers.get(key) or (False, None)
@@ -5405,12 +5429,19 @@ def _publish_rooms(hass):
                      "count": 0, "people": [], "pets": [], "things": [], "spots": [], "presence": None}
         seen = radar.get(key) or {"count": 0, "held": 0}
         forced = bool(getattr(switches.get(key), "_attr_is_on", False))
-        sensed = bool(is_on) or seen["count"] > 0
-        sensor.memory = rooms_mod.settle(getattr(sensor, "memory", None), sensed or forced, now, hold, extended)
+        link = links.get(key) or {}
+        inputs = rooms_mod.inputs_on(link.get("inputs"), state_of)
+        sensed = bool(is_on) or seen["count"] > 0 or bool(inputs)
+        door = rooms_mod.door_closed(state_of(link["door"])) if link.get("door") else None
+        own_hold, own_ext = link.get("hold_secs"), link.get("extended_secs")
+        sensor.memory = rooms_mod.settle(getattr(sensor, "memory", None), sensed or forced, now,
+                                         hold if own_hold is None else own_hold, extended if own_ext is None else own_ext,
+                                         door, door_settle, door_max)
         m = sensor.memory
         since = datetime.fromtimestamp(m["since"], timezone.utc).isoformat(timespec="seconds")
         attrs = {**attrs, "radar": seen["count"], "held": not is_on and seen["count"] > 0 and seen["held"] == seen["count"],
-                 "state": m["state"], "since": since, "forced": forced, "hold_over": m["on"] and not sensed and not forced}
+                 "state": m["state"], "since": since, "forced": forced, "inputs": inputs, "door_hold": m["door_hold"],
+                 "hold_over": m["on"] and not sensed and not forced and not m["door_hold"]}
         sensor.set_occupancy(m["on"], attrs)
         published[key] = (m["on"], attrs)
     floors, house = rooms_mod.aggregate(hass.data.get("sextant_room_keys") or [], published)
@@ -5877,6 +5908,9 @@ def _elect_zone(entity, floor_name, instant_zone, point, kf_state, zone_polys, s
     if incumbent is None:
         st.update(zone=best, since=now, challenge=None, locked=False, away_since=None)
         return best, False, speed
+    if best == incumbent and probs[best] >= HABIT_CONFIDENT_SHARE:
+        habits_mod.learn(_habits, entity, incumbent, now, _habits_last.get(entity), _local_tz)
+    _habits_last[entity] = now
 
     # 3b. Lock and unlock.
     stationary_secs = _tuning(layout, "stationary_secs")
@@ -5935,6 +5969,10 @@ def _elect_zone(entity, floor_name, instant_zone, point, kf_state, zone_polys, s
     if best != incumbent and _far_move(zone_polys, incumbent, best, scale):
         margin = max(margin, _tuning(layout, "far_move_margin"))
         dwell = max(dwell, _tuning(layout, "far_move_secs"))
+    if best != incumbent:
+        # Where this thing usually is at this hour tips a close call, never a clear one.
+        margin = max(0.05, margin + habits_mod.prior_shift(
+            _habits, entity, incumbent, best, now, _tuning(layout, "habit_margin_gain"), _local_tz))
     if best == incumbent or probs[best] - probs.get(incumbent, 0.0) < margin:
         st["challenge"] = None
         return incumbent, False, speed
@@ -7432,6 +7470,13 @@ async def async_setup_entry(hass, entry):
         _LOGGER.warning("Truth marks or learned gains not loaded: %s", e)
     global _wifi_heat
     _wifi_heat = heat_mod.clean(await load_wifi_heat(hass))
+    global _habits, _local_tz
+    _habits = habits_mod.clean(await load_habits(hass))
+    try:
+        from homeassistant.util import dt as dt_util
+        _local_tz = dt_util.get_default_time_zone()
+    except Exception:  # noqa: BLE001
+        _local_tz = None
     await _restore_runtime(hass)
     # (the sensor platform removes legacy duplicated-name entities as it sets up)
     await hass.config_entries.async_forward_entry_setups(entry, ["sensor", "binary_sensor", "switch", "device_tracker"])

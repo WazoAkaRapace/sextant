@@ -158,3 +158,7 @@ when both proxies have heights) solve a per-proxy multiplier, normalised so
 they never rescale everything at once. A multiplier is exactly a
 per-scanner RSSI offset in Bermuda's model, which is how
 `calibration_target: bermuda` writes it.
+
+## Routine: where a thing usually is
+
+Sextant counts the time each thing spends in each room, by weekday or weekend and hour of the day, from the rooms it is confident about, and forgets with a half-life of three weeks. A thing on the line between two rooms then switches a little more easily into the room it is usually in at that hour and a little less easily out of it (`habit_margin_gain`, 0.1: at most that much on the lead a challenger needs). It never overrides clear evidence, needs about 20 minutes in an hour slot before it says anything, and is kept in `.storage/sextant_habits`. Set `habit_margin_gain` to 0 to turn it off; delete that file to start over.
