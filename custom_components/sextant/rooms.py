@@ -191,13 +191,20 @@ HOUSE_ID = {"unique_id": "sextant_house_occupancy", "entity_id": "binary_sensor.
 
 
 def floor_ids(keys) -> dict[str, dict]:
-    """floor name -> {unique_id, entity_id, name} of its occupancy sensor."""
+    """floor name -> {unique_id, entity_id, name} of its occupancy sensor.
+    Floors whose names slug the same each carry a few characters of their exact name."""
+    names = sorted({k["floor"] for k in keys})
+    count: dict[str, int] = {}
+    for f in names:
+        count[slug(f)] = count.get(slug(f), 0) + 1
     out = {}
     for k in keys:
         f = k["floor"]
-        out.setdefault(f, {"unique_id": f"sextant_floor_occupancy_{slug(f)}",
-                           "entity_id": f"binary_sensor.{slug(f)}_sextant_floor_occupancy",
-                           "name": f"{f} Sextant Occupancy", "floor_id": k["floor_id"]})
+        if f in out:
+            continue
+        s = f"{slug(f)}_{hashlib.sha1(f.encode()).hexdigest()[:6]}" if count[slug(f)] > 1 else slug(f)
+        out[f] = {"unique_id": f"sextant_floor_occupancy_{s}", "entity_id": f"binary_sensor.{s}_sextant_floor_occupancy",
+                  "name": f"{f} Sextant Occupancy", "floor_id": k["floor_id"]}
     return out
 
 

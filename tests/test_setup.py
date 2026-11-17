@@ -86,7 +86,7 @@ def test_setup_and_unload_round_trip(tmp_path, monkeypatch):
     run(st.save_layout(hass, {"floor": [{"name": "F", "scale": 100.0, "receivers": [], "zones": [], "subzones": []}], "tuning": {}}))
 
     assert run(sextant.async_setup_entry(hass, entry)) is True
-    assert entry.forwarded == [["sensor", "binary_sensor", "device_tracker"]]
+    assert entry.forwarded == [["sensor", "binary_sensor", "switch", "device_tracker"]]
     assert {v.__class__.__name__ for v in hass.http.views} == {
         "SextantFrontendView", "SextantMapImageView", "SextantSaveAPIText", "SextantUploadThingIconAPI",
         "SextantCordsAPI", "SextantSelfTestAPI"}

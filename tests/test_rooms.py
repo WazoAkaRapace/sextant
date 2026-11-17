@@ -284,3 +284,10 @@ def test_publish_rooms_holds_forces_and_sums(hass):
     assert sensor._attr_is_on is True and sensor._attr_extra_state_attributes["forced"] is True
     house = hass.data["sextant_aggregate_sensors"][("house", None)]
     assert house._attr_is_on is True
+
+
+def test_floor_ids_separate_floors_that_slug_the_same():
+    keys = rooms.room_keys({"floor": [{"name": "Guest Floor", "zones": [{"entity_id": "A", "cords": [{"x": 0, "y": 0}] * 3}]},
+                                      {"name": "Guest-Floor", "zones": [{"entity_id": "B", "cords": [{"x": 0, "y": 0}] * 3}]}]})
+    ids = rooms.floor_ids(keys)
+    assert len({v["unique_id"] for v in ids.values()}) == 2 and len({v["entity_id"] for v in ids.values()}) == 2

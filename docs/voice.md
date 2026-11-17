@@ -12,6 +12,8 @@
 | `switch.<room>_sextant_force_occupied` | while on, the room's sensor stays on whatever Sextant hears (a still reader, a sleeper); it survives a restart |
 | `sensor.sextant_people_home` | how many people are home; `home` and `away` list them |
 
+A restart forgets a hold in progress and starts the "extended" timer again.
+
 Two tuning settings (`sextant.set_tuning`): `room_hold_secs` (default 0) keeps a room on that long after the last reading that put someone there, and `room_extended_secs` (default 600) is how long a stay lasts before `state` reads `extended`. Use `state` in automations to treat a long stay differently from someone passing through.
 
 ## Voice (Assist)

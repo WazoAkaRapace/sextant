@@ -60,13 +60,24 @@ def ensure_room_switches(hass, layout):
         return
     wanted = {key: (switch_ids(ids), ids) for key, ids in ids_for(room_keys(layout)).items()}
     new = []
+    ent_reg = er.async_get(hass)
     for key, (ids, room_ids) in wanted.items():
+        have = cache.get(key)
+        if have is not None and (have.entity_id != ids["entity_id"] or have._attr_unique_id != ids["unique_id"]):
+            # A room gained a namesake: its switch follows the room sensor's new ids (as ensure_room_sensors does).
+            changes = {}
+            if have.entity_id != ids["entity_id"] and ent_reg.async_get(ids["entity_id"]) is None:
+                changes["new_entity_id"] = ids["entity_id"]
+            if have._attr_unique_id != ids["unique_id"]:
+                changes["new_unique_id"] = ids["unique_id"]
+            if changes and ent_reg.async_get(have.entity_id) is not None:
+                ent_reg.async_update_entity(have.entity_id, **changes)
+            have.entity_id, have._attr_unique_id, have._attr_name = ids["entity_id"], ids["unique_id"], ids["name"]
         if key not in cache:
             cache[key] = SextantForceOccupied(key, ids, room_ids)
             new.append(cache[key])
     for key in [k for k in cache if k not in wanted]:
         del cache[key]
-    ent_reg = er.async_get(hass)
     uids = {ids["unique_id"] for ids, _r in wanted.values()}
     for entry in list(ent_reg.entities.values()):
         if (entry.platform == "sextant" and isinstance(entry.unique_id, str)

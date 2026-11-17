@@ -4036,9 +4036,8 @@ async def _radar_cycle(hass, layout, now=None):
                    for f in layout["floor"] for z in (f.get("zones") or [])
                    if isinstance(z, dict) and not z.get("no_go") and isinstance(z.get("presence_entity"), str) and z["presence_entity"]}
         by_room = radars_mod.presence_rooms(by_room, sensors, _room_presence_on, now, holds, _radar_tracker.hold_s)
-    if hass.data.get("sextant_radar_rooms") != by_room:
-        hass.data["sextant_radar_rooms"] = by_room
-        _publish_rooms(hass)
+    hass.data["sextant_radar_rooms"] = by_room
+    _publish_rooms(hass)       # every reading: a hold or "extended" runs out with nothing else changing
     _radar_push(hass, tracks)
     if _tuning(layout, "mmwave_auto_pins"):
         await _radar_auto_pins(hass, layout, tracks, rows, now, seen_by)
@@ -7435,7 +7434,7 @@ async def async_setup_entry(hass, entry):
     _wifi_heat = heat_mod.clean(await load_wifi_heat(hass))
     await _restore_runtime(hass)
     # (the sensor platform removes legacy duplicated-name entities as it sets up)
-    await hass.config_entries.async_forward_entry_setups(entry, ["sensor", "binary_sensor", "device_tracker"])
+    await hass.config_entries.async_forward_entry_setups(entry, ["sensor", "binary_sensor", "switch", "device_tracker"])
     entry.async_on_unload(entry.add_update_listener(async_update_options))
 
     """Set up Sextant from a config entry."""
