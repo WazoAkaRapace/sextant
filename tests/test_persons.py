@@ -213,3 +213,23 @@ def test_should_ask_gps_once_per_quiet_spell():
     assert not ask("away", False, NOW - 1000, None)
     assert not ask("quiet", True, NOW - 130, None)
     assert not ask("quiet", False, None, None)
+
+
+def test_room_changes_need_two_cycles_and_compare_floor():
+    from sextant import persons
+    K, O, H1, H2 = ("Kitchen", "G"), ("Office", "G"), ("Hall", "G"), ("Hall", "U")
+    base, pend = {"a": K, "b": K, "c": H1, "gone": K}, {}
+    now = {"a": O, "b": K, "c": H2, "d": K, "pet": O}
+    base, pend, ev = persons.room_changes(base, pend, now, pets=("pet",))
+    assert ev == [] and pend == {"a": O, "c": H2} and base["a"] == K and "gone" not in base and "pet" not in base
+    base, pend, ev = persons.room_changes(base, pend, now, pets=("pet",))
+    assert [e[1]["person"] for e in ev] == ["a", "c"] and ev[1][1]["from_floor"] == "G" and ev[1][1]["floor"] == "U"
+    assert base["a"] == O and pend == {}
+    # a stray fix then back: nothing
+    base, pend, ev = persons.room_changes(base, {}, {**now, "a": K}, pets=("pet",))
+    base, pend, ev = persons.room_changes(base, pend, now, pets=("pet",))
+    assert ev == [] and base["a"] == O
+    # leaving and arriving make no room change
+    base, pend, ev = persons.room_changes(base, {}, {**now, "a": None}, pets=("pet",))
+    base, pend, ev = persons.room_changes(base, pend, {**now, "a": None}, pets=("pet",))
+    assert ev == [] and base["a"] is None

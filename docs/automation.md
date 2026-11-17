@@ -127,6 +127,7 @@ needs no state to compare:
 |---|---|---|
 | `sextant_person_arrived` | a person's tracker goes from away to home | `person`, `source` (`ble`, `wifi` or `gps`), `time`, `people_home` |
 | `sextant_person_left` | a person's tracker goes from home to away | `person`, `source` (what last had them home), `time`, `people_home` |
+| `sextant_person_room_changed` | a person moves from one room to another while home (not on arriving or leaving) | `person`, `from_room`, `from_floor`, `room`, `floor` |
 | `sextant_first_arrived` | an arrival into a house with nobody home | `person`, `source`, `time` |
 | `sextant_everyone_left` | a departure leaves nobody home | `person` (the last to leave), `source`, `time` |
 

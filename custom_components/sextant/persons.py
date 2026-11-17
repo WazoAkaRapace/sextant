@@ -462,6 +462,33 @@ def visit_events(before, after, pets=()) -> list:
     return out
 
 
+def room_changes(baseline, pending, now, pets=()):
+    """``(baseline, pending, events)`` for ``sextant_person_room_changed``.
+
+    ``now`` maps a person to ``(room, floor)`` while a sensor puts them in a
+    room (None otherwise). A new place must read the same on two cycles in a
+    row before it counts, so one stray fix makes nothing; the event fires only
+    for a move from one place to another (arriving and leaving have their own
+    events), and a person new to the map just sets their baseline. People no
+    longer in ``now`` drop out of both maps."""
+    base, pend, out = {}, {}, []
+    for p in sorted(now):
+        place = now[p]
+        if p in pets:
+            continue
+        old = baseline.get(p)
+        if p not in baseline or place == old:
+            base[p] = place if p not in baseline else old
+        elif pending.get(p) == place:
+            base[p] = place
+            if old and place:
+                out.append(("sextant_person_room_changed", {"person": p, "from_room": old[0], "from_floor": old[1],
+                                                             "room": place[0], "floor": place[1]}))
+        else:
+            base[p], pend[p] = old, place
+    return base, pend, out
+
+
 def fuse(best, why, presence, held, gps, ignored, home=None, wifi=None):
     """(suffix -> (state, attributes)) for a person's sensors, BLE, Wi-Fi and GPS fused.
 
