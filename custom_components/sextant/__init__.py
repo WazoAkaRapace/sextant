@@ -4264,6 +4264,7 @@ _event_visits = None
 # person -> (room, floor) while in a real room, now and as the events last saw it.
 _person_places = {}
 _event_places = {}
+_place_pending = {}
 _events_from = 0.0
 EVENTS_SETTLE_S = 300.0
 # What Wi-Fi association has taught (wifi.py): access-point footprints and
@@ -5139,7 +5140,7 @@ def _update_person_sensors(hass):
         wifi_clients = _unifi_clients(hass) or {}
     except Exception:  # noqa: BLE001 - no last-seen times: Wi-Fi stands as it reads
         wifi_clients = {}
-    global _event_visits, _events_from, _event_places
+    global _event_visits, _events_from, _event_places, _place_pending
     if _event_visits is None:
         _event_visits, _events_from = dict(_person_visits), now + EVENTS_SETTLE_S
     for person, things in by_person.items():
@@ -5261,7 +5262,7 @@ def _update_person_sensors(hass):
             update_sextant_sensor_state(hass, persons_mod.sensor_entity_id(slug, suffix, person in pets), state, attrs)
             if suffix == "sextant_person_location":
                 logged = (state, attrs.get("source"))
-                room_ok = attrs.get("kind") == "room" and attrs.get("room") not in (None, "unknown")
+                room_ok = attrs.get("room") not in (None, "unknown")
                 _person_places[person] = (attrs["room"], attrs.get("floor")) if room_ok else None
         _person_visits[person] = persons_mod.visit(_person_visits.get(person), persons_mod.home_via(presence, gps, wifi_home), last_heard, now)
         try:
@@ -5298,9 +5299,9 @@ def _update_person_sensors(hass):
         for event, data in persons_mod.visit_events(_event_visits, _person_visits, pets):
             hass.bus.async_fire(event, data)
         _event_visits = dict(_person_visits)
-        for event, data in persons_mod.room_changes(_event_places, _person_places, pets):
+        _event_places, _place_pending, moves = persons_mod.room_changes(_event_places, _place_pending, _person_places, pets)
+        for event, data in moves:
             hass.bus.async_fire(event, data)
-        _event_places = dict(_person_places)
     try:
         _wifi_heat_cycle(hass, layout, view, by_person, rows, classes, now)
     except Exception as e:  # noqa: BLE001 - the signal map is a picture, never a stop

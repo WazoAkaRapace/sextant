@@ -16,9 +16,9 @@ async def async_get_config_entry_diagnostics(hass, entry):
         "tuning_overrides": dict(layout.get("tuning") or {}),
         "bermuda_features": sorted(bermuda_source.async_features(hass)),
         "scanners_known": len(scanner_info),
-        "receivers_offline": sorted(dom.get("rl_offline") or []),
-        "receivers_offline_guessed": sorted(dom.get("rl_offline_guessed") or []),
+        "receivers_offline": len(dom.get("rl_offline") or []),
+        "receivers_offline_guessed": len(dom.get("rl_offline_guessed") or []),
         "things_heard": len(_last_seen),
-        "people": {p: {"home": isinstance(v, dict) and v.get("arrived") is not None, "via": (v or {}).get("via")}
-                   for p, v in _person_visits.items() if isinstance(v, dict)},
+        "people_home": sum(1 for v in _person_visits.values() if isinstance(v, dict) and v.get("arrived") is not None),
+        "people_away": sum(1 for v in _person_visits.values() if isinstance(v, dict) and v.get("arrived") is None),
     }

@@ -14,5 +14,5 @@ def test_diagnostics_have_counts_and_no_plan_geometry():
                                   "tuning": {"x": 1}}
     hass.data.setdefault("sextant", {})["rl_offline"] = ["rx"]
     out = asyncio.new_event_loop().run_until_complete(diagnostics.async_get_config_entry_diagnostics(hass, None))
-    assert out["floors"] == [{"rooms": 1, "receivers": 1}] and out["receivers_offline"] == ["rx"]
-    assert "Secret Floor" not in json.dumps(out) and "Bedroom" not in json.dumps(out)
+    assert out["floors"] == [{"rooms": 1, "receivers": 1}] and out["receivers_offline"] == 1
+    assert "rx" not in json.dumps(out) and "Secret Floor" not in json.dumps(out) and "Bedroom" not in json.dumps(out)
