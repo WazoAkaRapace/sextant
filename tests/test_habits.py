@@ -42,3 +42,13 @@ def test_old_time_fades_and_the_table_stays_bounded_and_clean():
     assert row["z"]["A"] < before * 0.6
     assert habits.clean({"p": {"wd7": {"at": 1, "z": {"A": 5, "B": -1, "C": "x"}}, "bad": 3}, 4: {}}) == {"p": {"wd7": {"at": 1.0, "z": {"A": 5.0}}}}
     assert habits.clean("junk") == {}
+
+
+def test_stale_history_fades_without_being_added_to_and_clean_caps_rows():
+    s = habits.new_store()
+    _spend(s, "p", "A", MON_7AM, 30 * 60)
+    assert habits.share(s, "p", "A", MON_7AM + 30 * 60, timezone.utc) == 1.0
+    assert habits.share(s, "p", "A", MON_7AM + 30 * 60 + 200 * 86400, timezone.utc) is None   # months later: nothing to say
+    raw = {"p": {"wd7": {"at": float("inf"), "z": {"A": 5}}, "wd8": {"at": 1, "z": {f"r{i}": i + 1 for i in range(500)}}}}
+    out = habits.clean(raw)
+    assert "wd7" not in out["p"] and len(out["p"]["wd8"]["z"]) == habits.MAX_ZONES_PER_SLOT

@@ -5417,6 +5417,10 @@ def _publish_rooms(hass):
     hold, extended, now = _tuning(layout, "room_hold_secs"), _tuning(layout, "room_extended_secs"), time.time()
     door_settle, door_max = _tuning(layout, "door_settle_secs"), _tuning(layout, "door_hold_max_secs")
 
+    def elsewhere(here):
+        """The people the other rooms hold right now."""
+        return {p for k, (_on, a) in answers.items() if k != here and a for p in a.get("people") or []}
+
     def state_of(entity_id):
         st = hass.states.get(entity_id)
         return st.state if st is not None else None
@@ -5437,6 +5441,11 @@ def _publish_rooms(hass):
         sensor.memory = rooms_mod.settle(getattr(sensor, "memory", None), sensed or forced, now,
                                          hold if own_hold is None else own_hold, extended if own_ext is None else own_ext,
                                          door, door_settle, door_max)
+        if sensed:
+            sensor.door_people = list(attrs.get("people") or [])
+        elif rooms_mod.release_if_elsewhere(sensor.memory, getattr(sensor, "door_people", None), elsewhere(key)):
+            sensor.memory = rooms_mod.settle(sensor.memory, False, now, hold if own_hold is None else own_hold,
+                                             extended if own_ext is None else own_ext, door, door_settle, door_max)
         m = sensor.memory
         since = datetime.fromtimestamp(m["since"], timezone.utc).isoformat(timespec="seconds")
         attrs = {**attrs, "radar": seen["count"], "held": not is_on and seen["count"] > 0 and seen["held"] == seen["count"],
@@ -5822,6 +5831,11 @@ def _zone_membership(zone_polys, samples):
     return {z: s / total for z, s in shares.items()} if total > 0 else {}
 
 
+def _habit_zone(floor_name, zone):
+    """Rooms of the same name on two floors are two places."""
+    return f"{floor_name}|{zone}"
+
+
 def _elect_zone(entity, floor_name, instant_zone, point, kf_state, zone_polys, scale, layout, now=None, hold=False):
     """The zone to PUBLISH for a thing this cycle. Returns
     (zone, locked, speed_m_s).
@@ -5909,7 +5923,7 @@ def _elect_zone(entity, floor_name, instant_zone, point, kf_state, zone_polys, s
         st.update(zone=best, since=now, challenge=None, locked=False, away_since=None)
         return best, False, speed
     if best == incumbent and probs[best] >= HABIT_CONFIDENT_SHARE:
-        habits_mod.learn(_habits, entity, incumbent, now, _habits_last.get(entity), _local_tz)
+        habits_mod.learn(_habits, entity, _habit_zone(floor_name, incumbent), now, _habits_last.get(entity), _local_tz)
     _habits_last[entity] = now
 
     # 3b. Lock and unlock.
@@ -5971,8 +5985,10 @@ def _elect_zone(entity, floor_name, instant_zone, point, kf_state, zone_polys, s
         dwell = max(dwell, _tuning(layout, "far_move_secs"))
     if best != incumbent:
         # Where this thing usually is at this hour tips a close call, never a clear one.
-        margin = max(0.05, margin + habits_mod.prior_shift(
-            _habits, entity, incumbent, best, now, _tuning(layout, "habit_margin_gain"), _local_tz))
+        shifted = max(0.05, margin + habits_mod.prior_shift(
+            _habits, entity, _habit_zone(floor_name, incumbent), _habit_zone(floor_name, best), now,
+            _tuning(layout, "habit_margin_gain"), _local_tz))
+        margin = min(shifted, max(margin, 0.9))   # a habit never makes a unanimous challenger unable to win
     if best == incumbent or probs[best] - probs.get(incumbent, 0.0) < margin:
         st["challenge"] = None
         return incumbent, False, speed

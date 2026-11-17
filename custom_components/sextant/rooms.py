@@ -73,8 +73,10 @@ def room_options(zone) -> dict:
     say someone is in the room: motion, media players, a presence sensor) and
     ``door`` (a contact entity whose closed state keeps the room occupied)."""
     door = _entity_ids(zone.get("door"))
+    # Never a Sextant occupancy sensor (it would hold itself on) nor the door (an open door is not a person).
+    inputs = [e for e in _entity_ids(zone.get("inputs")) if not e.endswith("_sextant_occupancy") and e not in door]
     return {"hold_secs": _secs(zone.get("room_hold_secs"), 0.0, 3600.0), "extended_secs": _secs(zone.get("room_extended_secs"), 30.0, 86400.0),
-            "inputs": _entity_ids(zone.get("inputs")), "door": door[0] if door else None}
+            "inputs": inputs, "door": door[0] if door else None}
 
 
 # States that say "someone is here" for a motion/presence/occupancy sensor, a
@@ -271,7 +273,9 @@ def settle(prev, raw_on, now, hold_s=0.0, extended_s=600.0, door=None, door_sett
     prev = prev or {}
     last_raw = now if raw_on else prev.get("last_raw")
     shut, shut_at, closed_since = bool(prev.get("door_hold")), prev.get("door_at"), prev.get("door_closed_at")
-    if door is not True:
+    if door is None:
+        pass   # unavailable or no door: keep what was known (a sleeper's hold survives a flaky contact sensor)
+    elif door is False:
         shut = False
         closed_since = None
     else:
@@ -290,6 +294,16 @@ def settle(prev, raw_on, now, hold_s=0.0, extended_s=600.0, door=None, door_sett
     state = "clear" if not on else ("extended" if now - since >= extended_s else "occupied")
     return {"on": on, "state": state, "since": since, "last_raw": last_raw,
             "door_hold": shut, "door_at": shut_at if shut else None, "door_closed_at": closed_since}
+
+
+def release_if_elsewhere(memory, held_people, elsewhere) -> bool:
+    """Let a door hold go when everyone it was holding for is now placed in
+    another room (they left and shut the door behind them). Edits ``memory``
+    (a settle() result) and says whether it did."""
+    if memory.get("door_hold") and held_people and set(held_people) <= set(elsewhere):
+        memory.update(door_hold=False, door_at=None, door_closed_at=float("inf"))
+        return True
+    return False
 
 
 def aggregate(keys, answers) -> tuple[dict, tuple[bool, dict]]:

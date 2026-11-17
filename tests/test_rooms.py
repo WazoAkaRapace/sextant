@@ -358,3 +358,21 @@ def test_publish_rooms_uses_a_rooms_own_timing_inputs_and_door(hass):
     sextant._publish_rooms(hass)
     attrs = sensor._attr_extra_state_attributes
     assert sensor._attr_is_on is True and attrs["hold_over"] is True   # its own 600 s hold, the global is 0
+
+
+def test_inputs_never_include_our_own_sensors_or_the_door():
+    o = rooms.room_options({"inputs": "binary_sensor.kitchen_sextant_occupancy, binary_sensor.door, binary_sensor.m", "door": "binary_sensor.door"})
+    assert o["inputs"] == ["binary_sensor.m"]
+
+
+def test_an_unavailable_door_keeps_a_hold_and_a_departure_releases_it():
+    s = rooms.settle(None, True, 0.0, door=True)
+    s = rooms.settle(s, True, 100.0, door=True)
+    assert s["door_hold"]
+    s = rooms.settle(s, False, 200.0, door=None)                 # contact sensor flaps unavailable
+    assert s["door_hold"] and s["on"]
+    assert rooms.release_if_elsewhere(s, ["Eilee"], {"Eilee", "Jack"}) and not s["door_hold"]
+    assert not rooms.settle(s, False, 300.0, door=True)["on"]    # and it does not take hold again
+    s = rooms.settle(None, True, 0.0, door=True)
+    s = rooms.settle(s, True, 100.0, door=True)
+    assert not rooms.release_if_elsewhere(s, ["Eilee", "Jack"], {"Eilee"})   # one of them is still unaccounted for

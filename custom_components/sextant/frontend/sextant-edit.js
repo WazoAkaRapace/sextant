@@ -864,14 +864,14 @@ class SextantEdit extends LitElement {
   _renderOccupancyOptions(item) {
     const tuning = this.data?.layout?.tuning || {};
     const spec = this.data?.tuning_spec || {};
-    const num = (key) => (v) => this._edit(key, v === "" ? undefined : Number(v));
+    const num = (key, lo, hi) => (v) => this._edit(key, v === "" || !Number.isFinite(Number(v)) ? undefined : Math.min(hi, Math.max(lo, Number(v))));
     const text = (key) => (v) => this._edit(key, v.trim() || undefined);
     return html`<div class="muted small" style="margin-top: 8px">Occupancy sensor</div>
       <div class="row">
         ${uiField({ label: "Clears after (s)", type: "number", step: 1, min: 0, max: 3600, value: item.room_hold_secs ?? "",
-          placeholder: String(tuning.room_hold_secs ?? spec.room_hold_secs?.default ?? 0), onChange: num("room_hold_secs"), style: "width: 150px" })}
+          placeholder: String(tuning.room_hold_secs ?? spec.room_hold_secs?.default ?? 0), onChange: num("room_hold_secs", 0, 3600), style: "width: 150px" })}
         ${uiField({ label: "Extended after (s)", type: "number", step: 1, min: 30, max: 86400, value: item.room_extended_secs ?? "",
-          placeholder: String(tuning.room_extended_secs ?? spec.room_extended_secs?.default ?? 600), onChange: num("room_extended_secs"), style: "width: 150px" })}
+          placeholder: String(tuning.room_extended_secs ?? spec.room_extended_secs?.default ?? 600), onChange: num("room_extended_secs", 30, 86400), style: "width: 150px" })}
       </div>
       ${uiField({ label: "Other sensors that mean someone is here (entity ids)", value: Array.isArray(item.inputs) ? item.inputs.join(", ") : item.inputs ?? "",
         placeholder: "binary_sensor.kitchen_motion, media_player.kitchen", onChange: text("inputs"), style: "width: 100%" })}

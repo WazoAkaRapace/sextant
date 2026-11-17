@@ -22,6 +22,7 @@ MAX_STEP_S = 60.0          # one update counts at most a minute: a gap is not ti
 MIN_SLOT_S = 20 * 60.0     # less than this in a slot says nothing yet
 MAX_ZONES_PER_SLOT = 12    # a slot keeps its busiest rooms; the rest are noise
 MAX_THINGS = 200
+MAX_SLOTS = 48             # weekday/weekend x 24 hours
 
 
 def new_store() -> dict:
@@ -45,10 +46,12 @@ def clean(raw) -> dict:
         for slot, row in slots.items():
             zones = row.get("z") if isinstance(row, dict) else None
             at = row.get("at") if isinstance(row, dict) else None
-            if not isinstance(slot, str) or not isinstance(zones, dict) or isinstance(at, bool) or not isinstance(at, (int, float)):
+            if (not isinstance(slot, str) or not isinstance(zones, dict) or isinstance(at, bool)
+                    or not isinstance(at, (int, float)) or not math.isfinite(at) or len(out.get(ent, {})) >= MAX_SLOTS):
                 continue
-            good = {z: float(s) for z, s in zones.items()
+            good = {z: float(s) for z, s in list(zones.items())[:4 * MAX_ZONES_PER_SLOT]
                     if isinstance(z, str) and isinstance(s, (int, float)) and not isinstance(s, bool) and math.isfinite(s) and s > 0}
+            good = dict(sorted(good.items(), key=lambda kv: -kv[1])[:MAX_ZONES_PER_SLOT])
             if good:
                 out.setdefault(ent, {})[slot] = {"at": float(at), "z": good}
     return out
@@ -80,7 +83,9 @@ def share(store: dict, ent: str, zone: str, now: float, tz=None) -> float | None
     if not row:
         return None
     total = sum(row["z"].values())
-    return None if total < MIN_SLOT_S else row["z"].get(zone, 0.0) / total
+    # History that has not been added to for a long time has faded: the slot only decays when it is learned into.
+    faded = total * 0.5 ** (max(0.0, now - row["at"]) / HALF_LIFE_S)
+    return None if faded < MIN_SLOT_S else row["z"].get(zone, 0.0) / total
 
 
 def prior_shift(store: dict, ent: str, incumbent: str, challenger: str, now: float, gain: float, tz=None) -> float:
