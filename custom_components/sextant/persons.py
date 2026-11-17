@@ -462,6 +462,17 @@ def visit_events(before, after, pets=()) -> list:
     return out
 
 
+def room_changes(before, after, pets=()) -> list:
+    """``sextant_person_room_changed`` events: ``before`` / ``after`` map a
+    person to ``(room, floor)`` while a sensor puts them in a real room (None
+    otherwise). Only a move from one room to another counts: arriving, leaving
+    and a person new to the map make none (the arrived / left events say so)."""
+    return [("sextant_person_room_changed", {"person": p, "from_room": before[p][0], "from_floor": before[p][1],
+                                             "room": after[p][0], "floor": after[p][1]})
+            for p in sorted(after)
+            if p not in pets and before.get(p) and after[p] and before[p][0] != after[p][0]]
+
+
 def fuse(best, why, presence, held, gps, ignored, home=None, wifi=None):
     """(suffix -> (state, attributes)) for a person's sensors, BLE, Wi-Fi and GPS fused.
 

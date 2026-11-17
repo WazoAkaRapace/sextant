@@ -213,3 +213,12 @@ def test_should_ask_gps_once_per_quiet_spell():
     assert not ask("away", False, NOW - 1000, None)
     assert not ask("quiet", True, NOW - 130, None)
     assert not ask("quiet", False, None, None)
+
+
+def test_room_changes_only_for_a_move_between_rooms():
+    from sextant import persons
+    before = {"a": ("Kitchen", "Ground"), "b": ("Den", "Ground"), "c": None, "pet": ("Den", "Ground")}
+    after = {"a": ("Office", "Upper"), "b": ("Den", "Ground"), "c": ("Den", "Ground"), "d": ("Den", "Ground"), "pet": ("Hall", "Ground")}
+    assert persons.room_changes(before, after, pets=("pet",)) == [("sextant_person_room_changed", {
+        "person": "a", "from_room": "Kitchen", "from_floor": "Ground", "room": "Office", "floor": "Upper"})]
+    assert persons.room_changes({"a": ("Kitchen", "Ground")}, {"a": None}) == []
