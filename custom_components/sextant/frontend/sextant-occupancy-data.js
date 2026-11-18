@@ -28,6 +28,7 @@ export function occupancyByFloor(states, planFloors) {
 }
 
 export const WHERE_SOURCE = { ble: "Bluetooth", wifi: "Wi-Fi", gps: "GPS", held: "Bluetooth (held)", none: "None" };
+export const WHERE_ICON = { ble: "mdi:bluetooth", wifi: "mdi:wifi", gps: "mdi:crosshairs-gps", held: "mdi:bluetooth-off", none: "mdi:help-circle-outline" };
 
 /** Where a chip's person, pet or thing is, from its location sensors; null when it has none.
  *  ``ids`` is the room sensor's {display name: thing slug}; a person (or a pet that is a
