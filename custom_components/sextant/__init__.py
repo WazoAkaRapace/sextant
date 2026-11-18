@@ -5519,7 +5519,7 @@ def _publish_rooms(hass):
             who.set_occupancy(people_on, {**attrs, "state": wm["state"],
                                          "sources": rooms_mod.sources(bool(attrs.get("humans") or attrs.get("people")), seen["count"] > 0, inputs, forced,
                                                                       wm["door_hold"], who_grace and not wm["on"], hold_over),
-                                         "since": datetime.fromtimestamp(wm["since"], timezone.utc).isoformat(timespec="seconds"),
+                                         "since": datetime.fromtimestamp(wm["since"], timezone.utc).isoformat(timespec="seconds"), "people_only": True,
                                          "door_hold": wm["door_hold"],
                                          "hold_over": hold_over})
             published_people[key] = (people_on, {**attrs, "pets": [], "count": attrs.get("humans") or len(attrs.get("people") or [])})
