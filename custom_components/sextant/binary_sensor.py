@@ -66,6 +66,10 @@ class SextantRoomOccupancy(BinarySensorEntity, RestoreEntity):
             self._attr_extra_state_attributes = {**self._attr_extra_state_attributes, "sources": ["restored"]}
             self.restore_until = until
             self.restored_door_hold = bool(last.attributes.get("door_hold"))   # a sleeper's door hold outlives the restart
+            at, who = last.attributes.get("door_at"), last.attributes.get("door_people")
+            self.restored_door_at = float(at) if isinstance(at, (int, float)) and not isinstance(at, bool) and at == at and abs(at) != float("inf") else None
+            if isinstance(who, list):
+                self.door_people = [w for w in who if isinstance(w, str)]
             self.async_write_ha_state()
 
     def set_occupancy(self, is_on, attrs):

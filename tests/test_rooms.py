@@ -529,6 +529,49 @@ def test_a_door_hold_survives_a_restart_and_lets_go_when_the_door_opens(hass):
     assert anyone._attr_is_on is True and anyone._attr_extra_state_attributes["sources"] == ["door"]
 
 
+def _restart_bedroom(hass, attrs, door_state=None, answers=None):
+    import asyncio
+    import types
+    layout = {"floor": [{"name": "Ground Floor", "floor_id": "ground", "zones": [{"entity_id": "Bedroom", "cords": [{"x": 0, "y": 0}] * 3}]}]}
+    _added(hass)
+    hass.data["sextant_room_keys"] = rooms.room_keys(layout)
+    hass.data["sextant_room_keys"][0]["door"] = "binary_sensor.door" if door_state else None
+    hass.data["sextant_aggregate_sensors"] = {}
+    platform.ensure_room_sensors(hass, layout)
+    hass.data["sextant_room_switches"] = {}
+    key = ("Ground Floor", "Bedroom")
+    anyone = hass.data["sextant_room_sensors"][key]
+    anyone.hass = hass
+    anyone.async_write_ha_state = lambda: None
+    anyone._test_last_state = types.SimpleNamespace(state="on", attributes=attrs)
+    asyncio.run(anyone.async_added_to_hass())
+    st = types.SimpleNamespace(state=door_state)
+    hass.states = type("S", (), {"get": staticmethod(lambda e: st if door_state else None)})()
+    hass.data["sextant_room_answers"] = answers or {}
+    anyone.restore_until = 1.0
+    return anyone, key
+
+
+def test_a_restart_does_not_renew_the_door_hold_timeout(hass):
+    import time
+    anyone, _ = _restart_bedroom(hass, {"door_hold": True, "door_at": time.time() - 10 ** 6})
+    sextant._publish_rooms(hass)
+    assert anyone.memory["door_hold"] is False and anyone._attr_is_on is False
+
+
+def test_an_open_door_after_a_restart_ends_the_door_hold(hass):
+    anyone, _ = _restart_bedroom(hass, {"door_hold": True}, door_state="on")
+    sextant._publish_rooms(hass)
+    assert anyone.memory["door_hold"] is False and anyone._attr_is_on is False
+
+
+def test_a_restored_door_hold_lets_go_when_its_people_are_elsewhere(hass):
+    anyone, key = _restart_bedroom(hass, {"door_hold": True, "door_people": ["David"]}, door_state="off",
+                                   answers={("Ground Floor", "Kitchen"): (True, {"people": ["David"]})})
+    sextant._publish_rooms(hass)
+    assert anyone.memory["door_hold"] is False and anyone._attr_is_on is False
+
+
 def test_sources_say_why_a_room_is_on():
     assert rooms.sources(True, False, [], False, False, False, False) == ["bluetooth"]
     assert rooms.sources(False, False, ["media_player.tv", "binary_sensor.m"], False, False, False, False) == ["media_player", "sensor"]
