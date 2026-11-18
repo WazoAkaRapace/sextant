@@ -30,6 +30,7 @@ export function occupancyByFloor(states, planFloors) {
 export const WHERE_SOURCE = { ble: "Bluetooth", wifi: "Wi-Fi", gps: "GPS", held: "Bluetooth (held)", none: "None" };
 
 /** People and pets whose Sextant location is Outside (beyond every room, still at home). */
+// shortcut: only pets with a person.* entity are listed; a tag-only pet outside shows nowhere. Add layout thing_classes if one appears.
 export function outsideNow(states) {
   states = states || {};
   const people = [], pets = [];

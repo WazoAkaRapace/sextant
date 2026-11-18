@@ -5428,7 +5428,8 @@ def _update_room_sensors(hass):
             pet_persons.add(name)
             continue
         room, floor = st.attributes.get("room"), st.attributes.get("floor")
-        if presences[name] in rooms_mod.COUNTED and room and room != "unknown" and floor and floor != "unknown":
+        # Outside keeps the floor but is no room, even one that happens to be called "Outside".
+        if presences[name] in rooms_mod.COUNTED and room and room != "unknown" and floor and floor != "unknown" and st.attributes.get("kind") != "outside":
             person_rooms[name] = (floor, room)
     names = _thing_names(hass, {r.get("ent") for r in rows if r.get("ent")}, layout)
     counts = rooms_mod.stands_for_someone(owners, speaking, lambda ent: persons_mod.locates_owner(layout, ent, classes.get(ent)))

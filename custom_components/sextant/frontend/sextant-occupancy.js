@@ -123,7 +123,7 @@ class SextantOccupancy extends LitElement {
 
   render() {
     const floors = this._floors || [];
-    if (!floors.length) return html`<div class="empty">No room sensors yet. Draw rooms in Edit.</div>`;
+    if (!floors.length && !this._outside) return html`<div class="empty">No room sensors yet. Draw rooms in Edit.</div>`;
     const people = new Set(floors.flatMap((f) => f.rooms.flatMap((r) => r.people))).size;
     return html`${[...floors, ...(this._outside ? [this._outside] : [])].map((f) => html`
       <div class="floor">
