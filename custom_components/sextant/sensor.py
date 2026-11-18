@@ -121,7 +121,7 @@ def thing_of_unique_id(unique_id):
     """The thing slug behind a per-thing Sextant unique_id, else None."""
     # A room's occupancy sensor is sextant_room_occupancy_<floor>_<room>: read
     # as a sextant_room sensor, the prune took 21 rooms for untracked things.
-    if not unique_id or unique_id.startswith("sextant_room_occupancy_"):
+    if not unique_id or unique_id.startswith(("sextant_room_occupancy_", "sextant_room_people_")):
         return None
     for suffix, _label in SENSOR_KINDS:
         if unique_id.startswith(suffix + "_"):
@@ -637,7 +637,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     # user's name, area and disabled flag with them.
     from .persons import PERSON_SENSOR_KINDS  # noqa: PLC0415
     # Not a thing's: the people's sensors and trackers, and the rooms' occupancy.
-    kept_prefixes = tuple(f"{suffix}_" for suffix, _label in PERSON_SENSOR_KINDS) + ("sextant_person_tracker_", "sextant_room_occupancy_")
+    kept_prefixes = tuple(f"{suffix}_" for suffix, _label in PERSON_SENSOR_KINDS) + ("sextant_person_tracker_", "sextant_room_occupancy_", "sextant_room_people_")
     entity_registry = er.async_get(hass)
     if expected_entity_ids:
         stale_sextant_ids = [

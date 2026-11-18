@@ -5455,6 +5455,7 @@ def _publish_rooms(hass):
         st = hass.states.get(entity_id)
         return st.state if st is not None else None
     published = {}
+    people_sensors = hass.data.get("sextant_room_people") or {}
     for key, sensor in cache.items():
         is_on, attrs = answers.get(key) or (False, None)
         if attrs is None:
@@ -5483,6 +5484,23 @@ def _publish_rooms(hass):
                  "hold_over": m["on"] and not sensed and not forced and not m["door_hold"]}
         sensor.set_occupancy(m["on"], attrs)
         published[key] = (m["on"], attrs)
+        who = people_sensors.get(key)
+        if who is not None:
+            # Radars, inputs and the force switch cannot tell a pet from a person, so they count as people here.
+            humans = bool(attrs.get("humans") or attrs.get("people")) or seen["count"] > 0 or bool(inputs)
+            if humans and attrs.get("people"):
+                who.door_people = list(attrs["people"])
+            who.memory = rooms_mod.settle(getattr(who, "memory", None), humans or forced, now,
+                                          hold if own_hold is None else own_hold, extended if own_ext is None else own_ext,
+                                          door, door_settle, door_max)
+            if not humans and rooms_mod.release_if_elsewhere(who.memory, getattr(who, "door_people", None), elsewhere(key)):
+                who.memory = rooms_mod.settle(who.memory, forced, now, hold if own_hold is None else own_hold,
+                                              extended if own_ext is None else own_ext, door, door_settle, door_max)
+            wm = who.memory
+            who.set_occupancy(wm["on"], {**attrs, "state": wm["state"],
+                                         "since": datetime.fromtimestamp(wm["since"], timezone.utc).isoformat(timespec="seconds"),
+                                         "door_hold": wm["door_hold"],
+                                         "hold_over": wm["on"] and not humans and not forced and not wm["door_hold"]})
     floors, house = rooms_mod.aggregate(hass.data.get("sextant_room_keys") or [], published)
     for (kind, floor), sensor in (hass.data.get("sextant_aggregate_sensors") or {}).items():
         on, attrs = house if kind == "house" else floors.get(floor, (False, None))
@@ -7503,7 +7521,7 @@ async def async_unload_entry(hass: HomeAssistant, entry):
     hass.data.pop("sextant_initialized", None)
     hass.data.pop("sextant_sensors", None)
     hass.data.pop("sextant_add_entities", None)
-    for key in ("sextant_room_sensors", "sextant_aggregate_sensors", "sextant_room_switches", "sextant_switch_add", "sextant_room_add", "sextant_room_keys", "sextant_room_unlinked"):
+    for key in ("sextant_room_sensors", "sextant_room_people", "sextant_aggregate_sensors", "sextant_room_switches", "sextant_switch_add", "sextant_room_add", "sextant_room_keys", "sextant_room_unlinked"):
         hass.data.pop(key, None)
 
     return True
