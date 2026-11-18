@@ -485,6 +485,13 @@ def test_a_room_that_was_on_stays_on_over_a_restart_until_the_grace_runs_out(has
     assert anyone._attr_is_on is False and people._attr_is_on is False
 
 
+def test_sources_say_why_a_room_is_on():
+    assert rooms.sources(True, False, [], False, False, False, False) == ["bluetooth"]
+    assert rooms.sources(False, False, ["media_player.tv", "binary_sensor.m"], False, False, False, False) == ["media_player", "sensor"]
+    assert rooms.sources(False, True, [], True, True, True, True) == ["radar", "forced", "door", "restored", "hold"]
+    assert rooms.sources(False, False, [], False, False, False, False) == []
+
+
 def test_inputs_never_include_our_own_sensors_or_the_door():
     o = rooms.room_options({"inputs": "binary_sensor.kitchen_sextant_occupancy, binary_sensor.door, binary_sensor.m", "door": "binary_sensor.door"})
     assert o["inputs"] == ["binary_sensor.m"]

@@ -6,7 +6,7 @@
 
 | Entity | Meaning |
 |---|---|
-| `binary_sensor.<room>_sextant_occupancy` | on while anyone is in the room. Attributes: `people`, `pets`, `things`, `count`, `state` (`occupied`, `extended` or `clear`), `since`, `forced`, `hold_over` |
+| `binary_sensor.<room>_sextant_occupancy` | on while anyone is in the room. Attributes: `people`, `pets`, `things`, `count`, `state` (`occupied`, `extended` or `clear`), `since`, `forced`, `hold_over`, `sources` (why it is on: `bluetooth`, `radar`, `media_player`, `sensor`, `forced`, `door`, `restored`, `hold`) |
 | `binary_sensor.<room>_sextant_people_occupancy` | the same without pets: a pet's tag alone leaves it off (radars and other sensors still count) |
 | `binary_sensor.<floor>_sextant_floor_occupancy` | on while anyone is on the floor; `rooms`, `people`, `pets`, `count` |
 | `binary_sensor.sextant_house_occupancy` | on while anyone is in the house; the same attributes across all floors |
