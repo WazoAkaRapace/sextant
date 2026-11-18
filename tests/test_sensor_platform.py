@@ -108,10 +108,13 @@ def test_setup_migrates_renamed_kinds_and_removes_legacy_and_stale_entries(tmp_p
     reg.add("sensor.someone_else", platform="other", unique_id="sextant_zone_other")
     reg.add("binary_sensor.kitchen_sextant_occupancy", unique_id="sextant_room_occupancy_ground_floor_kitchen")  # a room's, not a thing's
     reg.add("device_tracker.alex_sextant", unique_id="sextant_person_tracker_alex")  # a person's tracker
+    reg.add("switch.kitchen_sextant_force_occupied", unique_id="sextant_room_force_ground_floor_kitchen")  # a room's force switch
+    reg.add("switch.stray_sextant", unique_id="sextant_room_occupancy_ground_floor_stray")  # a room prefix on a switch is not a room's sensor
     added, add = _added()
     run(sn.async_setup_entry(hass, None, add))
     ids = set(reg.entities)
     assert "binary_sensor.kitchen_sextant_occupancy" in ids and "device_tracker.alex_sextant" in ids
+    assert "switch.kitchen_sextant_force_occupied" in ids and "switch.stray_sextant" not in ids
     assert "sensor.cat_sextant_spot" in ids and "sensor.cat_sextant_sub_zone" not in ids
     assert "sensor.cat_sextant_zone" not in ids  # rename blocked -> removed
     assert "sensor.cat_cat_sextant_floor" not in ids and "sensor.cat_cat_sextant_floor" not in hass.states.states

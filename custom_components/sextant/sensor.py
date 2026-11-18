@@ -637,8 +637,9 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     # user's name, area and disabled flag with them.
     from .persons import PERSON_SENSOR_KINDS  # noqa: PLC0415
     # Not a thing's: the people's sensors and trackers, and the rooms' occupancy.
-    kept_prefixes = tuple(f"{suffix}_" for suffix, _label in PERSON_SENSOR_KINDS) + ("sextant_person_tracker_", "sextant_room_occupancy_", "sextant_room_people_", "sextant_floor_occupancy_", "sextant_floor_people_occupancy_", "sextant_house_occupancy", "sextant_house_people_occupancy")
-    person_prefixes = kept_prefixes[:-6]
+    person_prefixes = tuple(f"{suffix}_" for suffix, _label in PERSON_SENSOR_KINDS) + ("sextant_person_tracker_",)
+    room_prefixes = ("sextant_room_occupancy_", "sextant_room_people_", "sextant_floor_occupancy_", "sextant_floor_people_occupancy_", "sextant_house_occupancy", "sextant_house_people_occupancy")
+    force_prefix = "sextant_room_force_"     # the rooms' force switches (switch.py)
     entity_registry = er.async_get(hass)
     if expected_entity_ids:
         stale_sextant_ids = [
@@ -646,7 +647,10 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
             for entry in entity_registry.entities.values()
             if entry.platform == "sextant" and entry.entity_id not in expected_entity_ids
             and entry.entity_id not in GLOBAL_ENTITY_IDS  # keep the global sensors
-            and not (isinstance(entry.unique_id, str) and entry.unique_id.startswith(kept_prefixes) and (entry.entity_id.startswith("binary_sensor.") or entry.unique_id.startswith(person_prefixes)))
+            and not (isinstance(entry.unique_id, str) and (
+                entry.unique_id.startswith(person_prefixes)
+                or (entry.unique_id.startswith(room_prefixes) and entry.entity_id.startswith("binary_sensor."))
+                or (entry.unique_id.startswith(force_prefix) and entry.entity_id.startswith("switch."))))
         ]
         for entity_id in stale_sextant_ids:
             _LOGGER.info("Removing stale Sextant registry entity: %s", entity_id)
