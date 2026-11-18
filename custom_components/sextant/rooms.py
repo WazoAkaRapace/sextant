@@ -256,6 +256,7 @@ def occupancy(keys, rows, presence_of, classes=None, names=None, person_rooms=No
         out[key] = (bool(counted) or bool(people), {
             "room": k["room"], "floor": k["floor"], "area_id": k["area_id"], "floor_id": k["floor_id"],
             "count": len(counted), "people": people, "pets": pets, "things": things,
+            "humans": sum(1 for t in counted if classes.get(t[0]) not in PET_CLASSES),
             "spots": sorted({s for _e, _p, s, _c in counted if s}),
             "presence": presence,
         })
@@ -290,6 +291,15 @@ def people_home(presences: dict[str, str], pets=()) -> tuple[int, dict]:
     away = sorted(n for n, p in presences.items() if p not in at_home and n not in pets)
     pets_home = sorted(n for n, p in presences.items() if p in at_home and n in pets)
     return len(home), {"home": home, "away": away, "pets_home": pets_home}
+
+
+def people_ids(ids) -> dict:
+    """The people-only sensor of a room (on for a person, never for a pet's tag alone), from its ``ids_for`` entry."""
+    return {
+        "unique_id": ids["unique_id"].replace("sextant_room_occupancy_", "sextant_room_people_", 1),
+        "entity_id": ids["entity_id"].replace("_sextant_occupancy", "_sextant_people_occupancy"),
+        "name": ids["name"].replace("Sextant Occupancy", "Sextant People Occupancy"),
+    }
 
 
 def switch_ids(ids) -> dict:

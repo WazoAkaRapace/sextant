@@ -119,21 +119,25 @@ def _added(hass):
 def test_sensors_are_created_once_per_room_and_pruned_with_the_plan(hass):
     added = _added(hass)
     platform.ensure_room_sensors(hass, LAYOUT)
-    assert [s.entity_id for s in added] == [
+    assert [s.entity_id for s in added if "people" not in s.entity_id] == [
         "binary_sensor.kitchen_sextant_occupancy", "binary_sensor.ground_floor_office_sextant_occupancy",
         "binary_sensor.second_floor_office_sextant_occupancy", "binary_sensor.master_bedroom_sextant_occupancy"]
+    assert len(added) == 8                                   # each room has a people-only sensor too
     platform.ensure_room_sensors(hass, LAYOUT)
-    assert len(added) == 4                                   # nothing created twice
+    assert len(added) == 8                                   # nothing created twice
     # The Kitchen is renamed: its sensor (and empty device) go, the new room's comes.
     from homeassistant.helpers import device_registry as dr
     from homeassistant.helpers import entity_registry as er
     ent_reg, dev_reg = er.async_get(hass), dr.async_get(hass)
     dev = dev_reg.add({("sextant", "room_ground_floor_kitchen")})
     ent_reg.add("binary_sensor.kitchen_sextant_occupancy", unique_id="sextant_room_occupancy_ground_floor_kitchen", device_id=dev.id)
+    ent_reg.add("binary_sensor.kitchen_sextant_people_occupancy", unique_id="sextant_room_people_ground_floor_kitchen", device_id=dev.id)
     renamed = {"floor": [{"name": "Ground Floor", "zones": [{"entity_id": "Cook House", "cords": [{"x": 0, "y": 0}] * 3}]}]}
     platform.prune_room_sensors(hass, renamed)
     assert ("Ground Floor", "Kitchen") not in hass.data["sextant_room_sensors"]
     assert ent_reg.async_get("binary_sensor.kitchen_sextant_occupancy") is None
+    assert ent_reg.async_get("binary_sensor.kitchen_sextant_people_occupancy") is None
+    assert ("Ground Floor", "Kitchen") not in hass.data["sextant_room_people"]
     assert dev.id not in dev_reg.devices
 
 
@@ -405,6 +409,36 @@ def test_publish_rooms_uses_a_rooms_own_timing_inputs_and_door(hass):
     sextant._publish_rooms(hass)
     attrs = sensor._attr_extra_state_attributes
     assert sensor._attr_is_on is True and attrs["hold_over"] is True   # its own 600 s hold, the global is 0
+
+
+def test_people_sensor_ignores_a_pets_tag_but_not_a_person_or_a_sensor(hass):
+    layout = {"floor": [{"name": "Ground Floor", "floor_id": "ground", "zones": [
+        {"entity_id": "Kitchen", "inputs": "binary_sensor.kitchen_motion", "cords": [{"x": 0, "y": 0}] * 3}]}]}
+    _added(hass)
+    hass.data["sextant_room_keys"] = rooms.room_keys(layout)
+    hass.data["sextant_aggregate_sensors"] = {}
+    platform.ensure_room_sensors(hass, layout)
+    hass.data["sextant_room_switches"] = {}
+    key = ("Ground Floor", "Kitchen")
+    states = {"binary_sensor.kitchen_motion": "off"}
+    hass.states = type("S", (), {"get": staticmethod(lambda e: type("St", (), {"state": states[e]})() if e in states else None)})()
+    anyone, people = hass.data["sextant_room_sensors"][key], hass.data["sextant_room_people"][key]
+    assert people.entity_id == "binary_sensor.kitchen_sextant_people_occupancy"
+    assert people._attr_unique_id == "sextant_room_people_" + anyone._attr_unique_id[len("sextant_room_occupancy_"):]
+
+    def answer(humans, count):
+        hass.data["sextant_room_answers"] = {key: (count > 0, {"room": "Kitchen", "floor": "Ground Floor", "count": count, "humans": humans,
+                                                              "people": [], "pets": ["Fry"], "things": []})}
+        sextant._publish_rooms(hass)
+    answer(0, 1)                                                    # only the cat's tag
+    assert anyone._attr_is_on is True and people._attr_is_on is False
+    answer(1, 2)
+    assert people._attr_is_on is True
+    answer(0, 1)
+    people.memory = None
+    states["binary_sensor.kitchen_motion"] = "on"                   # a motion sensor cannot tell: it counts as people
+    answer(0, 1)
+    assert people._attr_is_on is True
 
 
 def test_inputs_never_include_our_own_sensors_or_the_door():

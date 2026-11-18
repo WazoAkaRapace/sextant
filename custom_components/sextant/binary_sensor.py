@@ -18,12 +18,13 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import DeviceInfo
 
 from .assist import expose
-from .rooms import HOUSE_ID, floor_ids, ids_for, room_keys
+from .rooms import HOUSE_ID, floor_ids, ids_for, people_ids, room_keys
 from .storage import get_layout
 
 _LOGGER = logging.getLogger(__name__)
 
 UNIQUE_PREFIX = "sextant_room_occupancy_"
+PEOPLE_PREFIX = "sextant_room_people_"
 
 
 class SextantRoomOccupancy(BinarySensorEntity):
@@ -56,6 +57,16 @@ class SextantRoomOccupancy(BinarySensorEntity):
         self._attr_extra_state_attributes = attrs
         if getattr(self, "hass", None) is not None:
             self.async_write_ha_state()
+
+
+class SextantRoomPeople(SextantRoomOccupancy):
+    """The room's sensor for people: on when anyone but a pet's tag is there (lights, not the cats' say). It shares the room's device."""
+
+    def __init__(self, key, ids, room_ids):
+        super().__init__(key, room_ids)
+        self._attr_name = ids["name"]
+        self._attr_unique_id = ids["unique_id"]
+        self.entity_id = ids["entity_id"]
 
 
 class SextantAggregateOccupancy(SextantRoomOccupancy):
@@ -100,55 +111,70 @@ def ensure_aggregate_sensors(hass, layout):
         add_entities(new, update_before_add=False)
 
 
+def _follow_ids(ent_reg, sensor, ids):
+    """A room that gained a namesake on another floor now shows its floor in the
+    entity id (and the other way round). The registry entry follows, unless the
+    new id is taken; Home Assistant re-adds the entity under the new id by itself."""
+    if sensor.entity_id == ids["entity_id"] and sensor._attr_unique_id == ids["unique_id"]:
+        return
+    changes = {}
+    if sensor.entity_id != ids["entity_id"] and ent_reg.async_get(ids["entity_id"]) is None:
+        changes["new_entity_id"] = ids["entity_id"]
+    if sensor._attr_unique_id != ids["unique_id"]:
+        changes["new_unique_id"] = ids["unique_id"]
+    if changes and ent_reg.async_get(sensor.entity_id) is not None:
+        ent_reg.async_update_entity(sensor.entity_id, **changes)
+    sensor.entity_id = ids["entity_id"]
+    sensor._attr_unique_id = ids["unique_id"]
+    sensor._attr_name = ids["name"]
+
+
 @callback
 def ensure_room_sensors(hass, layout):
-    """Create the sensor of any room on the plan that has none yet."""
+    """Create the sensors (anyone, and people only) of any room on the plan that has none yet."""
     cache = hass.data.get("sextant_room_sensors")
     add_entities = hass.data.get("sextant_room_add")
     if cache is None or add_entities is None:
         return
+    people = hass.data.setdefault("sextant_room_people", {})
     new = []
     ent_reg = er.async_get(hass)
     for key, ids in ids_for(room_keys(layout)).items():
-        sensor = cache.get(key)
-        if sensor is not None:
-            # A room that gained a namesake on another floor now shows its
-            # floor in the entity id (and the other way round). The registry
-            # entry follows, unless the new id is taken; Home Assistant
-            # re-adds the entity under the new id by itself.
-            if sensor.entity_id != ids["entity_id"] or sensor._attr_unique_id != ids["unique_id"]:
-                changes = {}
-                if sensor.entity_id != ids["entity_id"] and ent_reg.async_get(ids["entity_id"]) is None:
-                    changes["new_entity_id"] = ids["entity_id"]
-                if sensor._attr_unique_id != ids["unique_id"]:
-                    changes["new_unique_id"] = ids["unique_id"]
-                if changes and ent_reg.async_get(sensor.entity_id) is not None:
-                    ent_reg.async_update_entity(sensor.entity_id, **changes)
-                sensor.entity_id = ids["entity_id"]
-                sensor._attr_unique_id = ids["unique_id"]
-                sensor._attr_name = ids["name"]
-            continue
-        cache[key] = SextantRoomOccupancy(key, ids)
-        new.append(cache[key])
+        if cache.get(key) is not None:
+            _follow_ids(ent_reg, cache[key], ids)
+        else:
+            cache[key] = SextantRoomOccupancy(key, ids)
+            new.append(cache[key])
+        pids = people_ids(ids)
+        if people.get(key) is not None:
+            _follow_ids(ent_reg, people[key], pids)
+        else:
+            people[key] = SextantRoomPeople(key, pids, ids)
+            new.append(people[key])
     if new:
-        _LOGGER.info("Creating Sextant occupancy sensors for %d room(s)", len(new))
+        _LOGGER.info("Creating Sextant occupancy sensors for %d room sensor(s)", len(new))
         add_entities(new, update_before_add=False)
         # The area link needs the device, which exists once the add has run.
-        hass.data.setdefault("sextant_room_unlinked", set()).update(s.key for s in new)
+        hass.data.setdefault("sextant_room_unlinked", set()).update(s.key for s in new if not isinstance(s, SextantRoomPeople))
 
 
 @callback
 def prune_room_sensors(hass, layout):
-    """Remove the sensor of any room no longer on the plan (renamed rooms too)."""
+    """Remove the sensors of any room no longer on the plan (renamed rooms too)."""
     keep = set(ids_for(room_keys(layout)))
     cache = hass.data.get("sextant_room_sensors") or {}
-    keep_uids = {s._attr_unique_id for k, s in cache.items() if k in keep} | {i["unique_id"] for i in ids_for(room_keys(layout)).values()}
+    people = hass.data.get("sextant_room_people") or {}
+    keep_uids = {s._attr_unique_id for k, s in cache.items() if k in keep} | {s._attr_unique_id for k, s in people.items() if k in keep}
+    for i in ids_for(room_keys(layout)).values():
+        keep_uids |= {i["unique_id"], people_ids(i)["unique_id"]}
     for key in [k for k in cache if k not in keep]:
         del cache[key]
+    for key in [k for k in people if k not in keep]:
+        del people[key]
     ent_reg = er.async_get(hass)
     dev_reg = dr.async_get(hass)
     for entry in list(ent_reg.entities.values()):
-        if entry.platform != "sextant" or not isinstance(entry.unique_id, str) or not entry.unique_id.startswith(UNIQUE_PREFIX):
+        if entry.platform != "sextant" or not isinstance(entry.unique_id, str) or not entry.unique_id.startswith((UNIQUE_PREFIX, PEOPLE_PREFIX)):
             continue
         if entry.unique_id in keep_uids:
             continue
@@ -205,6 +231,7 @@ def _device(hass, dev_reg, identifier):
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
     hass.data.setdefault("sextant_room_sensors", {})
+    hass.data.setdefault("sextant_room_people", {})
     hass.data.setdefault("sextant_aggregate_sensors", {})
     hass.data["sextant_room_add"] = async_add_entities
     layout = get_layout(hass)

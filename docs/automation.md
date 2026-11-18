@@ -148,6 +148,11 @@ triggers:
 
 ## Rooms
 
+Each room also gets `binary_sensor.<room>_sextant_people_occupancy`, the same
+answer without the pets: a cat's or dog's tag alone leaves it `off`, so
+lights can switch off on it while the pets stay put. Radars, other sensors
+and the force switch cannot tell a pet from a person, so they turn it `on`.
+
 Each room on the plan gets `binary_sensor.<room>_sextant_occupancy`
 (device class occupancy): `on` while Sextant places a person or a pet in
 it. What counts is the thing speaking for each person ([People](#people))
