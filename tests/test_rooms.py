@@ -85,6 +85,12 @@ def test_a_thing_gone_away_or_not_placed_counts_nowhere():
     assert "gone" not in things and "lost_tag" not in things
 
 
+def test_a_thing_outside_is_not_in_its_nearest_room():
+    out_row = {"ent": "meg", "zone": "Kitchen", "floor": "Ground Floor", "outside": True}
+    on, kitchen = rooms.occupancy(rooms.room_keys(LAYOUT), [out_row], PRESENCE.get, CLASSES, NAMES)[("Ground Floor", "Kitchen")]
+    assert not on and kitchen["pets"] == [] and kitchen["things"] == []
+
+
 def test_a_room_of_only_quiet_things_is_on_but_says_quiet():
     out = rooms.occupancy(rooms.room_keys(LAYOUT), [ROWS[1]], PRESENCE.get, CLASSES, NAMES)
     on, kitchen = out[("Ground Floor", "Kitchen")]
