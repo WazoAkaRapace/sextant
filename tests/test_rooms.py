@@ -434,7 +434,7 @@ def test_people_sensor_ignores_a_pets_tag_but_not_a_person_or_a_sensor(hass):
     states = {"binary_sensor.kitchen_motion": "off"}
     hass.states = type("S", (), {"get": staticmethod(lambda e: type("St", (), {"state": states[e]})() if e in states else None)})()
     anyone, people = hass.data["sextant_room_sensors"][key], hass.data["sextant_room_people"][key]
-    assert (anyone.icon, people.icon) == ("mdi:paw-off", "mdi:account-outline")
+    assert (anyone.icon, people.icon) == ("mdi:map-marker-radius-outline", "mdi:account-outline")
     assert people.entity_id == "binary_sensor.kitchen_sextant_people_occupancy"
     assert people._attr_unique_id == "sextant_room_people_" + anyone._attr_unique_id[len("sextant_room_occupancy_"):]
 
