@@ -314,6 +314,8 @@ def test_a_watch_the_ap_still_lists_but_has_not_heard_is_dated_by_idletime():
     assert wifi.heard_at({"last_seen": NOW - 3}) == NOW - 3              # no idletime: last_seen as before
     assert wifi.heard_at({"last_seen": NOW - 3, "idletime": -1}) == NOW - 3
     assert wifi.heard_at({"last_seen": NOW - 3, "idletime": True}) == NOW - 3
+    assert wifi.heard_at({"last_seen": NOW - 3, "idletime": 85000, "uptime": 300}) == NOW - 3   # idle longer than associated: not seconds
+    assert wifi.heard_at({"last_seen": NOW - 3, "idletime": 150, "uptime": 300}) == NOW - 153
     assert wifi.heard_at({"idletime": 5}) is None
     assert wifi.heard_at(None) is None
 

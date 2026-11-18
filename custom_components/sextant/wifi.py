@@ -294,6 +294,10 @@ def heard_at(raw) -> float | None:
         return None
     if isinstance(idle, bool) or not isinstance(idle, (int, float)) or not math.isfinite(idle) or idle < 0:
         return float(seen)
+    # Never idle for longer than it has been associated: an idle that is not the seconds of this report is ignored.
+    up = raw.get("uptime")
+    if not isinstance(up, bool) and isinstance(up, (int, float)) and math.isfinite(up) and 0 <= up < idle:
+        return float(seen)
     return float(seen) - float(idle)
 
 

@@ -5329,11 +5329,13 @@ def _update_person_sensors(hass):
                 trackers_in = [
                     {"e": a["entity"], "home": c.get("home"), "ap": c.get("ap"),
                      "seen_age": None if not isinstance(seen_at, (int, float)) else round(now - seen_at),
-                     "idle": raw.get("idletime")}
+                     "idle": raw.get("idletime"),
+                     "heard_age": None if heard is None else round(now - heard)}
                     for a in (view.get("assigned") or {}).get(person) or []
                     for c in [(view.get("candidates") or {}).get(a["entity"]) or {}]
                     for raw in [wifi_clients.get(c.get("mac")) or {}]
                     for seen_at in [raw.get("last_seen")]
+                    for heard in [wifi_mod.heard_at(raw)]
                 ]
                 line, key = person_log_mod.row(
                     person, now, logged[1], presence, logged[0], _person_visits[person].get("arrived") is not None, wifi_raw, wifi_home,
