@@ -4,6 +4,7 @@
  * One websocket subscription (sextant/subscribe) feeds every mode; the
  * request/response commands in ws.py do the rest. Modes:
  *   live         the floor plan with things, trails and a history scrubber
+ *   occupancy    who is in each room, by floor (read only)
  *   edit         the floor-plan editor
  *   things     what Bermuda tracks, and what it hears but does not
  *   bermuda      Bermuda's own things: global options, FindMy, Tiles
@@ -21,6 +22,7 @@ import { personGroups } from "./sextant-groups.js";
 import { VERSION as PANEL_VERSION } from "./sextant-version.js";
 import "./sextant-devices.js";
 import "./sextant-health.js";
+import "./sextant-occupancy.js";
 import "./sextant-edit.js";
 import "./sextant-property.js";
 import "./sextant-stack.js";
@@ -31,6 +33,7 @@ const NO_SPOTS = Object.freeze([]);
 
 const MODES = [
   ["live", "Live", "mdi:map-marker-radius"],
+  ["occupancy", "Occupancy", "mdi:account-group-outline"],
   ["edit", "Edit", "mdi:vector-polygon"],
   ["things", "Things", "mdi:tag-multiple"],
   ["bermuda", "Bermuda", "mdi:bluetooth-settings"],
@@ -336,6 +339,8 @@ class SextantPanel extends LitElement {
       case "edit":
         return html`<sextant-edit .hass=${this.hass} .data=${this._data} .floor=${this._floor} .narrow=${this.narrow} .spots=${this._spots || NO_SPOTS}
                                   @layout-changed=${() => this._onLayoutChanged()} @floor-changed=${(e) => { this._floor = e.detail; }}></sextant-edit>`;
+      case "occupancy":
+        return html`<sextant-occupancy .hass=${this.hass} .data=${this._data}></sextant-occupancy>`;
       case "things":
       case "bermuda":
         return html`<sextant-devices .hass=${this.hass} .data=${this._data} .positions=${this._positions} .section=${this._mode}
