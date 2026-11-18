@@ -5441,6 +5441,17 @@ def _restoring(sensor, sensed, now):
     return True
 
 
+def _restored_memory(sensor, now):
+    """The first settle after a restart starts from the door hold the room had, if any (once)."""
+    if getattr(sensor, "memory", None) is None and getattr(sensor, "restored_door_hold", False):
+        sensor.restored_door_hold = False
+        at = getattr(sensor, "restored_door_at", None)
+        at = at if at is not None and at <= now else now     # the hold keeps its first start: a restart does not renew the timeout
+        return {"on": True, "state": "occupied", "since": now, "last_raw": None,
+                "door_hold": True, "door_at": at, "door_closed_at": at}
+    return getattr(sensor, "memory", None)
+
+
 def _publish_rooms(hass):
     """Each room's sensor from two answers: the things' (rooms.occupancy, once
     a cycle) and the radars' (the tracks in each room, every reading). A
@@ -5482,7 +5493,7 @@ def _publish_rooms(hass):
         grace = _restoring(sensor, sensed, now)
         door = rooms_mod.door_closed(state_of(link["door"])) if link.get("door") else None
         own_hold, own_ext = link.get("hold_secs"), link.get("extended_secs")
-        sensor.memory = rooms_mod.settle(getattr(sensor, "memory", None), sensed or forced, now,
+        sensor.memory = rooms_mod.settle(_restored_memory(sensor, now), sensed or forced, now,
                                          hold if own_hold is None else own_hold, extended if own_ext is None else own_ext,
                                          door, door_settle, door_max)
         if sensed and attrs.get("people"):
@@ -5494,6 +5505,7 @@ def _publish_rooms(hass):
         since = datetime.fromtimestamp(m["since"], timezone.utc).isoformat(timespec="seconds")
         attrs = {**attrs, "radar": seen["count"], "held": not is_on and seen["count"] > 0 and seen["held"] == seen["count"],
                  "state": m["state"], "since": since, "forced": forced, "inputs": inputs, "door_hold": m["door_hold"],
+                 "door_at": m["door_at"], "door_people": list(getattr(sensor, "door_people", None) or []),
                  "hold_over": m["on"] and not sensed and not forced and not m["door_hold"]}
         attrs["sources"] = rooms_mod.sources(bool(is_on), seen["count"] > 0, inputs, forced, m["door_hold"],
                                              grace and not m["on"], attrs["hold_over"])
@@ -5507,7 +5519,7 @@ def _publish_rooms(hass):
             if humans and attrs.get("people"):
                 who.door_people = list(attrs["people"])
             who_grace = _restoring(who, humans, now)
-            who.memory = rooms_mod.settle(getattr(who, "memory", None), humans or forced, now,
+            who.memory = rooms_mod.settle(_restored_memory(who, now), humans or forced, now,
                                           hold if own_hold is None else own_hold, extended if own_ext is None else own_ext,
                                           door, door_settle, door_max)
             if not humans and rooms_mod.release_if_elsewhere(who.memory, getattr(who, "door_people", None), elsewhere(key)):
@@ -5521,6 +5533,7 @@ def _publish_rooms(hass):
                                                                       wm["door_hold"], who_grace and not wm["on"], hold_over),
                                          "since": datetime.fromtimestamp(wm["since"], timezone.utc).isoformat(timespec="seconds"), "people_only": True,
                                          "door_hold": wm["door_hold"],
+                                         "door_at": wm["door_at"], "door_people": list(getattr(who, "door_people", None) or []),
                                          "hold_over": hold_over})
             published_people[key] = (people_on, {**attrs, "pets": [], "count": attrs.get("humans") or len(attrs.get("people") or [])})
     keys = hass.data.get("sextant_room_keys") or []
