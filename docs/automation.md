@@ -153,6 +153,10 @@ answer without the pets: a cat's or dog's tag alone leaves it `off`, so
 lights can switch off on it while the pets stay put. Radars, other sensors
 and the force switch cannot tell a pet from a person, so they turn it `on`.
 
+After a Home Assistant restart a room that was `on` stays `on` for up to ten
+minutes while Sextant places things again, unless the first readings say it
+is occupied; both room sensors carry over this way.
+
 Each room on the plan gets `binary_sensor.<room>_sextant_occupancy`
 (device class occupancy): `on` while Sextant places a person or a pet in
 it. What counts is the thing speaking for each person ([People](#people))

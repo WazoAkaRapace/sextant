@@ -301,7 +301,7 @@ def _install_homeassistant_stubs():
     # exercise the cache/creation logic, never HA's entity machinery).
     _module("homeassistant.components.sensor", SensorEntity=type("SensorEntity", (), {}),  # a class, so RestoreEntity can follow it in an MRO
             SensorStateClass=types.SimpleNamespace(MEASUREMENT="measurement"))
-    _module("homeassistant.components.binary_sensor", BinarySensorEntity=object,
+    _module("homeassistant.components.binary_sensor", BinarySensorEntity=type("BinarySensorEntity", (), {}),
             BinarySensorDeviceClass=types.SimpleNamespace(OCCUPANCY="occupancy"))
     _module("homeassistant.components.switch", SwitchEntity=type("SwitchEntity", (), {}))
     _module("homeassistant.helpers.entity", DeviceInfo=dict)

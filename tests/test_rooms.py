@@ -459,6 +459,32 @@ def test_people_sensor_ignores_a_pets_tag_but_not_a_person_or_a_sensor(hass):
     assert people._attr_is_on is True
 
 
+def test_a_room_that_was_on_stays_on_over_a_restart_until_the_grace_runs_out(hass):
+    import asyncio
+    import types
+    layout = {"floor": [{"name": "Ground Floor", "floor_id": "ground", "zones": [{"entity_id": "Kitchen", "cords": [{"x": 0, "y": 0}] * 3}]}]}
+    _added(hass)
+    hass.data["sextant_room_keys"] = rooms.room_keys(layout)
+    hass.data["sextant_aggregate_sensors"] = {}
+    platform.ensure_room_sensors(hass, layout)
+    hass.data["sextant_room_switches"] = {}
+    key = ("Ground Floor", "Kitchen")
+    for s in (hass.data["sextant_room_sensors"][key], hass.data["sextant_room_people"][key]):
+        s.hass = hass
+        s.async_write_ha_state = lambda: None
+        s._test_last_state = types.SimpleNamespace(state="on", attributes={})
+        asyncio.run(s.async_added_to_hass())
+    anyone, people = hass.data["sextant_room_sensors"][key], hass.data["sextant_room_people"][key]
+    assert anyone._attr_is_on and people._attr_is_on        # carried over, nothing placed yet
+    hass.states = type("S", (), {"get": staticmethod(lambda e: None)})()
+    hass.data["sextant_room_answers"] = {}
+    sextant._publish_rooms(hass)
+    assert anyone._attr_is_on is True and people._attr_is_on is True
+    anyone.restore_until = people.restore_until = 1.0       # grace over
+    sextant._publish_rooms(hass)
+    assert anyone._attr_is_on is False and people._attr_is_on is False
+
+
 def test_inputs_never_include_our_own_sensors_or_the_door():
     o = rooms.room_options({"inputs": "binary_sensor.kitchen_sextant_occupancy, binary_sensor.door, binary_sensor.m", "door": "binary_sensor.door"})
     assert o["inputs"] == ["binary_sensor.m"]

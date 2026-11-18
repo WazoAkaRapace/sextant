@@ -7,6 +7,7 @@ room's linked Home Assistant area when the device is first created (and
 left alone after that, so moving it in HA sticks).
 """
 import logging
+import time
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -16,6 +17,7 @@ from homeassistant.core import callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.restore_state import RestoreEntity
 
 from .assist import expose
 from .rooms import HOUSE_ID, floor_ids, ids_for, people_ids, room_keys
@@ -25,9 +27,10 @@ _LOGGER = logging.getLogger(__name__)
 
 UNIQUE_PREFIX = "sextant_room_occupancy_"
 PEOPLE_PREFIX = "sextant_room_people_"
+RESTORE_GRACE_S = 600.0
 
 
-class SextantRoomOccupancy(BinarySensorEntity):
+class SextantRoomOccupancy(BinarySensorEntity, RestoreEntity):
     """Whether anyone Sextant tracks is in one room, and who."""
 
     _attr_should_poll = False
@@ -47,7 +50,14 @@ class SextantRoomOccupancy(BinarySensorEntity):
         )
 
     async def async_added_to_hass(self):
+        await super().async_added_to_hass()
         expose(self.hass, self.entity_id)
+        # A restart finds nothing placed yet: a room that was on stays on for RESTORE_GRACE_S unless the cycle says it is occupied (carried over, not cleared).
+        last = await self.async_get_last_state()
+        if last is not None and last.state == "on":
+            self._attr_is_on = True
+            self.restore_until = time.time() + RESTORE_GRACE_S
+            self.async_write_ha_state()
 
     def set_occupancy(self, is_on, attrs):
         """Push one cycle's answer; written only when something changed."""

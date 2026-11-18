@@ -5429,6 +5429,18 @@ def _update_room_sensors(hass):
     update_sextant_sensor_state(hass, PEOPLE_HOME_ENTITY_ID, count, attrs)
 
 
+def _restoring(sensor, sensed, now):
+    """True while a sensor restored as on after a restart has not yet been
+    confirmed or has not run out its grace; real evidence ends the grace."""
+    until = getattr(sensor, "restore_until", 0)
+    if not until:
+        return False
+    if sensed or now >= until:
+        sensor.restore_until = 0
+        return False
+    return True
+
+
 def _publish_rooms(hass):
     """Each room's sensor from two answers: the things' (rooms.occupancy, once
     a cycle) and the radars' (the tracks in each room, every reading). A
@@ -5467,9 +5479,10 @@ def _publish_rooms(hass):
         link = links.get(key) or {}
         inputs = rooms_mod.inputs_on(link.get("inputs"), state_of)
         sensed = bool(is_on) or seen["count"] > 0 or bool(inputs)
+        grace = _restoring(sensor, sensed, now)
         door = rooms_mod.door_closed(state_of(link["door"])) if link.get("door") else None
         own_hold, own_ext = link.get("hold_secs"), link.get("extended_secs")
-        sensor.memory = rooms_mod.settle(getattr(sensor, "memory", None), sensed or forced, now,
+        sensor.memory = rooms_mod.settle(getattr(sensor, "memory", None), sensed or forced or grace, now,
                                          hold if own_hold is None else own_hold, extended if own_ext is None else own_ext,
                                          door, door_settle, door_max)
         if sensed and attrs.get("people"):
@@ -5490,7 +5503,7 @@ def _publish_rooms(hass):
             humans = bool(attrs.get("humans") or attrs.get("people")) or seen["count"] > 0 or bool(inputs)
             if humans and attrs.get("people"):
                 who.door_people = list(attrs["people"])
-            who.memory = rooms_mod.settle(getattr(who, "memory", None), humans or forced, now,
+            who.memory = rooms_mod.settle(getattr(who, "memory", None), humans or forced or _restoring(who, humans, now), now,
                                           hold if own_hold is None else own_hold, extended if own_ext is None else own_ext,
                                           door, door_settle, door_max)
             if not humans and rooms_mod.release_if_elsewhere(who.memory, getattr(who, "door_people", None), elsewhere(key)):
