@@ -35,7 +35,7 @@ class SextantRoomOccupancy(BinarySensorEntity, RestoreEntity):
 
     _attr_should_poll = False
     _attr_device_class = BinarySensorDeviceClass.OCCUPANCY
-    icons = ("mdi:paw", "mdi:paw-off")      # on, off: anyone, pets included
+    icons = ("mdi:map-marker-radius", "mdi:map-marker-radius-outline")      # on, off: anyone, pets included
 
     @property
     def icon(self):
