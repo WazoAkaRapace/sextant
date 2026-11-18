@@ -354,6 +354,12 @@ def test_missing_needs_time_and_unavailable_then_unknown_keeps_counting():
     assert rooms.sensor_problems(keys, states.get, now, 99, 6 * 3600, bad)["binary_sensor.late"]["kind"] == "gone"
 
 
+def test_a_media_player_that_is_unavailable_is_not_gone_but_a_missing_one_is():
+    now, keys = 1_000_000.0, [{"floor": "G", "room": "R", "inputs": ["media_player.tv", "media_player.typo"], "door": None}]
+    states, bad = {"media_player.tv": _st("unavailable", 48, now)}, {"media_player.typo": now - 7 * 3600}
+    assert list(rooms.sensor_problems(keys, states.get, now, 99, 6 * 3600, bad)) == ["media_player.typo"]
+
+
 def test_a_closed_door_holds_someone_who_stays_but_not_someone_who_left():
     # shut in: still reading in the room 90 s after the door closed, then gone quiet
     s = rooms.settle(None, True, 0.0, door=False)
