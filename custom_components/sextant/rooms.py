@@ -124,7 +124,7 @@ def sensor_problems(keys, get, now, stuck_s, gone_s, bad_since=None) -> dict[str
     """Room sensors (inputs and doors) that look broken, by entity id: ``{"kind", "age", "rooms"}``.
 
     ``missing``: no such entity for ``gone_s``. ``gone``: unavailable or unknown (either, in
-    any order) for ``gone_s``. ``stuck``: a binary sensor that has read on for ``stuck_s`` - it
+    any order) for ``gone_s``, except a media player (a TV reads unavailable when off). ``stuck``: a binary sensor that has read on for ``stuck_s`` - it
     keeps its room occupied, so a motion sensor with a dead battery or a wedged mmWave shows here.
     Numbers (they change all the time), media players and trackers (a person can be home for
     days) are never called stuck. ``get(entity_id)`` gives a state object or None; ``bad_since``
@@ -140,6 +140,8 @@ def sensor_problems(keys, get, now, stuck_s, gone_s, bad_since=None) -> dict[str
             ent = spec_entity(spec)
             st = get(ent)
             found = None
+            if st is not None and ent.startswith("media_player.") and ent != key.get("door") and str(st.state).lower() in ("unavailable", "unknown"):
+                continue   # a TV that is switched off reads unavailable: normal, not broken
             if st is None or str(st.state).lower() in ("unavailable", "unknown"):
                 seen_bad.add(ent)
                 since = bad_since.setdefault(ent, now)
