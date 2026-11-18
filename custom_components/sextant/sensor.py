@@ -637,7 +637,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     # user's name, area and disabled flag with them.
     from .persons import PERSON_SENSOR_KINDS  # noqa: PLC0415
     # Not a thing's: the people's sensors and trackers, and the rooms' occupancy.
-    kept_prefixes = tuple(f"{suffix}_" for suffix, _label in PERSON_SENSOR_KINDS) + ("sextant_person_tracker_", "sextant_room_occupancy_", "sextant_room_people_")
+    kept_prefixes = tuple(f"{suffix}_" for suffix, _label in PERSON_SENSOR_KINDS) + ("sextant_person_tracker_", "sextant_room_occupancy_", "sextant_room_people_", "sextant_floor_occupancy_", "sextant_floor_people_occupancy_", "sextant_house_occupancy", "sextant_house_people_occupancy")
     entity_registry = er.async_get(hass)
     if expected_entity_ids:
         stale_sextant_ids = [

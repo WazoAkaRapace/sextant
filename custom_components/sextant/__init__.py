@@ -5466,7 +5466,7 @@ def _publish_rooms(hass):
     def state_of(entity_id):
         st = hass.states.get(entity_id)
         return st.state if st is not None else None
-    published = {}
+    published, published_people = {}, {}
     people_sensors = hass.data.get("sextant_room_people") or {}
     for key, sensor in cache.items():
         is_on, attrs = answers.get(key) or (False, None)
@@ -5515,15 +5515,19 @@ def _publish_rooms(hass):
                                               extended if own_ext is None else own_ext, door, door_settle, door_max)
             wm = who.memory
             hold_over = wm["on"] and not humans and not forced and not wm["door_hold"]
-            who.set_occupancy(wm["on"] or who_grace, {**attrs, "state": wm["state"],
+            people_on = wm["on"] or who_grace
+            who.set_occupancy(people_on, {**attrs, "state": wm["state"],
                                          "sources": rooms_mod.sources(bool(attrs.get("humans") or attrs.get("people")), seen["count"] > 0, inputs, forced,
                                                                       wm["door_hold"], who_grace and not wm["on"], hold_over),
                                          "since": datetime.fromtimestamp(wm["since"], timezone.utc).isoformat(timespec="seconds"),
                                          "door_hold": wm["door_hold"],
                                          "hold_over": hold_over})
-    floors, house = rooms_mod.aggregate(hass.data.get("sextant_room_keys") or [], published)
+            published_people[key] = (people_on, {**attrs, "pets": [], "count": attrs.get("humans") or len(attrs.get("people") or [])})
+    keys = hass.data.get("sextant_room_keys") or []
+    rolled = {"": rooms_mod.aggregate(keys, published), "_people": rooms_mod.aggregate(keys, published_people)}
     for (kind, floor), sensor in (hass.data.get("sextant_aggregate_sensors") or {}).items():
-        on, attrs = house if kind == "house" else floors.get(floor, (False, None))
+        floors, house = rolled["_people" if kind.endswith("_people") else ""]
+        on, attrs = house if kind.startswith("house") else floors.get(floor, (False, None))
         if attrs is not None:
             sensor.set_occupancy(on, attrs)
 

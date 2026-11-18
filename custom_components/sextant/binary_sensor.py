@@ -20,7 +20,7 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.restore_state import RestoreEntity
 
 from .assist import expose
-from .rooms import HOUSE_ID, floor_ids, ids_for, people_ids, room_keys
+from .rooms import HOUSE_ID, floor_ids, ids_for, people_aggregate_ids, people_ids, room_keys
 from .storage import get_layout
 
 _LOGGER = logging.getLogger(__name__)
@@ -101,7 +101,7 @@ class SextantAggregateOccupancy(SextantRoomOccupancy):
         self.entity_id = ids["entity_id"]
         self._attr_is_on = False
         self._attr_extra_state_attributes = {"rooms": [], "people": [], "pets": [], "count": 0}
-        self._attr_device_info = DeviceInfo(identifiers={("sextant", ids["unique_id"])}, name=device_name,
+        self._attr_device_info = DeviceInfo(identifiers={("sextant", ids.get("device_id", ids["unique_id"]))}, name=device_name,
                                             manufacturer="Sextant", model="Occupancy")
 
     async def async_added_to_hass(self):
@@ -115,9 +115,10 @@ def ensure_aggregate_sensors(hass, layout):
     add_entities = hass.data.get("sextant_room_add")
     if cache is None or add_entities is None:
         return
-    wanted = {("house", None): (HOUSE_ID, "Sextant House")}
+    wanted = {("house", None): (HOUSE_ID, "Sextant House"), ("house_people", None): (people_aggregate_ids(HOUSE_ID), "Sextant House")}
     for floor, ids in floor_ids(room_keys(layout)).items():
         wanted[("floor", floor)] = (ids, f"{floor} (Sextant)")
+        wanted[("floor_people", floor)] = (people_aggregate_ids(ids), f"{floor} (Sextant)")
     new = []
     for key, (ids, device) in wanted.items():
         if key not in cache:
@@ -129,8 +130,8 @@ def ensure_aggregate_sensors(hass, layout):
     uids = {ids["unique_id"] for ids, _d in wanted.values()}
     for entry in list(ent_reg.entities.values()):
         if (entry.platform == "sextant" and entry.domain == "binary_sensor" and isinstance(entry.unique_id, str)
-                and entry.entity_id.endswith(("_sextant_floor_occupancy", "_sextant_house_occupancy"))
-                and entry.unique_id not in uids and entry.unique_id.startswith(("sextant_floor_occupancy_", "sextant_house_occupancy"))):
+                and entry.entity_id.endswith(("_sextant_floor_occupancy", "_sextant_house_occupancy", "_sextant_floor_people_occupancy", "_sextant_house_people_occupancy"))
+                and entry.unique_id not in uids and entry.unique_id.startswith(("sextant_floor_occupancy_", "sextant_house_occupancy", "sextant_floor_people_occupancy_", "sextant_house_people_occupancy"))):
             ent_reg.async_remove(entry.entity_id)
     if new:
         add_entities(new, update_before_add=False)

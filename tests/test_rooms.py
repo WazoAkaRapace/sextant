@@ -289,6 +289,18 @@ def test_publish_rooms_holds_forces_and_sums(hass):
     assert sensor._attr_is_on is True and sensor._attr_extra_state_attributes["forced"] is True
     house = hass.data["sextant_aggregate_sensors"][("house", None)]
     assert house._attr_is_on is True
+    # forced counts as people; a pet alone does not turn the people roll-ups on
+    assert hass.data["sextant_aggregate_sensors"][("house_people", None)]._attr_is_on is True
+    hass.data["sextant_room_switches"][kitchen]._attr_is_on = False
+    hass.data["sextant_room_answers"] = {kitchen: (True, {"room": "Kitchen", "floor": "Ground Floor", "count": 1, "humans": 0, "people": [],
+                                                           "pets": ["Fry"], "things": []})}
+    hass.data["sextant_room_sensors"][kitchen].memory = hass.data["sextant_room_people"][kitchen].memory = None
+    sextant._publish_rooms(hass)
+    assert house._attr_is_on is True
+    people = hass.data["sextant_aggregate_sensors"][("house_people", None)]
+    assert people._attr_is_on is False and people.entity_id == "binary_sensor.sextant_house_people_occupancy"
+    assert hass.data["sextant_aggregate_sensors"][("floor_people", "Ground Floor")].entity_id == "binary_sensor.ground_floor_sextant_floor_people_occupancy"
+    assert people._attr_device_info["identifiers"] == house._attr_device_info["identifiers"]
 
 
 def test_floor_ids_separate_floors_that_slug_the_same():
