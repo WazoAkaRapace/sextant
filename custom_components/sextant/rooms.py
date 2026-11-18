@@ -235,7 +235,8 @@ def occupancy(keys, rows, presence_of, classes=None, names=None, person_rooms=No
         if not isinstance(row, dict) or row.get("robot"):
             continue
         ent, zone, floor = row.get("ent"), row.get("zone"), row.get("floor")
-        if not ent or not zone or zone == "unknown" or not floor:
+        # Outside: the zone is only the nearest room, and the thing is in none of them.
+        if not ent or not zone or zone == "unknown" or not floor or row.get("outside"):
             continue
         presence = presence_of(ent)
         if presence not in COUNTED:

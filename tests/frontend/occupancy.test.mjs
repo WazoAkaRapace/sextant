@@ -50,3 +50,17 @@ test("firstName keeps the first word, capitalised", async () => {
   assert.equal(firstName("  meg  "), "Meg");
   assert.equal(firstName(""), "");
 });
+
+test("outsideNow lists people and pets whose location is Outside", async () => {
+  const { outsideNow } = await import("../../custom_components/sextant/frontend/sextant-occupancy-data.js");
+  const states = {
+    "person.primrose": { attributes: { friendly_name: "Primrose" } },
+    "sensor.primrose_sextant_pet_location": { state: "Outside", attributes: { kind: "outside", room: "Outside" } },
+    "person.david": { attributes: { friendly_name: "David Coulson" } },
+    "sensor.david_sextant_person_location": { state: "Kitchen", attributes: { kind: "room", room: "Kitchen" } },
+    "person.alex": { attributes: { friendly_name: "Alex" } },
+    "sensor.alex_sextant_person_location": { state: "Outside", attributes: { kind: "outside" } },
+  };
+  assert.deepEqual(outsideNow(states), { people: ["Alex"], pets: ["Primrose"] });
+  assert.deepEqual(outsideNow(undefined), { people: [], pets: [] });
+});

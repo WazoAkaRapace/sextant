@@ -29,6 +29,20 @@ export function occupancyByFloor(states, planFloors) {
 
 export const WHERE_SOURCE = { ble: "Bluetooth", wifi: "Wi-Fi", gps: "GPS", held: "Bluetooth (held)", none: "None" };
 
+/** People and pets whose Sextant location is Outside (beyond every room, still at home). */
+export function outsideNow(states) {
+  states = states || {};
+  const people = [], pets = [];
+  for (const [id, s] of Object.entries(states)) {
+    if (!id.startsWith("person.")) continue;
+    const slug = id.slice(7);
+    const pet = states[`sensor.${slug}_sextant_pet_location`];
+    const loc = states[`sensor.${slug}_sextant_person_location`] || pet;
+    if (loc?.attributes?.kind === "outside") (loc === pet ? pets : people).push(s.attributes?.friendly_name || slug);
+  }
+  return { people: people.sort(), pets: pets.sort() };
+}
+
 /** Where a chip's person, pet or thing is, from its location sensors; null when it has none.
  *  ``ids`` is the room sensor's {display name: thing slug}; a person (or a pet that is a
  *  person) is found by the friendly name the room sensor listed them under. */

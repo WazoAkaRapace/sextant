@@ -1,7 +1,7 @@
 /** Occupancy tab: floors stacked like the house, a tile per room with who is in it and why it is on. Read only. */
 import { LitElement, html, css, nothing } from "./lit.js";
 import { sharedStyles, fmtAge, fmtLen, proxyName } from "./sextant-ui.js";
-import { occupancyByFloor, chipDetail, firstName, SOURCE_ICON, SOURCE_LABEL, WHERE_SOURCE } from "./sextant-occupancy-data.js";
+import { occupancyByFloor, outsideNow, chipDetail, firstName, SOURCE_ICON, SOURCE_LABEL, WHERE_SOURCE } from "./sextant-occupancy-data.js";
 
 class SextantOccupancy extends LitElement {
   static properties = { hass: {}, data: {}, _open: { state: true } };
@@ -21,8 +21,12 @@ class SextantOccupancy extends LitElement {
 
   willUpdate() {
     this._floors = occupancyByFloor(this.hass?.states, this.data?.layout?.floor);
+    const out = outsideNow(this.hass?.states);
+    this._outside = out.people.length || out.pets.length
+      ? { name: "Outside", people: out.people.length, pets: out.pets.length, rooms: [{ room: "Outside", floor: "", on: true, peopleOn: out.people.length > 0, ids: {}, sources: [], ...out }] }
+      : null;
     // The open chip's occupant left the room (or the house): drop the popup and its pin with it.
-    if (this._open && !this._floors.some((f) => f.rooms.some((r) => [...r.people, ...r.pets].some((n) => `${r.floor}|${r.room}|${n}` === this._open)))) this._close();
+    if (this._open && ![...this._floors, ...(this._outside ? [this._outside] : [])].some((f) => f.rooms.some((r) => [...r.people, ...r.pets].some((n) => `${r.floor}|${r.room}|${n}` === this._open)))) this._close();
   }
   static styles = [sharedStyles, css`
     :host { display: block; overflow-y: auto; padding: 16px; max-width: 900px; margin: 0 auto; }
@@ -121,14 +125,14 @@ class SextantOccupancy extends LitElement {
     const floors = this._floors || [];
     if (!floors.length) return html`<div class="empty">No room sensors yet. Draw rooms in Edit.</div>`;
     const people = new Set(floors.flatMap((f) => f.rooms.flatMap((r) => r.people))).size;
-    return html`${floors.map((f) => html`
+    return html`${[...floors, ...(this._outside ? [this._outside] : [])].map((f) => html`
       <div class="floor">
         <div class="fh"><b>${f.name}</b>
           <span class="pill ${f.people ? "on" : ""}">${f.people} ${f.people === 1 ? "person" : "people"}</span>
           ${f.pets ? html`<span class="pill">${f.pets} ${f.pets === 1 ? "pet" : "pets"}</span>` : nothing}</div>
         <div class="grid">${f.rooms.map((r) => html`
           <div class="room ${r.on ? (r.peopleOn ? "on" : "pets") : ""}">
-            <div class="rn">${r.room}</div>
+            ${f === this._outside ? nothing : html`<div class="rn">${r.room}</div>`}
             ${r.people.map((p) => this._chip(r, p, "mdi:account", firstName(p)))}
             ${r.pets.map((p) => this._chip(r, p, "mdi:paw"))}
             ${r.on && r.sources.length ? html`<div class="src">${r.sources.map((x) => html`<ha-icon icon=${SOURCE_ICON[x] || "mdi:help-circle-outline"} title=${SOURCE_LABEL[x] || x}></ha-icon>`)}</div>` : nothing}
