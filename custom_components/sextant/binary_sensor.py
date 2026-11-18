@@ -58,6 +58,7 @@ class SextantRoomOccupancy(BinarySensorEntity, RestoreEntity):
         until = self.hass.data.setdefault("sextant_restore_deadline", time.time() + RESTORE_GRACE_S)
         if last is not None and last.state == "on" and time.time() < until:
             self._attr_is_on = True
+            self._attr_extra_state_attributes = {**self._attr_extra_state_attributes, "sources": ["restored"]}
             self.restore_until = until
             self.async_write_ha_state()
 

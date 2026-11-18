@@ -476,6 +476,7 @@ def test_a_room_that_was_on_stays_on_over_a_restart_until_the_grace_runs_out(has
         asyncio.run(s.async_added_to_hass())
     anyone, people = hass.data["sextant_room_sensors"][key], hass.data["sextant_room_people"][key]
     assert anyone._attr_is_on and people._attr_is_on        # carried over, nothing placed yet
+    assert anyone._attr_extra_state_attributes["sources"] == ["restored"]
     hass.states = type("S", (), {"get": staticmethod(lambda e: None)})()
     hass.data["sextant_room_answers"] = {}
     sextant._publish_rooms(hass)
