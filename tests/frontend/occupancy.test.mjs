@@ -20,5 +20,5 @@ test("rooms group by floor, top floor first, with people and pets counted", () =
   assert.equal(out[2].rooms[0].room, "Den");
   assert.equal(g.people, 1); assert.equal(g.pets, 2);
   assert.equal(g.rooms.find((r) => r.room === "Kitchen").peopleOn, false);
-  assert.deepEqual(g.rooms.find((r) => r.room === "Great Room").sources, ["Bluetooth", "Media playing"]);
+  assert.deepEqual(g.rooms.find((r) => r.room === "Great Room").sources, ["bluetooth", "media_player"]);
 });

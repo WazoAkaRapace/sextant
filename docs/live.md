@@ -317,4 +317,4 @@ Drag to pan, scroll, pinch or use **+**/**−** to zoom (past the map's last til
 
 ## Occupancy tab
 
-A read-only page beside Live: floors stacked top to bottom, a tile per room with the people and pets in it and why the room is on (Bluetooth, media playing, radar, door held). Dashed tiles are pets only. It reads the room sensors, so it follows them live.
+A read-only page beside Live: floors stacked top to bottom, a tile per room with the people and pets in it and an icon in its corner for why the room is on (Bluetooth, media playing, radar, door held; hover for the name). Dashed tiles are pets only. It reads the room sensors, so it follows them live.

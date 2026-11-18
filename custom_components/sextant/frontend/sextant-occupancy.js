@@ -1,7 +1,7 @@
 /** Occupancy tab: floors stacked like the house, a tile per room with who is in it and why it is on. Read only. */
 import { LitElement, html, css, nothing } from "./lit.js";
 import { sharedStyles } from "./sextant-ui.js";
-import { occupancyByFloor } from "./sextant-occupancy-data.js";
+import { occupancyByFloor, SOURCE_ICON, SOURCE_LABEL } from "./sextant-occupancy-data.js";
 
 class SextantOccupancy extends LitElement {
   static properties = { hass: {}, data: {} };
@@ -16,10 +16,13 @@ class SextantOccupancy extends LitElement {
     .room { border: 1px solid var(--divider-color); border-radius: 8px; padding: 8px 10px; min-height: 70px; background: var(--secondary-background-color); }
     .room.on { background: color-mix(in srgb, var(--primary-color) 14%, transparent); border-color: var(--primary-color); }
     .room.pets { background: var(--secondary-background-color); border: 1px dashed var(--primary-color); }
-    .rn { font-size: 13px; font-weight: 500; margin-bottom: 6px; }
+    .room { position: relative; }
+    .rn { font-size: 13px; font-weight: 500; margin-bottom: 6px; padding-right: 44px; }
+    .src { position: absolute; top: 6px; right: 8px; display: flex; gap: 4px; color: var(--secondary-text-color); }
+    .src ha-icon { --mdc-icon-size: 16px; }
     .chip { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; margin: 0 4px 4px 0; padding: 2px 7px; border-radius: 10px; background: var(--card-background-color); border: 1px solid var(--divider-color); }
+    .foot { font-size: 12px; color: var(--secondary-text-color); }
     .chip ha-icon { --mdc-icon-size: 14px; }
-    .src { font-size: 11px; color: var(--secondary-text-color); }
   `];
 
   render() {
@@ -36,10 +39,10 @@ class SextantOccupancy extends LitElement {
             <div class="rn">${r.room}</div>
             ${r.people.map((p) => html`<span class="chip"><ha-icon icon="mdi:account"></ha-icon>${p}</span>`)}
             ${r.pets.map((p) => html`<span class="chip"><ha-icon icon="mdi:paw"></ha-icon>${p}</span>`)}
-            ${r.on ? (r.sources.length ? html`<div class="src">${r.sources.join(", ")}</div>` : nothing) : html`<div class="src">Clear</div>`}
+            ${r.on && r.sources.length ? html`<div class="src">${r.sources.map((x) => html`<ha-icon icon=${SOURCE_ICON[x] || "mdi:help-circle-outline"} title=${SOURCE_LABEL[x] || x}></ha-icon>`)}</div>` : nothing}
           </div>`)}</div>
       </div>`)}
-      <div class="src">${people} ${people === 1 ? "person" : "people"} in the house</div>`;
+      <div class="foot">${people} ${people === 1 ? "person" : "people"} in the house</div>`;
   }
 }
 if (!customElements.get("sextant-occupancy")) customElements.define("sextant-occupancy", SextantOccupancy);
