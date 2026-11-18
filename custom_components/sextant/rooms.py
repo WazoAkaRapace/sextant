@@ -140,7 +140,7 @@ def sensor_problems(keys, get, now, stuck_s, gone_s, bad_since=None) -> dict[str
             ent = spec_entity(spec)
             st = get(ent)
             found = None
-            if st is not None and ent.startswith("media_player.") and str(st.state).lower() in ("unavailable", "unknown"):
+            if st is not None and ent.startswith("media_player.") and ent != key.get("door") and str(st.state).lower() in ("unavailable", "unknown"):
                 continue   # a TV that is switched off reads unavailable: normal, not broken
             if st is None or str(st.state).lower() in ("unavailable", "unknown"):
                 seen_bad.add(ent)
