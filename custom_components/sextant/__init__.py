@@ -844,6 +844,10 @@ TUNING_SPEC = {
     "door_hold_max_secs": (28800.0, float, 60.0, 172800.0),
     # How long someone must keep reading in a room after its door closed to count as shut in.
     "door_settle_secs": (90.0, float, 0.0, 600.0),
+    # A repair is raised for a room's sensor (other sensors, door contact) that has been unavailable
+    # this long, or a binary sensor that has read on this long (it would hold its room occupied).
+    "sensor_gone_secs": (21600.0, float, 600.0, 2592000.0),
+    "sensor_stuck_secs": (86400.0, float, 3600.0, 2592000.0),
     # Keep every floor election (each cycle's per-floor candidates, the odds
     # and the winner, per thing) for this many hours in
     # config/sextant_election_log, for tools/replay_floors.py. 0 = off. About
@@ -4431,6 +4435,10 @@ def _maintain_dead_issues(hass):
         _update_dead_issues(hass, layout if isinstance(layout, dict) else {})
     except Exception as e:  # noqa: BLE001
         _LOGGER.warning("Dead-thing repairs not updated: %s", e)
+    try:
+        _update_sensor_issues(hass, layout if isinstance(layout, dict) else {})
+    except Exception as e:  # noqa: BLE001
+        _LOGGER.warning("Room sensor repairs not updated: %s", e)
 
 
 def _update_dead_issues(hass, layout):
@@ -4446,6 +4454,27 @@ def _update_dead_issues(hass, layout):
         )
     for domain, issue_id in list(ir.async_get(hass).issues):
         if domain == DOMAIN and issue_id.startswith(DEAD_ISSUE_PREFIX) and issue_id[len(DEAD_ISSUE_PREFIX):] not in dead:
+            ir.async_delete_issue(hass, DOMAIN, issue_id)
+
+
+SENSOR_ISSUE_PREFIX = "room_sensor_"
+_SENSOR_TEXT = {"missing": "does not exist in Home Assistant", "gone": "has been unavailable for {age}",
+                "stuck": "has read on for {age}, which keeps the room occupied"}
+
+
+def _update_sensor_issues(hass, layout):
+    """One repair per broken room sensor, under a stable id; gone as soon as it reads normally or leaves the room."""
+    found = rooms_mod.sensor_problems(hass.data.get("sextant_room_keys") or [], hass.states.get, time.time(),
+                                      _tuning(layout, "sensor_stuck_secs"), _tuning(layout, "sensor_gone_secs"))
+    for ent, p in found.items():
+        ir.async_create_issue(
+            hass, DOMAIN, SENSOR_ISSUE_PREFIX + ent.replace(".", "_"), is_fixable=False, severity=ir.IssueSeverity.WARNING,
+            translation_key="room_sensor",
+            translation_placeholders={"name": ent, "where": ", ".join(p["rooms"]), "problem": _SENSOR_TEXT[p["kind"]].format(age=_ago(p["age"]))},
+        )
+    live = {SENSOR_ISSUE_PREFIX + e.replace(".", "_") for e in found}
+    for domain, issue_id in list(ir.async_get(hass).issues):
+        if domain == DOMAIN and issue_id.startswith(SENSOR_ISSUE_PREFIX) and issue_id not in live:
             ir.async_delete_issue(hass, DOMAIN, issue_id)
 
 

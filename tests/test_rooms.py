@@ -1,6 +1,7 @@
 """Per-room occupancy (rooms.py) and its binary_sensor platform."""
 
 
+import types
 import sextant  # noqa: F401
 from sextant import binary_sensor as platform
 from sextant import rooms
@@ -305,6 +306,35 @@ def test_inputs_on_and_door_closed():
     states = {"binary_sensor.m": "on", "media_player.tv": "paused", "binary_sensor.n": "unavailable"}
     assert rooms.inputs_on(list(states), states.get) == ["binary_sensor.m"]
     assert [rooms.door_closed(s) for s in ("off", "closed", "on", "open", "unavailable", None)] == [True, True, False, False, None, None]
+
+
+def test_a_number_past_a_threshold_is_an_input():
+    z = {"entity_id": "X", "inputs": "sensor.tv_power>20, sensor.lux<5 sensor.p>= sensor.sextant_x_occupancy>1 binary_sensor.d>3", "door": "binary_sensor.d"}
+    assert rooms.room_options(z)["inputs"] == ["sensor.tv_power>20", "sensor.lux<5"]
+    states = {"sensor.tv_power": "85.5", "sensor.lux": "12", "sensor.dead": "unavailable", "sensor.nan": "nan"}
+    specs = ["sensor.tv_power>20", "sensor.lux<5", "sensor.lux<=12", "sensor.dead>1", "sensor.nan>1", "sensor.gone<9", "sensor.tv_power>=85.5"]
+    assert rooms.inputs_on(specs, states.get) == ["sensor.tv_power>20", "sensor.lux<=12", "sensor.tv_power>=85.5"]
+
+
+def _st(state, hours_ago, now=1_000_000.0):
+    from datetime import datetime, timezone
+    return types.SimpleNamespace(state=state, last_changed=datetime.fromtimestamp(now - hours_ago * 3600, timezone.utc))
+
+
+def test_sensor_problems_name_missing_gone_and_stuck_sensors_once():
+    now = 1_000_000.0
+    keys = [{"floor": "G", "room": "Office", "inputs": ["binary_sensor.mm", "sensor.power>20", "binary_sensor.ok", "media_player.tv", "binary_sensor.typo"], "door": "binary_sensor.door"},
+            {"floor": "G", "room": "Den", "inputs": ["binary_sensor.mm"], "door": None}]
+    states = {"binary_sensor.mm": _st("on", 30), "sensor.power": _st("90", 100), "binary_sensor.ok": _st("on", 2),
+              "media_player.tv": _st("playing", 90), "binary_sensor.door": _st("unavailable", 7)}
+    found = rooms.sensor_problems(keys, states.get, now, 24 * 3600, 6 * 3600)
+    assert found == {"binary_sensor.mm": {"kind": "stuck", "age": 30 * 3600.0, "rooms": ["Office (G)", "Den (G)"]},
+                     "binary_sensor.typo": {"kind": "missing", "age": 0.0, "rooms": ["Office (G)"]},
+                     "binary_sensor.door": {"kind": "gone", "age": 7 * 3600.0, "rooms": ["Office (G)"]}}
+    states["binary_sensor.door"] = _st("off", 100)   # a door shut for days is normal
+    assert "binary_sensor.door" not in rooms.sensor_problems(keys, states.get, now, 24 * 3600, 6 * 3600)
+    states["binary_sensor.door"] = _st("unavailable", 1)   # a blip is not a repair
+    assert "binary_sensor.door" not in rooms.sensor_problems(keys, states.get, now, 24 * 3600, 6 * 3600)
 
 
 def test_a_closed_door_holds_someone_who_stays_but_not_someone_who_left():
