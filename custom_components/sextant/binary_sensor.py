@@ -118,8 +118,11 @@ def _follow_ids(ent_reg, sensor, ids):
     if sensor.entity_id == ids["entity_id"] and sensor._attr_unique_id == ids["unique_id"]:
         return
     changes = {}
-    if sensor.entity_id != ids["entity_id"] and ent_reg.async_get(ids["entity_id"]) is None:
-        changes["new_entity_id"] = ids["entity_id"]
+    if sensor.entity_id != ids["entity_id"]:
+        if ent_reg.async_get(ids["entity_id"]) is not None:
+            ids = {**ids, "entity_id": sensor.entity_id}     # taken: keep ours, or we would write another entity's state
+        else:
+            changes["new_entity_id"] = ids["entity_id"]
     if sensor._attr_unique_id != ids["unique_id"]:
         changes["new_unique_id"] = ids["unique_id"]
     if changes and ent_reg.async_get(sensor.entity_id) is not None:
@@ -174,7 +177,7 @@ def prune_room_sensors(hass, layout):
     ent_reg = er.async_get(hass)
     dev_reg = dr.async_get(hass)
     for entry in list(ent_reg.entities.values()):
-        if entry.platform != "sextant" or not isinstance(entry.unique_id, str) or not entry.unique_id.startswith((UNIQUE_PREFIX, PEOPLE_PREFIX)):
+        if entry.platform != "sextant" or not entry.entity_id.startswith("binary_sensor.") or not isinstance(entry.unique_id, str) or not entry.unique_id.startswith((UNIQUE_PREFIX, PEOPLE_PREFIX)):
             continue
         if entry.unique_id in keep_uids:
             continue

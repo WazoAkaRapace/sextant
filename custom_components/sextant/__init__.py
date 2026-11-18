@@ -5487,11 +5487,13 @@ def _publish_rooms(hass):
         who = people_sensors.get(key)
         if who is not None:
             # Radars, inputs and the force switch cannot tell a pet from a person, so they count as people here.
-            humans = bool(attrs.get("humans")) or seen["count"] > 0 or bool(inputs)
+            humans = bool(attrs.get("humans") or attrs.get("people")) or seen["count"] > 0 or bool(inputs)
+            if humans and attrs.get("people"):
+                who.door_people = list(attrs["people"])
             who.memory = rooms_mod.settle(getattr(who, "memory", None), humans or forced, now,
                                           hold if own_hold is None else own_hold, extended if own_ext is None else own_ext,
                                           door, door_settle, door_max)
-            if not humans and rooms_mod.release_if_elsewhere(who.memory, getattr(sensor, "door_people", None), elsewhere(key)):
+            if not humans and rooms_mod.release_if_elsewhere(who.memory, getattr(who, "door_people", None), elsewhere(key)):
                 who.memory = rooms_mod.settle(who.memory, forced, now, hold if own_hold is None else own_hold,
                                               extended if own_ext is None else own_ext, door, door_settle, door_max)
             wm = who.memory

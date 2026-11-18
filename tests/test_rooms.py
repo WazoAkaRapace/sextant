@@ -439,6 +439,13 @@ def test_people_sensor_ignores_a_pets_tag_but_not_a_person_or_a_sensor(hass):
     states["binary_sensor.kitchen_motion"] = "on"                   # a motion sensor cannot tell: it counts as people
     answer(0, 1)
     assert people._attr_is_on is True
+    states["binary_sensor.kitchen_motion"] = "off"                  # evidence gone, no hold set: it clears, the cat does not keep it on
+    answer(0, 1)
+    assert people._attr_is_on is False and anyone._attr_is_on is True
+    answer(0, 2)                                                    # a named person with no tag row yet still counts
+    hass.data["sextant_room_answers"][key][1]["people"] = ["David"]
+    sextant._publish_rooms(hass)
+    assert people._attr_is_on is True
 
 
 def test_inputs_never_include_our_own_sensors_or_the_door():
