@@ -6,7 +6,7 @@ import { occupancyByFloor } from "./sextant-occupancy-data.js";
 class SextantOccupancy extends LitElement {
   static properties = { hass: {}, data: {} };
   static styles = [sharedStyles, css`
-    :host { display: block; padding: 16px; max-width: 900px; margin: 0 auto; }
+    :host { display: block; overflow-y: auto; padding: 16px; max-width: 900px; margin: 0 auto; }
     .floor { background: var(--card-background-color); border: 1px solid var(--divider-color); border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; }
     .fh { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
     .fh b { flex: 1; font-size: 15px; }
