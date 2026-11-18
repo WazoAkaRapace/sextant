@@ -63,7 +63,7 @@ def _entity_ids(value) -> list[str]:
     """Entity ids from a list or a comma/space separated string; anything else is dropped."""
     if isinstance(value, str):
         value = re.split(r"[,\s]+", value)
-    return [v.strip() for v in value if isinstance(v, str) and re.fullmatch(r"[a-z_]+\.[a-z0-9_]+", v.strip())] if isinstance(value, list) else []
+    return [v.strip() for v in value if isinstance(v, str) and re.fullmatch(r"[a-z0-9]+(_[a-z0-9]+)*\.[a-z0-9]+(_[a-z0-9]+)*", v.strip())] if isinstance(value, list) else []
 
 
 def room_options(zone) -> dict:
@@ -74,7 +74,7 @@ def room_options(zone) -> dict:
     ``door`` (a contact entity whose closed state keeps the room occupied)."""
     door = _entity_ids(zone.get("door"))
     # Never a Sextant occupancy sensor (it would hold itself on) nor the door (an open door is not a person).
-    inputs = [e for e in _entity_ids(zone.get("inputs")) if not e.endswith("_sextant_occupancy") and e not in door]
+    inputs = [e for e in _entity_ids(zone.get("inputs")) if not re.search(r"sextant.*occupancy$", e) and e not in door]
     return {"hold_secs": _secs(zone.get("room_hold_secs"), 0.0, 3600.0), "extended_secs": _secs(zone.get("room_extended_secs"), 30.0, 86400.0),
             "inputs": inputs, "door": door[0] if door else None}
 
@@ -287,8 +287,8 @@ def settle(prev, raw_on, now, hold_s=0.0, extended_s=600.0, door=None, door_sett
             closed_since = float("inf")   # it left before the wait was up: not shut in, until the door reopens
         elif raw_on and not shut and closed_since != float("inf") and now - closed_since >= door_settle_s:
             shut, shut_at = True, now
-        if shut and now - shut_at >= door_max_s:
-            shut, closed_since = False, float("inf")   # a door that never opened: let go, and do not take hold again
+    if shut and now - (shut_at if shut_at is not None else now) >= door_max_s:
+        shut, closed_since = False, float("inf")   # a door that never opened (or whose sensor is gone): let go, and do not take hold again
     on = bool(raw_on) or shut or (hold_s > 0 and last_raw is not None and now - last_raw < hold_s)
     since = prev.get("since") if prev.get("on") == on and prev.get("since") is not None else now
     state = "clear" if not on else ("extended" if now - since >= extended_s else "occupied")

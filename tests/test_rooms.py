@@ -376,3 +376,14 @@ def test_an_unavailable_door_keeps_a_hold_and_a_departure_releases_it():
     s = rooms.settle(None, True, 0.0, door=True)
     s = rooms.settle(s, True, 100.0, door=True)
     assert not rooms.release_if_elsewhere(s, ["Eilee", "Jack"], {"Eilee"})   # one of them is still unaccounted for
+
+
+def test_review_two_fixes_in_rooms():
+    # a hold whose contact sensor went unavailable still ends at door_max_s
+    s = rooms.settle(None, True, 0.0, door=True)
+    s = rooms.settle(s, True, 100.0, door=True)
+    assert rooms.settle(s, False, 200.0, door=None)["door_hold"]
+    assert not rooms.settle(s, False, 100.0 + 29000.0, door=None)["door_hold"]
+    # no Sextant occupancy sensor (room, floor or house) and no malformed id is an input
+    o = rooms.room_options({"inputs": "binary_sensor.sextant_house_occupancy, binary_sensor.a_sextant_floor_occupancy, binary_sensor._motion, binary_sensor.ok"})
+    assert o["inputs"] == ["binary_sensor.ok"]

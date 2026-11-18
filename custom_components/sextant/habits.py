@@ -15,6 +15,7 @@ shown nowhere else; ``habit_margin_gain`` = 0 turns its use off.
 from __future__ import annotations
 
 import math
+import re
 from datetime import datetime
 
 HALF_LIFE_S = 21 * 86400.0
@@ -46,7 +47,7 @@ def clean(raw) -> dict:
         for slot, row in slots.items():
             zones = row.get("z") if isinstance(row, dict) else None
             at = row.get("at") if isinstance(row, dict) else None
-            if (not isinstance(slot, str) or not isinstance(zones, dict) or isinstance(at, bool)
+            if (not isinstance(slot, str) or not re.fullmatch(r"(wd|we)([0-9]|1[0-9]|2[0-3])", slot) or not isinstance(zones, dict) or isinstance(at, bool)
                     or not isinstance(at, (int, float)) or not math.isfinite(at) or len(out.get(ent, {})) >= MAX_SLOTS):
                 continue
             good = {z: float(s) for z, s in list(zones.items())[:4 * MAX_ZONES_PER_SLOT]
@@ -94,6 +95,7 @@ def gain_for(layout, ent: str, default: float, pet_classes=frozenset({"cat", "do
     lean on, so it gets 0 until the class is given a value."""
     layout = layout if isinstance(layout, dict) else {}
     cls = (layout.get("thing_classes") or {}).get(ent) if isinstance(layout.get("thing_classes"), dict) else None
+    cls = cls if isinstance(cls, str) else None
     table = layout.get("class_habit_gain")
     own = table.get(cls) if isinstance(table, dict) and cls else None
     if isinstance(own, (int, float)) and not isinstance(own, bool) and math.isfinite(own) and 0.0 <= own <= 0.3:

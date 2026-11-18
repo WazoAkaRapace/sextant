@@ -446,7 +446,9 @@ class SextantDevices extends LitElement {
       home_entity: w.home || null,
       // Only when the switch was touched, and only for a thing that has a class.
       ...(typeof w.classHome === "boolean" && w.thing_class ? { class_always_home: w.classHome } : {}),
-      ...(w.classHabit !== undefined && w.thing_class ? { class_habit_gain: w.classHabit === "" ? null : Math.min(0.3, Math.max(0, Number(w.classHabit) || 0)) } : {}),
+      // Only for the class it was typed for: changing the thing's class in the dialog must not carry the number over.
+      ...(w.classHabit !== undefined && w.thing_class && w.classHabitFor === w.thing_class
+        ? { class_habit_gain: w.classHabit === "" || !Number.isFinite(Number(w.classHabit)) ? null : Math.min(0.3, Math.max(0, Number(w.classHabit))) } : {}),
       height: w.height === "" || w.height == null ? null : fromDisplayLen(w.height, this.hass),
       ref_offset_db: w.ref === "" || w.ref == null ? null : Number(w.ref),
       icon: w.icon || null,
@@ -540,8 +542,8 @@ class SextantDevices extends LitElement {
         </div>
         ${w.thing_class ? html`<div class="row">
           ${uiField({ label: `Routine pull for every ${THING_CLASSES.find((c) => c[0] === w.thing_class)?.[1] || w.thing_class} (0 to 0.3)`, type: "number", step: 0.01, min: 0, max: 0.3,
-            value: w.classHabit ?? this.data?.layout?.class_habit_gain?.[w.thing_class] ?? "", placeholder: PET_CLASSES.includes(w.thing_class) ? "0 (pets)" : String(this.data?.layout?.tuning?.habit_margin_gain ?? 0.1),
-            onChange: (v) => { w.classHabit = v; this.requestUpdate(); }, style: "width: 260px" })}
+            value: (w.classHabitFor === w.thing_class ? w.classHabit : undefined) ?? this.data?.layout?.class_habit_gain?.[w.thing_class] ?? "", placeholder: PET_CLASSES.includes(w.thing_class) ? "0 (pets)" : String(this.data?.layout?.tuning?.habit_margin_gain ?? 0.1),
+            onChange: (v) => { w.classHabit = v; w.classHabitFor = w.thing_class; this.requestUpdate(); }, style: "width: 260px" })}
           <span class="small muted">How far where this kind of thing usually is at this hour eases a close call between two rooms. Blank is the default: the Tuning page's value, and none for pets. 0 turns it off for the class.</span>
         </div>` : nothing}
         <div class="row colour">

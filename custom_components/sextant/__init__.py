@@ -5441,10 +5441,10 @@ def _publish_rooms(hass):
         sensor.memory = rooms_mod.settle(getattr(sensor, "memory", None), sensed or forced, now,
                                          hold if own_hold is None else own_hold, extended if own_ext is None else own_ext,
                                          door, door_settle, door_max)
-        if sensed:
-            sensor.door_people = list(attrs.get("people") or [])
-        elif rooms_mod.release_if_elsewhere(sensor.memory, getattr(sensor, "door_people", None), elsewhere(key)):
-            sensor.memory = rooms_mod.settle(sensor.memory, False, now, hold if own_hold is None else own_hold,
+        if sensed and attrs.get("people"):
+            sensor.door_people = list(attrs["people"])   # a lingering radar track has none: keep who was there
+        if not sensed and rooms_mod.release_if_elsewhere(sensor.memory, getattr(sensor, "door_people", None), elsewhere(key)):
+            sensor.memory = rooms_mod.settle(sensor.memory, forced, now, hold if own_hold is None else own_hold,
                                              extended if own_ext is None else own_ext, door, door_settle, door_max)
         m = sensor.memory
         since = datetime.fromtimestamp(m["since"], timezone.utc).isoformat(timespec="seconds")
@@ -5985,10 +5985,11 @@ def _elect_zone(entity, floor_name, instant_zone, point, kf_state, zone_polys, s
         dwell = max(dwell, _tuning(layout, "far_move_secs"))
     if best != incumbent:
         # Where this thing usually is at this hour tips a close call, never a clear one.
-        shifted = max(0.05, margin + habits_mod.prior_shift(
-            _habits, entity, _habit_zone(floor_name, incumbent), _habit_zone(floor_name, best), now,
-            habits_mod.gain_for(layout, entity, _tuning(layout, "habit_margin_gain")), _local_tz))
-        margin = min(shifted, max(margin, 0.9))   # a habit never makes a unanimous challenger unable to win
+        gain = habits_mod.gain_for(layout, entity, _tuning(layout, "habit_margin_gain"))
+        if gain > 0:
+            shifted = max(0.05, margin + habits_mod.prior_shift(
+                _habits, entity, _habit_zone(floor_name, incumbent), _habit_zone(floor_name, best), now, gain, _local_tz))
+            margin = min(shifted, max(margin, 0.9))   # a habit never makes a unanimous challenger unable to win
     if best == incumbent or probs[best] - probs.get(incumbent, 0.0) < margin:
         st["challenge"] = None
         return incumbent, False, speed

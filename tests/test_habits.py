@@ -60,3 +60,9 @@ def test_gain_comes_from_the_class_then_the_default_and_pets_have_none():
     assert habits.gain_for(layout, "tag1", 0.1) == 0.0          # a dog: no routine by default
     assert habits.gain_for(layout, "tag2", 0.1) == 0.2          # a cat the owner gave a value
     assert habits.gain_for({}, "unknown", 0.1) == 0.1
+
+
+def test_review_two_fixes_in_habits():
+    assert habits.gain_for({"thing_classes": {"p": ["phone"]}, "class_habit_gain": {"phone": 0.2}}, "p", 0.1) == 0.1   # a malformed class is no class
+    raw = {"p": {**{f"junk{i}": {"at": 1, "z": {"A": 5}} for i in range(60)}, "wd7": {"at": 1, "z": {"A": 5}}}}
+    assert "wd7" in habits.clean(raw)["p"] and len(habits.clean(raw)["p"]) == 1
