@@ -307,7 +307,7 @@ def test_wifi_stands_on_an_arrival_or_without_a_last_seen_time():
 
 def test_heard_at_is_last_seen_less_idletime():
     """For the person log: the garage AP reported a watch 3 s ago that it had not heard for minutes."""
-    from custom_components.sextant import wifi
+    from sextant import wifi
     assert wifi.heard_at({"last_seen": NOW - 3, "idletime": 150}) == NOW - 153
     assert wifi.heard_at({"last_seen": NOW - 3}) == NOW - 3              # no idletime: last_seen as before
     assert wifi.heard_at({"last_seen": NOW - 3, "idletime": -1}) == NOW - 3

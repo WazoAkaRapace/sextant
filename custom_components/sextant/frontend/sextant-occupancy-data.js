@@ -11,7 +11,7 @@ export function occupancyByFloor(states, planFloors) {
     if (!id.startsWith("binary_sensor.") || a.room == null || a.floor == null) continue;
     const key = `${a.floor}\u0000${a.room}`;
     if (a.people_only) people.set(key, s.state === "on");
-    else rooms.set(key, { room: a.room, floor: a.floor, on: s.state === "on", people: a.people || [], pets: a.pets || [], things: a.things || [], sources: a.sources || [] });
+    else rooms.set(key, { room: a.room, floor: a.floor, on: s.state === "on", people: a.people || [], pets: a.pets || [], things: a.things || [], ids: a.ids || {}, sources: a.sources || [] });
   }
   const byFloor = new Map();
   for (const [key, r] of rooms) {
@@ -26,3 +26,32 @@ export function occupancyByFloor(states, planFloors) {
     return { name, rooms: list, people: new Set(list.flatMap((r) => r.people)).size, pets: new Set(list.flatMap((r) => r.pets)).size };
   });
 }
+
+export const WHERE_SOURCE = { ble: "Bluetooth", wifi: "Wi-Fi", gps: "GPS", held: "Bluetooth (held)", none: "None" };
+
+/** Where a chip's person, pet or thing is, from its location sensors; null when it has none.
+ *  ``ids`` is the room sensor's {display name: thing slug}; a person (or a pet that is a
+ *  person) is found by the friendly name the room sensor listed them under. */
+export function chipDetail(states, name, ids) {
+  states = states || {};
+  const person = Object.keys(states).find((id) => id.startsWith("person.") && (states[id]?.attributes?.friendly_name || id.slice(7)) === name);
+  const slug = person?.slice(7);
+  const loc = slug ? states[`sensor.${slug}_sextant_person_location`] || states[`sensor.${slug}_sextant_pet_location`] : null;
+  const via = loc ? loc.attributes?.via : ids?.[name];
+  const thing = via && !String(via).includes(".") ? via : null;   // a Wi-Fi via is a device_tracker, not a thing
+  const tloc = thing ? states[`sensor.${thing}_sextant_location`] : null;
+  const s = loc || tloc;
+  if (!s) return null;
+  const a = s.attributes || {}, t = tloc?.attributes || {};
+  const heard = a.last_heard || t.last_heard;
+  const spot = a.spot && a.spot !== "unknown" ? a.spot : null;
+  return {
+    thing, room: a.room, spot, floor: a.floor, presence: a.presence,
+    conf: a.conf ?? t.conf ?? null, source: a.source || "ble",
+    accessPoint: a.access_point || null, gpsAccuracy: a.gps_accuracy ?? null,
+    heardAt: heard ? Date.parse(heard) : null,
+  };
+}
+
+/** A person's chip label: the first word of their name, capitalised ("david coulson" -> "David"). */
+export const firstName = (name) => { const w = String(name ?? "").trim().split(/\s+/)[0]; return w ? w[0].toUpperCase() + w.slice(1) : String(name ?? ""); };
