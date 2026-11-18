@@ -2510,10 +2510,9 @@ def test_a_habit_never_makes_a_unanimous_challenger_unable_to_win():
 def test_a_stale_smoothed_lead_does_not_win_the_floor_when_this_cycles_scores_disagree():
     # One cycle scored the incumbent 0, so the smoothed odds still favour the challenger after the scores recover.
     probs = {"a": 0.64, "b": 0.36}
-    ch = None
-    _, ch = sextant._elect_floor(probs, "b", {"a", "b"}, ch, now=0.0, switch_secs=15.0, margin=0.15, scores={"a": 0.8, "b": 0.0})
+    _, ch = sextant._elect_floor(probs, "b", {"a", "b"}, None, now=0.0, switch_secs=15.0, margin=0.15, scores={"a": 0.8, "b": 0.0})
     assert ch is not None
-    floor, ch = sextant._elect_floor(probs, "b", {"a", "b"}, ch, now=10.0, switch_secs=15.0, margin=0.15, scores={"a": 0.61, "b": 0.75})
-    assert (floor, ch) == ("b", None)
-    floor, ch = sextant._elect_floor(probs, "b", {"a", "b"}, ch, now=20.0, switch_secs=15.0, margin=0.15, scores={"a": 0.61, "b": 0.75})
-    assert (floor, ch) == ("b", None)
+    floor, ch = sextant._elect_floor(probs, "b", {"a", "b"}, ch, now=16.0, switch_secs=15.0, margin=0.15, scores={"a": 0.61, "b": 0.75})
+    assert floor == "b" and ch is not None            # dwell is over but this cycle disagrees: held, challenge kept
+    floor, ch = sextant._elect_floor(probs, "b", {"a", "b"}, ch, now=21.0, switch_secs=15.0, margin=0.15, scores={"a": 0.9, "b": 0.1})
+    assert floor == "a"                                # a cycle that agrees completes the switch: a real move is not blocked

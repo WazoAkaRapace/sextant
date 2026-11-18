@@ -5819,8 +5819,9 @@ def _elect_floor(probs, incumbent, solved, challenge, now=None,
 
     ``scores`` are this cycle's raw floor scores. The probabilities are
     smoothed, so one bad cycle (a floor scoring 0) leaves the challenger ahead
-    for many cycles after the scores have recovered: a challenge only
-    stands while this cycle's scores also put the challenger ahead.
+    for many cycles after the scores have recovered: the switch only happens on
+    a cycle whose scores also put the challenger ahead (the dwell keeps running
+    meanwhile, so a real move that scores noisily still gets there).
     """
     now = time.time() if now is None else now
     contenders = {f: p for f, p in probs.items() if f in solved}
@@ -5831,10 +5832,8 @@ def _elect_floor(probs, incumbent, solved, challenge, now=None,
         return best, None  # no standing incumbent: adopt the best immediately
     if best == incumbent or contenders[best] - contenders[incumbent] < margin:
         return incumbent, None
-    if scores and scores.get(best, 0.0) <= scores.get(incumbent, 0.0):
-        return incumbent, None   # the smoothed lead is stale: this cycle says otherwise
     since = challenge["since"] if challenge and challenge.get("floor") == best else now
-    if now - since >= switch_secs:
+    if now - since >= switch_secs and not (scores and scores.get(best, 0.0) <= scores.get(incumbent, 0.0)):
         return best, None
     return incumbent, {"floor": best, "since": since}
 
