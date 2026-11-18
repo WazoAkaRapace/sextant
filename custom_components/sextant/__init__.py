@@ -2972,7 +2972,7 @@ async def update_trilateration_and_zone(hass, new_global_data, entity):
     )
     lowest_floor_name, challenge = _elect_floor(
         probs, incumbent, solved, _floor_challenge.get(entity),
-        now=now, switch_secs=_tuning(layout, "floor_switch_secs"), margin=margin,
+        now=now, switch_secs=_tuning(layout, "floor_switch_secs"), margin=margin, scores=scores,
     )
     if challenge is None:
         _floor_challenge.pop(entity, None)
@@ -5798,7 +5798,7 @@ def _update_floor_probabilities(entity, scores, valid_floors=None, now=None):
 
 
 def _elect_floor(probs, incumbent, solved, challenge, now=None,
-                 switch_secs=FLOOR_SWITCH_SECS, margin=FLOOR_SWITCH_MARGIN):
+                 switch_secs=FLOOR_SWITCH_SECS, margin=FLOOR_SWITCH_MARGIN, scores=None):
     """Pick the floor to publish. Returns (floor, challenge_state).
 
     The caller guarantees the incumbent is either solved this cycle or None
@@ -5816,6 +5816,12 @@ def _elect_floor(probs, incumbent, solved, challenge, now=None,
     floor must not be the cure. Wall clock rather than cycles because the
     update interval is configurable: "three cycles" meant 30 s at one
     setting and 3 s at another.
+
+    ``scores`` are this cycle's raw floor scores. The probabilities are
+    smoothed, so one bad cycle (a floor scoring 0) leaves the challenger ahead
+    for many cycles after the scores have recovered: the switch only happens on
+    a cycle whose scores also put the challenger ahead (the dwell keeps running
+    meanwhile, so a real move that scores noisily still gets there).
     """
     now = time.time() if now is None else now
     contenders = {f: p for f, p in probs.items() if f in solved}
@@ -5827,7 +5833,7 @@ def _elect_floor(probs, incumbent, solved, challenge, now=None,
     if best == incumbent or contenders[best] - contenders[incumbent] < margin:
         return incumbent, None
     since = challenge["since"] if challenge and challenge.get("floor") == best else now
-    if now - since >= switch_secs:
+    if now - since >= switch_secs and not (scores and scores.get(best, 0.0) <= scores.get(incumbent, 0.0)):
         return best, None
     return incumbent, {"floor": best, "since": since}
 
