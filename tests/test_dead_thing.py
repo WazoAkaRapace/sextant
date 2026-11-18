@@ -190,11 +190,14 @@ def test_a_stuck_room_sensor_raises_one_repair_and_clears_when_it_reads_normally
     states = {"binary_sensor.mm": types.SimpleNamespace(state="on", last_changed=datetime.fromtimestamp(time.time() - 30 * 3600, timezone.utc))}
     hass.states = types.SimpleNamespace(get=states.get)
     hass.data["sextant_room_keys"] = [{"floor": "G", "room": "Office", "inputs": ["binary_sensor.mm"], "door": None}]
-    key = ("sextant", "room_sensor_binary_sensor_mm")
+    key = ("sextant", "room_sensor_binary_sensor__mm")
     for _ in range(2):
         sextant._update_sensor_issues(hass, {})
         assert list(hass.data["issues"]) == [key]
     assert hass.data["issues"][key]["translation_placeholders"] == {"name": "binary_sensor.mm", "where": "Office (G)", "problem": "has read on for 1 day, which keeps the room occupied"}
     states["binary_sensor.mm"] = types.SimpleNamespace(state="off", last_changed=datetime.fromtimestamp(time.time(), timezone.utc))
     sextant._update_sensor_issues(hass, {})
+    assert not hass.data["issues"]
+    hass.data["issues"][key] = {}
+    sextant._update_sensor_issues(hass, {})   # nothing is broken now: an old repair is not left behind
     assert not hass.data["issues"]

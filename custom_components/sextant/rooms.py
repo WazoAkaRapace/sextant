@@ -74,7 +74,7 @@ def _input_specs(value) -> list[str]:
     """Inputs from a list or a comma/space separated string: an entity id, or one with a
     number test (``sensor.tv_power>20``, ``sensor.lux<5``); anything else is dropped."""
     if isinstance(value, str):
-        value = re.split(r"[,\s]+", value)
+        value = re.split(r"[,\s]+", re.sub(r"\s*(>=|<=|>|<)\s*", r"\1", value))
     return [v.strip() for v in value if isinstance(v, str) and _SPEC.fullmatch(v.strip())] if isinstance(value, list) else []
 
 
@@ -110,7 +110,7 @@ def _input_on(spec, state) -> bool:
         value, limit = float(state), float(m.group(3))
     except (TypeError, ValueError):
         return False   # unavailable or text: not evidence
-    if not math.isfinite(value):
+    if not (math.isfinite(value) and math.isfinite(limit)):
         return False
     return {">": value > limit, ">=": value >= limit, "<": value < limit, "<=": value <= limit}[m.group(2)]
 
@@ -120,34 +120,42 @@ def inputs_on(inputs, get_state) -> list[str]:
     return [e for e in inputs or [] if _input_on(e, get_state(spec_entity(e)))]
 
 
-def sensor_problems(keys, get, now, stuck_s, gone_s) -> dict[str, dict]:
+def sensor_problems(keys, get, now, stuck_s, gone_s, bad_since=None) -> dict[str, dict]:
     """Room sensors (inputs and doors) that look broken, by entity id: ``{"kind", "age", "rooms"}``.
 
-    ``missing``: no such entity. ``gone``: unavailable or unknown for ``gone_s``.
-    ``stuck``: a binary sensor that has read on for ``stuck_s`` - it keeps its room
-    occupied, so a motion sensor with a dead battery or a wedged mmWave shows here.
-    Numbers (they change all the time), media players and trackers (a person can be
-    home for days) are never called stuck. ``get(entity_id)`` gives a state object or None.
-    shortcut: last_changed restarts with Home Assistant, so a restart resets the clocks; fine for hours-long limits.
+    ``missing``: no such entity for ``gone_s``. ``gone``: unavailable or unknown (either, in
+    any order) for ``gone_s``. ``stuck``: a binary sensor that has read on for ``stuck_s`` - it
+    keeps its room occupied, so a motion sensor with a dead battery or a wedged mmWave shows here.
+    Numbers (they change all the time), media players and trackers (a person can be home for
+    days) are never called stuck. ``get(entity_id)`` gives a state object or None; ``bad_since``
+    (kept by the caller between calls) times how long each has been missing or unavailable.
+    shortcut: last_changed and ``bad_since`` restart with Home Assistant, so a restart resets the clocks; fine for hours-long limits.
     """
+    bad_since = {} if bad_since is None else bad_since
     out: dict[str, dict] = {}
+    seen_bad = set()
     for key in keys:
         room = f"{key['room']} ({key['floor']})"
         for spec in (key.get("inputs") or []) + ([key["door"]] if key.get("door") else []):
             ent = spec_entity(spec)
             st = get(ent)
-            if st is None:
-                found = {"kind": "missing", "age": 0.0}
-            else:
+            found = None
+            if st is None or str(st.state).lower() in ("unavailable", "unknown"):
+                seen_bad.add(ent)
+                since = bad_since.setdefault(ent, now)
+                age = now - since if st is None else max(now - since, now - st.last_changed.timestamp())
+                if age >= gone_s:
+                    found = {"kind": "missing" if st is None else "gone", "age": max(0.0, age)}
+            elif ent.startswith("binary_sensor.") and spec == ent and ent != key.get("door") and str(st.state).lower() == "on":
                 age = max(0.0, now - st.last_changed.timestamp())
-                if str(st.state).lower() in ("unavailable", "unknown"):
-                    found = {"kind": "gone", "age": age} if age >= gone_s else None
-                elif ent.startswith("binary_sensor.") and spec == ent and ent != key.get("door") and str(st.state).lower() == "on" and age >= stuck_s:
+                if age >= stuck_s:
                     found = {"kind": "stuck", "age": age}
-                else:
-                    found = None
             if found:
-                out.setdefault(ent, {**found, "rooms": []})["rooms"].append(room)
+                rooms = out.setdefault(ent, {**found, "rooms": []})["rooms"]
+                if room not in rooms:
+                    rooms.append(room)
+    for ent in set(bad_since) - seen_bad:
+        del bad_since[ent]
     return out
 
 

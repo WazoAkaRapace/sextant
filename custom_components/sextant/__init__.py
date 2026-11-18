@@ -4458,6 +4458,7 @@ def _update_dead_issues(hass, layout):
 
 
 SENSOR_ISSUE_PREFIX = "room_sensor_"
+_sensor_bad_since: dict = {}   # entity id -> when it was first seen missing or unavailable
 _SENSOR_TEXT = {"missing": "does not exist in Home Assistant", "gone": "has been unavailable for {age}",
                 "stuck": "has read on for {age}, which keeps the room occupied"}
 
@@ -4465,14 +4466,14 @@ _SENSOR_TEXT = {"missing": "does not exist in Home Assistant", "gone": "has been
 def _update_sensor_issues(hass, layout):
     """One repair per broken room sensor, under a stable id; gone as soon as it reads normally or leaves the room."""
     found = rooms_mod.sensor_problems(hass.data.get("sextant_room_keys") or [], hass.states.get, time.time(),
-                                      _tuning(layout, "sensor_stuck_secs"), _tuning(layout, "sensor_gone_secs"))
+                                      _tuning(layout, "sensor_stuck_secs"), _tuning(layout, "sensor_gone_secs"), _sensor_bad_since)
     for ent, p in found.items():
         ir.async_create_issue(
-            hass, DOMAIN, SENSOR_ISSUE_PREFIX + ent.replace(".", "_"), is_fixable=False, severity=ir.IssueSeverity.WARNING,
+            hass, DOMAIN, SENSOR_ISSUE_PREFIX + ent.replace(".", "__"), is_fixable=False, severity=ir.IssueSeverity.WARNING,
             translation_key="room_sensor",
             translation_placeholders={"name": ent, "where": ", ".join(p["rooms"]), "problem": _SENSOR_TEXT[p["kind"]].format(age=_ago(p["age"]))},
         )
-    live = {SENSOR_ISSUE_PREFIX + e.replace(".", "_") for e in found}
+    live = {SENSOR_ISSUE_PREFIX + e.replace(".", "__") for e in found}
     for domain, issue_id in list(ir.async_get(hass).issues):
         if domain == DOMAIN and issue_id.startswith(SENSOR_ISSUE_PREFIX) and issue_id not in live:
             ir.async_delete_issue(hass, DOMAIN, issue_id)
@@ -7444,6 +7445,10 @@ async def async_unload_entry(hass: HomeAssistant, entry):
         if task:
             task.cancel()
     await _save_runtime(hass, final=True)
+    for domain, issue_id in list(ir.async_get(hass).issues):
+        if domain == DOMAIN and issue_id.startswith(SENSOR_ISSUE_PREFIX):
+            ir.async_delete_issue(hass, DOMAIN, issue_id)
+    _sensor_bad_since.clear()
 
     # Get whatever the tracking loop buffered since the last 60 s flush onto
     # disk before the task goes away. The in-memory ring survives an unload
