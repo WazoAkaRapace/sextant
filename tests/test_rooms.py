@@ -434,6 +434,7 @@ def test_people_sensor_ignores_a_pets_tag_but_not_a_person_or_a_sensor(hass):
     states = {"binary_sensor.kitchen_motion": "off"}
     hass.states = type("S", (), {"get": staticmethod(lambda e: type("St", (), {"state": states[e]})() if e in states else None)})()
     anyone, people = hass.data["sextant_room_sensors"][key], hass.data["sextant_room_people"][key]
+    assert (anyone.icon, people.icon) == ("mdi:paw-off", "mdi:account-outline")
     assert people.entity_id == "binary_sensor.kitchen_sextant_people_occupancy"
     assert people._attr_unique_id == "sextant_room_people_" + anyone._attr_unique_id[len("sextant_room_occupancy_"):]
 
@@ -457,6 +458,46 @@ def test_people_sensor_ignores_a_pets_tag_but_not_a_person_or_a_sensor(hass):
     hass.data["sextant_room_answers"][key][1]["people"] = ["David"]
     sextant._publish_rooms(hass)
     assert people._attr_is_on is True
+
+
+def test_a_room_that_was_on_stays_on_over_a_restart_until_the_grace_runs_out(hass):
+    import asyncio
+    import types
+    layout = {"floor": [{"name": "Ground Floor", "floor_id": "ground", "zones": [{"entity_id": "Kitchen", "cords": [{"x": 0, "y": 0}] * 3}]}]}
+    _added(hass)
+    hass.data["sextant_room_keys"] = rooms.room_keys(layout)
+    hass.data["sextant_aggregate_sensors"] = {}
+    platform.ensure_room_sensors(hass, layout)
+    hass.data["sextant_room_switches"] = {}
+    key = ("Ground Floor", "Kitchen")
+    for s in (hass.data["sextant_room_sensors"][key], hass.data["sextant_room_people"][key]):
+        s.hass = hass
+        s.async_write_ha_state = lambda: None
+        s._test_last_state = types.SimpleNamespace(state="on", attributes={})
+        asyncio.run(s.async_added_to_hass())
+    anyone, people = hass.data["sextant_room_sensors"][key], hass.data["sextant_room_people"][key]
+    assert anyone._attr_is_on and people._attr_is_on        # carried over, nothing placed yet
+    assert anyone._attr_extra_state_attributes["sources"] == ["restored"]
+    hass.states = type("S", (), {"get": staticmethod(lambda e: None)})()
+    hass.data["sextant_room_answers"] = {}
+    sextant._publish_rooms(hass)
+    assert anyone._attr_is_on is True and people._attr_is_on is True
+    anyone.restore_until = people.restore_until = 1.0       # grace over
+    sextant._publish_rooms(hass)
+    assert anyone._attr_is_on is False and people._attr_is_on is False
+    # a reload after the deadline gets no new grace; the sensors' own memory was never fed by it
+    hass.data["sextant_restore_deadline"] = 1.0
+    anyone._attr_is_on = False
+    anyone._test_last_state = types.SimpleNamespace(state="on", attributes={})
+    asyncio.run(anyone.async_added_to_hass())
+    assert anyone._attr_is_on is False and not getattr(anyone, "restore_until", 0)
+
+
+def test_sources_say_why_a_room_is_on():
+    assert rooms.sources(True, False, [], False, False, False, False) == ["bluetooth"]
+    assert rooms.sources(False, False, ["media_player.tv", "binary_sensor.m"], False, False, False, False) == ["media_player", "sensor"]
+    assert rooms.sources(False, True, [], True, True, True, True) == ["radar", "forced", "door", "restored", "hold"]
+    assert rooms.sources(False, False, [], False, False, False, False) == []
 
 
 def test_inputs_never_include_our_own_sensors_or_the_door():

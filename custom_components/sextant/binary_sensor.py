@@ -7,6 +7,7 @@ room's linked Home Assistant area when the device is first created (and
 left alone after that, so moving it in HA sticks).
 """
 import logging
+import time
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -16,6 +17,7 @@ from homeassistant.core import callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.restore_state import RestoreEntity
 
 from .assist import expose
 from .rooms import HOUSE_ID, floor_ids, ids_for, people_ids, room_keys
@@ -25,13 +27,19 @@ _LOGGER = logging.getLogger(__name__)
 
 UNIQUE_PREFIX = "sextant_room_occupancy_"
 PEOPLE_PREFIX = "sextant_room_people_"
+RESTORE_GRACE_S = 600.0
 
 
-class SextantRoomOccupancy(BinarySensorEntity):
+class SextantRoomOccupancy(BinarySensorEntity, RestoreEntity):
     """Whether anyone Sextant tracks is in one room, and who."""
 
     _attr_should_poll = False
     _attr_device_class = BinarySensorDeviceClass.OCCUPANCY
+    icons = ("mdi:paw", "mdi:paw-off")      # on, off: anyone, pets included
+
+    @property
+    def icon(self):
+        return self.icons[0 if self._attr_is_on else 1] if self.icons else None
 
     def __init__(self, key, ids):
         self.key = key                      # (floor, room)
@@ -47,7 +55,17 @@ class SextantRoomOccupancy(BinarySensorEntity):
         )
 
     async def async_added_to_hass(self):
+        await super().async_added_to_hass()
         expose(self.hass, self.entity_id)
+        # A restart finds nothing placed yet: a room that was on stays on for RESTORE_GRACE_S unless the cycle says it is occupied (carried over, not cleared).
+        last = await self.async_get_last_state()
+        # One deadline per Home Assistant process: a reload or rename must not grant a fresh grace.
+        until = self.hass.data.setdefault("sextant_restore_deadline", time.time() + RESTORE_GRACE_S)
+        if last is not None and last.state == "on" and time.time() < until:
+            self._attr_is_on = True
+            self._attr_extra_state_attributes = {**self._attr_extra_state_attributes, "sources": ["restored"]}
+            self.restore_until = until
+            self.async_write_ha_state()
 
     def set_occupancy(self, is_on, attrs):
         """Push one cycle's answer; written only when something changed."""
@@ -62,6 +80,8 @@ class SextantRoomOccupancy(BinarySensorEntity):
 class SextantRoomPeople(SextantRoomOccupancy):
     """The room's sensor for people: on when anyone but a pet's tag is there (lights, not the cats' say). It shares the room's device."""
 
+    icons = ("mdi:account", "mdi:account-outline")
+
     def __init__(self, key, ids, room_ids):
         super().__init__(key, room_ids)
         self._attr_name = ids["name"]
@@ -72,6 +92,8 @@ class SextantRoomPeople(SextantRoomOccupancy):
 class SextantAggregateOccupancy(SextantRoomOccupancy):
     """Whether anyone is on one floor, or in the house, and who: the rooms' answers summed up."""
 
+    icons = None
+
     def __init__(self, key, ids, device_name):
         self.key = key
         self._attr_name = ids["name"]
@@ -81,6 +103,9 @@ class SextantAggregateOccupancy(SextantRoomOccupancy):
         self._attr_extra_state_attributes = {"rooms": [], "people": [], "pets": [], "count": 0}
         self._attr_device_info = DeviceInfo(identifiers={("sextant", ids["unique_id"])}, name=device_name,
                                             manufacturer="Sextant", model="Occupancy")
+
+    async def async_added_to_hass(self):
+        expose(self.hass, self.entity_id)     # computed from the rooms each publish: nothing to restore
 
 
 @callback

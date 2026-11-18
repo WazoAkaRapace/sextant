@@ -336,6 +336,25 @@ def floor_ids(keys) -> dict[str, dict]:
     return out
 
 
+def sources(things, radar, inputs, forced, door_hold, restoring, hold_over) -> list:
+    """Why a room is on, for its ``sources`` attribute: ``bluetooth`` (a tracked
+    thing placed there), ``radar``, ``media_player`` / ``sensor`` (an input, named
+    in ``inputs``), ``forced``, ``door`` (shut in), ``restored`` (carried over a
+    restart) and ``hold`` (nothing now, the clear-after hold still running)."""
+    out = []
+    for name, on in (("bluetooth", things), ("radar", radar)):
+        if on:
+            out.append(name)
+    if any(str(e).startswith("media_player.") for e in inputs or []):
+        out.append("media_player")
+    if any(not str(e).startswith("media_player.") for e in inputs or []):
+        out.append("sensor")
+    for name, on in (("forced", forced), ("door", door_hold), ("restored", restoring), ("hold", hold_over)):
+        if on:
+            out.append(name)
+    return out
+
+
 def settle(prev, raw_on, now, hold_s=0.0, extended_s=600.0, door=None, door_settle_s=90.0, door_max_s=28800.0) -> dict:
     """A room's published state from this reading's ``raw_on``.
 

@@ -5429,6 +5429,18 @@ def _update_room_sensors(hass):
     update_sextant_sensor_state(hass, PEOPLE_HOME_ENTITY_ID, count, attrs)
 
 
+def _restoring(sensor, sensed, now):
+    """True while a sensor restored as on after a restart has not yet been
+    confirmed or has not run out its grace; real evidence ends the grace."""
+    until = getattr(sensor, "restore_until", 0)
+    if not until:
+        return False
+    if sensed or now >= until:
+        sensor.restore_until = 0
+        return False
+    return True
+
+
 def _publish_rooms(hass):
     """Each room's sensor from two answers: the things' (rooms.occupancy, once
     a cycle) and the radars' (the tracks in each room, every reading). A
@@ -5467,6 +5479,7 @@ def _publish_rooms(hass):
         link = links.get(key) or {}
         inputs = rooms_mod.inputs_on(link.get("inputs"), state_of)
         sensed = bool(is_on) or seen["count"] > 0 or bool(inputs)
+        grace = _restoring(sensor, sensed, now)
         door = rooms_mod.door_closed(state_of(link["door"])) if link.get("door") else None
         own_hold, own_ext = link.get("hold_secs"), link.get("extended_secs")
         sensor.memory = rooms_mod.settle(getattr(sensor, "memory", None), sensed or forced, now,
@@ -5482,14 +5495,18 @@ def _publish_rooms(hass):
         attrs = {**attrs, "radar": seen["count"], "held": not is_on and seen["count"] > 0 and seen["held"] == seen["count"],
                  "state": m["state"], "since": since, "forced": forced, "inputs": inputs, "door_hold": m["door_hold"],
                  "hold_over": m["on"] and not sensed and not forced and not m["door_hold"]}
-        sensor.set_occupancy(m["on"], attrs)
-        published[key] = (m["on"], attrs)
+        attrs["sources"] = rooms_mod.sources(bool(is_on), seen["count"] > 0, inputs, forced, m["door_hold"],
+                                             grace and not m["on"], attrs["hold_over"])
+        on = m["on"] or grace          # a restart's carried-over state shows, but never feeds the hold or the door latch
+        sensor.set_occupancy(on, attrs)
+        published[key] = (on, attrs)
         who = people_sensors.get(key)
         if who is not None:
             # Radars, inputs and the force switch cannot tell a pet from a person, so they count as people here.
             humans = bool(attrs.get("humans") or attrs.get("people")) or seen["count"] > 0 or bool(inputs)
             if humans and attrs.get("people"):
                 who.door_people = list(attrs["people"])
+            who_grace = _restoring(who, humans, now)
             who.memory = rooms_mod.settle(getattr(who, "memory", None), humans or forced, now,
                                           hold if own_hold is None else own_hold, extended if own_ext is None else own_ext,
                                           door, door_settle, door_max)
@@ -5497,10 +5514,13 @@ def _publish_rooms(hass):
                 who.memory = rooms_mod.settle(who.memory, forced, now, hold if own_hold is None else own_hold,
                                               extended if own_ext is None else own_ext, door, door_settle, door_max)
             wm = who.memory
-            who.set_occupancy(wm["on"], {**attrs, "state": wm["state"],
+            hold_over = wm["on"] and not humans and not forced and not wm["door_hold"]
+            who.set_occupancy(wm["on"] or who_grace, {**attrs, "state": wm["state"],
+                                         "sources": rooms_mod.sources(bool(attrs.get("humans") or attrs.get("people")), seen["count"] > 0, inputs, forced,
+                                                                      wm["door_hold"], who_grace and not wm["on"], hold_over),
                                          "since": datetime.fromtimestamp(wm["since"], timezone.utc).isoformat(timespec="seconds"),
                                          "door_hold": wm["door_hold"],
-                                         "hold_over": wm["on"] and not humans and not forced and not wm["door_hold"]})
+                                         "hold_over": hold_over})
     floors, house = rooms_mod.aggregate(hass.data.get("sextant_room_keys") or [], published)
     for (kind, floor), sensor in (hass.data.get("sextant_aggregate_sensors") or {}).items():
         on, attrs = house if kind == "house" else floors.get(floor, (False, None))
