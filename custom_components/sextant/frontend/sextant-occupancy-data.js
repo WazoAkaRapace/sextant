@@ -1,7 +1,8 @@
 /** Room occupancy grouped by floor, from the room sensors' states. No DOM: the tab and the tests share it. */
 import { sortFloors } from "./sextant-floors.js";
 
-const SOURCE_LABEL = { bluetooth: "Bluetooth", radar: "Radar", media_player: "Media playing", sensor: "Sensor", forced: "Forced on", door: "Door held", restored: "Carried over restart", hold: "Holding" };
+export const SOURCE_LABEL = { bluetooth: "Bluetooth", radar: "Radar", media_player: "Media playing", sensor: "Sensor", forced: "Forced on", door: "Door held", restored: "Carried over restart", hold: "Holding" };
+export const SOURCE_ICON = { bluetooth: "mdi:bluetooth", radar: "mdi:radar", media_player: "mdi:television-play", sensor: "mdi:motion-sensor", forced: "mdi:toggle-switch", door: "mdi:door", restored: "mdi:restart", hold: "mdi:timer-sand" };
 
 export function occupancyByFloor(states, planFloors) {
   const rooms = new Map(), people = new Map();
@@ -10,7 +11,7 @@ export function occupancyByFloor(states, planFloors) {
     if (!id.startsWith("binary_sensor.") || a.room == null || a.floor == null) continue;
     const key = `${a.floor}\u0000${a.room}`;
     if (a.people_only) people.set(key, s.state === "on");
-    else rooms.set(key, { room: a.room, floor: a.floor, on: s.state === "on", people: a.people || [], pets: a.pets || [], things: a.things || [], sources: (a.sources || []).map((x) => SOURCE_LABEL[x] || x) });
+    else rooms.set(key, { room: a.room, floor: a.floor, on: s.state === "on", people: a.people || [], pets: a.pets || [], things: a.things || [], sources: a.sources || [] });
   }
   const byFloor = new Map();
   for (const [key, r] of rooms) {
