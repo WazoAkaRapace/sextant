@@ -18,6 +18,7 @@ Pure: no Home Assistant imports. __init__ does the registry lookups.
 """
 from __future__ import annotations
 
+import math
 import re
 
 ROUTER = "router"
@@ -279,6 +280,21 @@ def norm_mac(mac) -> str | None:
     """A MAC address as lower-case colon pairs, or None if it is not one."""
     text = str(mac or "").strip().lower().replace("-", ":")
     return text if _MAC.match(text) else None
+
+
+def heard_at(raw) -> float | None:
+    """When the access point last heard a UniFi client, epoch seconds, or None.
+    ``last_seen`` is when the AP last listed the client in a report, and it keeps
+    listing one for minutes after the phone has gone; ``idletime`` is how long
+    the AP had heard nothing from it by then, so the difference is the true sighting."""
+    if not isinstance(raw, dict):
+        return None
+    seen, idle = raw.get("last_seen"), raw.get("idletime")
+    if isinstance(seen, bool) or not isinstance(seen, (int, float)) or not math.isfinite(seen):
+        return None
+    if isinstance(idle, bool) or not isinstance(idle, (int, float)) or not math.isfinite(idle) or idle < 0:
+        return float(seen)
+    return float(seen) - float(idle)
 
 
 def _mac_key(value) -> str | None:

@@ -5277,7 +5277,7 @@ def _update_person_sensors(hass):
             outrun = {
                 a["entity"] for a in (view.get("assigned") or {}).get(person) or []
                 if persons_mod.wifi_outrun(
-                    gps, (wifi_clients.get(((view.get("candidates") or {}).get(a["entity"]) or {}).get("mac")) or {}).get("last_seen"),
+                    gps, wifi_mod.heard_at(wifi_clients.get(((view.get("candidates") or {}).get(a["entity"]) or {}).get("mac"))),
                     home, _tuning(layout, "gps_leave_m"))
             }
             if outrun:
@@ -5328,10 +5328,12 @@ def _update_person_sensors(hass):
                 cand = {c["ent"]: c for c in candidates}
                 trackers_in = [
                     {"e": a["entity"], "home": c.get("home"), "ap": c.get("ap"),
-                     "seen_age": None if not isinstance(seen_at, (int, float)) else round(now - seen_at)}
+                     "seen_age": None if not isinstance(seen_at, (int, float)) else round(now - seen_at),
+                     "idle": raw.get("idletime")}
                     for a in (view.get("assigned") or {}).get(person) or []
                     for c in [(view.get("candidates") or {}).get(a["entity"]) or {}]
-                    for seen_at in [(wifi_clients.get(c.get("mac")) or {}).get("last_seen")]
+                    for raw in [wifi_clients.get(c.get("mac")) or {}]
+                    for seen_at in [raw.get("last_seen")]
                 ]
                 line, key = person_log_mod.row(
                     person, now, logged[1], presence, logged[0], _person_visits[person].get("arrived") is not None, wifi_raw, wifi_home,
