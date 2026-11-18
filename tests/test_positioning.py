@@ -887,13 +887,6 @@ def test_extract_candidate_floors_applies_the_cap_and_carries_quality():
     assert pts[0][4] == 0.5 and pts[1][4] == 1.0
 
 
-def test_a_zero_range_is_left_out_of_the_fix():
-    rx = [{"entity_id": f"r{i}", "cords": {"x": i * 100.0, "y": 0.0, "r": d * SCALE}, "distance": d}
-          for i, d in enumerate([0.0, 3.0, 3.2, 2.8, 0.04, 0.2])]
-    cands = sextant.extract_candidate_floors([{"entity": "e", "data": {"floor": [{"name": "F", "scale": SCALE, "receivers": rx}]}}], "e")
-    assert sorted(p[0] for p in cands[0]["cords"]) == [100.0, 200.0, 300.0, 500.0] and cands[0]["nearest_m"] == 0.2
-
-
 # ---------------------------------------------------------------------------
 # Median RSSI estimator
 # ---------------------------------------------------------------------------

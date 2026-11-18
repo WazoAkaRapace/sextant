@@ -2605,8 +2605,10 @@ async def update_receiver_radii(hass, eids):
 
             # A distance must be a positive, finite number of metres: -1 is a
             # common "no reading" sentinel, and a NaN would carry through the
-            # solve into the Kalman state and stay there.
-            if not (isinstance(distance_m, (int, float)) and math.isfinite(distance_m) and distance_m > 0):
+            # solve into the Kalman state and stay there. Under 5 cm is one
+            # too: a wall tablet read a phone across the house at ~0 m, and
+            # each one anchored the phone to the tablet at confidence 0.9.
+            if not (isinstance(distance_m, (int, float)) and math.isfinite(distance_m) and distance_m >= INVALID_RANGE_M):
                 receiver.pop("distance", None)
                 continue
 
@@ -5545,17 +5547,6 @@ def _publish_rooms(hass):
             sensor.set_occupancy(on, attrs)
 
 
-INVALID_RANGE_M = 0.05       # no RSSI model reads a thing this close: it is a sentinel, not a measurement
-
-
-def _drop_invalid_ranges(entries):
-    """Leave out ranges under INVALID_RANGE_M. A wall tablet scanner read a phone
-    at 0.0 m in 5 % of cycles from across the house, and each one pinned the fix
-    to the tablet (spot proxies, anchors and fingerprints already skip exact 0.0).
-    ``entries`` are ``(distance_m, point, name)``."""
-    return [e for e in entries if e[0] >= INVALID_RANGE_M]
-
-
 def extract_candidate_floors(new_global_data, tmpentity):
     """Every floor hearing the thing, ranked by its nearest receiver.
 
@@ -5601,7 +5592,6 @@ def extract_candidate_floors(new_global_data, tmpentity):
                     receiver["cords"]["x"], receiver["cords"]["y"],
                     receiver["cords"]["r"], distance * floor["scale"], float(quality),
                 ), receiver.get("entity_id")))
-            entries = _drop_invalid_ranges(entries)
             # Nearest-K cap: with thirty receivers on a floor, the far ones
             # contribute mostly noise, and 1/r^2 does not zero them out.
             cords, heard = _select_receivers(entries, max_receivers, max_range, near_always)
@@ -6247,6 +6237,7 @@ def _subzone_membership(sub_polys, samples):
 
 
 ANCHOR_CONF = 0.9   # an anchored fix is as sure as a fix gets
+INVALID_RANGE_M = 0.05       # no RSSI model reads a thing this close: a sentinel, not a measurement
 
 
 def _floor_receivers(layout, floor_name):
