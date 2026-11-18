@@ -35,6 +35,11 @@ class SextantRoomOccupancy(BinarySensorEntity, RestoreEntity):
 
     _attr_should_poll = False
     _attr_device_class = BinarySensorDeviceClass.OCCUPANCY
+    icons = ("mdi:paw", "mdi:paw-off")      # on, off: anyone, pets included
+
+    @property
+    def icon(self):
+        return self.icons[0 if self._attr_is_on else 1] if self.icons else None
 
     def __init__(self, key, ids):
         self.key = key                      # (floor, room)
@@ -75,6 +80,8 @@ class SextantRoomOccupancy(BinarySensorEntity, RestoreEntity):
 class SextantRoomPeople(SextantRoomOccupancy):
     """The room's sensor for people: on when anyone but a pet's tag is there (lights, not the cats' say). It shares the room's device."""
 
+    icons = ("mdi:account", "mdi:account-outline")
+
     def __init__(self, key, ids, room_ids):
         super().__init__(key, room_ids)
         self._attr_name = ids["name"]
@@ -84,6 +91,8 @@ class SextantRoomPeople(SextantRoomOccupancy):
 
 class SextantAggregateOccupancy(SextantRoomOccupancy):
     """Whether anyone is on one floor, or in the house, and who: the rooms' answers summed up."""
+
+    icons = None
 
     def __init__(self, key, ids, device_name):
         self.key = key
