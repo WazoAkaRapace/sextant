@@ -1,18 +1,28 @@
 /** Occupancy tab: floors stacked like the house, a tile per room with who is in it and why it is on. Read only. */
 import { LitElement, html, css, nothing } from "./lit.js";
-import { sharedStyles, fmtAge } from "./sextant-ui.js";
+import { sharedStyles, fmtAge, fmtLen, proxyName } from "./sextant-ui.js";
 import { occupancyByFloor, chipDetail, firstName, SOURCE_ICON, SOURCE_LABEL, WHERE_SOURCE } from "./sextant-occupancy-data.js";
 
 class SextantOccupancy extends LitElement {
-  static properties = { hass: {}, data: {}, _open: { state: true }, _readings: { state: true } };
+  static properties = { hass: {}, data: {}, _open: { state: true } };
 
   constructor() {
     super();
     this._open = null;          // "<floor>|<room>|<name>" of the chip whose details are showing
     this._pinned = false;       // opened by a tap or click, so leaving it with the mouse keeps it
-    this._readings = {};        // thing slug -> sextant/thing/readings answer (or "loading")
+    this._readings = {};        // thing slug -> { at, res, loading }: sextant/thing/readings, refreshed while shown
     this.addEventListener("click", (e) => { if (!e.composedPath().some((el) => el.classList?.contains("who"))) this._close(); });
-    this.addEventListener("keydown", (e) => { if (e.key === "Escape") this._close(); });
+    // On the document: a hover-opened popup has no focus inside this element for Escape to reach.
+    this._onKey = (e) => { if (e.key === "Escape" && this._open) this._close(); };
+  }
+
+  connectedCallback() { super.connectedCallback(); document.addEventListener("keydown", this._onKey); }
+  disconnectedCallback() { super.disconnectedCallback(); document.removeEventListener("keydown", this._onKey); }
+
+  willUpdate() {
+    this._floors = occupancyByFloor(this.hass?.states, this.data?.layout?.floor);
+    // The open chip's occupant left the room (or the house): drop the popup and its pin with it.
+    if (this._open && !this._floors.some((f) => f.rooms.some((r) => [...r.people, ...r.pets].some((n) => `${r.floor}|${r.room}|${n}` === this._open)))) this._close();
   }
   static styles = [sharedStyles, css`
     :host { display: block; overflow-y: auto; padding: 16px; max-width: 900px; margin: 0 auto; }
@@ -55,14 +65,19 @@ class SextantOccupancy extends LitElement {
     } else if (this._pinned) return;
     if (this._open === key) return;
     this._open = key;
-    if (thing && this.hass) this._fetch(thing);
   }
 
-  async _fetch(thing) {
-    this._readings = { ...this._readings, [thing]: "loading" };
-    let res = null;
-    try { res = await this.hass.callWS({ type: "sextant/thing/readings", entity: thing }); } catch (e) { /* the popup says no receivers */ }
-    this._readings = { ...this._readings, [thing]: res };
+  /** The receivers' readings for the thing speaking for an open popup: fetched on first show and
+   *  again at most every 10 s while it stays open (render runs on every state change). */
+  _readingsFor(thing) {
+    const e = this._readings[thing];
+    if (this.hass && (!e || (!e.loading && Date.now() - e.at > 10000))) {
+      this._readings[thing] = { ...e, loading: true };
+      this.hass.callWS({ type: "sextant/thing/readings", entity: thing })
+        .then((res) => res, () => null)     // an error reads as "no receiver right now"
+        .then((res) => { this._readings[thing] = { at: Date.now(), res, loading: false }; this.requestUpdate(); });
+    }
+    return this._readings[thing];
   }
 
   _chip(r, name, icon, label = name) {
@@ -85,9 +100,11 @@ class SextantOccupancy extends LitElement {
     const age = d.heardAt ? fmtAge((Date.now() - d.heardAt) / 1000) + " ago" : null;
     let src = WHERE_SOURCE[d.source] || d.source;
     if (d.source === "wifi" && d.accessPoint) src += ` (${d.accessPoint})`;
-    if (d.source === "gps" && d.gpsAccuracy != null) src += ` (±${Math.round(d.gpsAccuracy)} m)`;
-    const rd = bt ? this._readings[bt] : null;
-    const heard = rd && rd !== "loading" ? (rd.receivers || []).filter((x) => x.distance != null && !x.stale).sort((a, b) => a.distance - b.distance) : [];
+    if (d.source === "gps" && d.gpsAccuracy != null) src += ` (±${fmtLen(d.gpsAccuracy, this.hass, 0)})`;
+    const rd = bt ? this._readingsFor(bt) : null;
+    const waiting = rd && !("res" in rd);
+    // Under 5 cm (or Bermuda's -1) is "no reading" to the solver too.
+    const heard = (rd?.res?.receivers || []).filter((x) => Number.isFinite(x.distance) && x.distance >= 0.05 && !x.stale).sort((a, b) => a.distance - b.distance);
     return html`<div class="pop" role="tooltip"><b>${name}</b>
       ${row("Room", d.room && d.room !== "unknown" ? d.room : "Unknown")}
       ${row("Spot", d.spot)}
@@ -95,13 +112,13 @@ class SextantOccupancy extends LitElement {
       ${row("Confidence", d.conf != null ? `${Math.round(d.conf * 100)}%` : null)}
       ${row("Last heard", age ? `${age}${d.presence ? ` (${d.presence})` : ""}` : d.presence)}
       ${row("Source", src)}
-      ${bt ? html`<div><span class="k">Heard by</span>${rd === "loading" ? "…" : heard.length ? nothing : "no receiver right now"}</div>
-        ${heard.length ? html`<ul>${heard.slice(0, 8).map((x) => html`<li>${x.receiver} · ${Number(x.distance).toFixed(1)} m</li>`)}${heard.length > 8 ? html`<li>${heard.length - 8} more</li>` : nothing}</ul>` : nothing}` : nothing}
+      ${bt ? html`<div><span class="k">Heard by</span>${waiting ? "…" : heard.length ? nothing : "no receiver right now"}</div>
+        ${heard.length ? html`<ul>${heard.slice(0, 8).map((x) => html`<li>${proxyName(this.data, x.receiver)} · ${fmtLen(x.distance, this.hass)}</li>`)}${heard.length > 8 ? html`<li>${heard.length - 8} more</li>` : nothing}</ul>` : nothing}` : nothing}
     </div>`;
   }
 
   render() {
-    const floors = occupancyByFloor(this.hass?.states, this.data?.layout?.floor);
+    const floors = this._floors || [];
     if (!floors.length) return html`<div class="empty">No room sensors yet. Draw rooms in Edit.</div>`;
     const people = new Set(floors.flatMap((f) => f.rooms.flatMap((r) => r.people))).size;
     return html`${floors.map((f) => html`
