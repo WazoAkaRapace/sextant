@@ -291,3 +291,99 @@ def test_floor_ids_separate_floors_that_slug_the_same():
                                       {"name": "Guest-Floor", "zones": [{"entity_id": "B", "cords": [{"x": 0, "y": 0}] * 3}]}]})
     ids = rooms.floor_ids(keys)
     assert len({v["unique_id"] for v in ids.values()}) == 2 and len({v["entity_id"] for v in ids.values()}) == 2
+
+
+def test_room_options_are_read_safely():
+    z = {"entity_id": "X", "room_hold_secs": 45, "room_extended_secs": 5, "inputs": "binary_sensor.m, media_player.tv, junk",
+         "door": "binary_sensor.d"}
+    o = rooms.room_options(z)
+    assert o == {"hold_secs": 45.0, "extended_secs": None, "inputs": ["binary_sensor.m", "media_player.tv"], "door": "binary_sensor.d"}
+    assert rooms.room_options({"room_hold_secs": True, "inputs": 7, "door": ["x"]}) == {"hold_secs": None, "extended_secs": None, "inputs": [], "door": None}
+
+
+def test_inputs_on_and_door_closed():
+    states = {"binary_sensor.m": "on", "media_player.tv": "paused", "binary_sensor.n": "unavailable"}
+    assert rooms.inputs_on(list(states), states.get) == ["binary_sensor.m"]
+    assert [rooms.door_closed(s) for s in ("off", "closed", "on", "open", "unavailable", None)] == [True, True, False, False, None, None]
+
+
+def test_a_closed_door_holds_someone_who_stays_but_not_someone_who_left():
+    # shut in: still reading in the room 90 s after the door closed, then gone quiet
+    s = rooms.settle(None, True, 0.0, door=False)
+    s = rooms.settle(s, True, 10.0, door=True)
+    assert not s["door_hold"]
+    s = rooms.settle(s, True, 100.0, door=True)
+    assert s["door_hold"]
+    s = rooms.settle(s, False, 5000.0, door=True)               # asleep, BLE quiet
+    assert s["on"] is True and s["state"] != "clear"
+    s = rooms.settle(s, False, 5010.0, door=False)              # the door opens: back to the hold rules
+    assert s["on"] is False
+    # shut the door on the way out: stops reading before the wait is up
+    s = rooms.settle(None, True, 0.0, door=False)
+    s = rooms.settle(s, True, 10.0, door=True)
+    s = rooms.settle(s, False, 40.0, door=True)
+    s = rooms.settle(s, True, 200.0, door=True)                  # a stray reading later does not shut them in
+    assert not s["door_hold"] and s["on"]
+    s = rooms.settle(s, False, 210.0, door=True)
+    assert s["on"] is False
+    # a door that never opens lets go after door_max_s
+    s = rooms.settle(None, True, 0.0, door=True, door_max_s=1000.0)
+    s = rooms.settle(s, True, 100.0, door=True, door_max_s=1000.0)
+    s = rooms.settle(s, False, 500.0, door=True, door_max_s=1000.0)
+    assert s["on"]
+    s = rooms.settle(s, False, 1200.0, door=True, door_max_s=1000.0)
+    assert not s["on"]
+    # an unknown door does nothing
+    assert rooms.settle(rooms.settle(None, True, 0.0, door=None), False, 500.0, door=None)["on"] is False
+
+
+def test_publish_rooms_uses_a_rooms_own_timing_inputs_and_door(hass):
+    layout = {"floor": [{"name": "Ground Floor", "floor_id": "ground", "zones": [
+        {"entity_id": "Kitchen", "room_hold_secs": 600, "inputs": "binary_sensor.kitchen_motion", "door": "binary_sensor.kitchen_door",
+         "cords": [{"x": 0, "y": 0}] * 3}]}]}
+    _added(hass)
+    hass.data["sextant_room_keys"] = rooms.room_keys(layout)
+    hass.data["sextant_aggregate_sensors"] = {}
+    platform.ensure_room_sensors(hass, layout)
+    hass.data["sextant_room_switches"] = {}
+    key = ("Ground Floor", "Kitchen")
+    states = {"binary_sensor.kitchen_motion": "on", "binary_sensor.kitchen_door": "off"}
+    hass.states = type("S", (), {"get": staticmethod(lambda e: type("St", (), {"state": states[e]})() if e in states else None)})()
+    hass.data["sextant_room_answers"] = {key: (False, None)}
+    sextant._publish_rooms(hass)
+    sensor = hass.data["sextant_room_sensors"][key]
+    assert sensor._attr_is_on is True                               # nothing BLE here: the motion sensor is the evidence
+    assert sensor._attr_extra_state_attributes["inputs"] == ["binary_sensor.kitchen_motion"]
+    states["binary_sensor.kitchen_motion"] = "off"
+    sextant._publish_rooms(hass)
+    attrs = sensor._attr_extra_state_attributes
+    assert sensor._attr_is_on is True and attrs["hold_over"] is True   # its own 600 s hold, the global is 0
+
+
+def test_inputs_never_include_our_own_sensors_or_the_door():
+    o = rooms.room_options({"inputs": "binary_sensor.kitchen_sextant_occupancy, binary_sensor.door, binary_sensor.m", "door": "binary_sensor.door"})
+    assert o["inputs"] == ["binary_sensor.m"]
+
+
+def test_an_unavailable_door_keeps_a_hold_and_a_departure_releases_it():
+    s = rooms.settle(None, True, 0.0, door=True)
+    s = rooms.settle(s, True, 100.0, door=True)
+    assert s["door_hold"]
+    s = rooms.settle(s, False, 200.0, door=None)                 # contact sensor flaps unavailable
+    assert s["door_hold"] and s["on"]
+    assert rooms.release_if_elsewhere(s, ["Eilee"], {"Eilee", "Jack"}) and not s["door_hold"]
+    assert not rooms.settle(s, False, 300.0, door=True)["on"]    # and it does not take hold again
+    s = rooms.settle(None, True, 0.0, door=True)
+    s = rooms.settle(s, True, 100.0, door=True)
+    assert not rooms.release_if_elsewhere(s, ["Eilee", "Jack"], {"Eilee"})   # one of them is still unaccounted for
+
+
+def test_review_two_fixes_in_rooms():
+    # a hold whose contact sensor went unavailable still ends at door_max_s
+    s = rooms.settle(None, True, 0.0, door=True)
+    s = rooms.settle(s, True, 100.0, door=True)
+    assert rooms.settle(s, False, 200.0, door=None)["door_hold"]
+    assert not rooms.settle(s, False, 100.0 + 29000.0, door=None)["door_hold"]
+    # no Sextant occupancy sensor (room, floor or house) and no malformed id is an input
+    o = rooms.room_options({"inputs": "binary_sensor.sextant_house_occupancy, binary_sensor.a_sextant_floor_occupancy, binary_sensor._motion, binary_sensor.ok"})
+    assert o["inputs"] == ["binary_sensor.ok"]

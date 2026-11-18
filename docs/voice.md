@@ -16,6 +16,14 @@ A restart forgets a hold in progress and starts the "extended" timer again.
 
 Two tuning settings (`sextant.set_tuning`): `room_hold_secs` (default 0) keeps a room on that long after the last reading that put someone there, and `room_extended_secs` (default 600) is how long a stay lasts before `state` reads `extended`. Use `state` in automations to treat a long stay differently from someone passing through.
 
+### Per room: timing, other sensors, a door
+
+Select a room on the Edit page and its **Occupancy sensor** block takes:
+
+- **Clears after** and **Extended after**: this room's own timings, instead of the two settings above.
+- **Other sensors that mean someone is here**: entity ids of a motion, presence or occupancy binary sensor, a media player, a person or a tracker. The room stays occupied while any of them is `on`, `playing` or `home`, so a guest with no beacon counts. The room's `inputs` attribute lists the ones that are on.
+- **Door contact**: a binary sensor (`on` = open) or a cover. Someone who keeps reading in the room for `door_settle_secs` (default 90) after the door closed is taken to have shut themselves in; the room then stays on, however still they are, until the door opens (`door_hold` is true meanwhile) or `door_hold_max_secs` (default 8 h) passes. Someone who shuts the door on the way out stops reading in the room within the wait and is not held. If everyone the hold was for is placed in another room, it lets go. An unavailable contact sensor keeps the hold as it was, and a restart forgets it. The inputs are read once a cycle and on each radar reading; a Sextant occupancy sensor or the door itself is ignored if listed as an input. Habits are kept per floor and room name, so renaming a room starts its history again.
+
 ## Voice (Assist)
 
 The room, floor and house sensors and the force switches are exposed to Assist the first time they are created, unless you have already set their exposure; un-exposing one is respected. Each room's device is put in the room's Home Assistant area, so area-based sentences work. The force switch is a plain switch: "turn on the kitchen force occupied".

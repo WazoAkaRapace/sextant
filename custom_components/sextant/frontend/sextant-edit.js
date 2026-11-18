@@ -860,6 +860,25 @@ class SextantEdit extends LitElement {
     <div class="muted small">A thing in this room reports the area's id (<code>area_id</code> on its room and location sensors), so an automation can act on the area itself.</div>`;
   }
 
+  /** This room's occupancy sensor: its own timing, other sensors that say someone is here, and a door that holds it. */
+  _renderOccupancyOptions(item) {
+    const tuning = this.data?.layout?.tuning || {};
+    const spec = this.data?.tuning_spec || {};
+    const num = (key, lo, hi) => (v) => this._edit(key, v === "" || !Number.isFinite(Number(v)) ? undefined : Math.min(hi, Math.max(lo, Number(v))));
+    const text = (key) => (v) => this._edit(key, v.trim() || undefined);
+    return html`<div class="muted small" style="margin-top: 8px">Occupancy sensor</div>
+      <div class="row">
+        ${uiField({ label: "Clears after (s)", type: "number", step: 1, min: 0, max: 3600, value: item.room_hold_secs ?? "",
+          placeholder: String(tuning.room_hold_secs ?? spec.room_hold_secs?.default ?? 0), onChange: num("room_hold_secs", 0, 3600), style: "width: 150px" })}
+        ${uiField({ label: "Extended after (s)", type: "number", step: 1, min: 30, max: 86400, value: item.room_extended_secs ?? "",
+          placeholder: String(tuning.room_extended_secs ?? spec.room_extended_secs?.default ?? 600), onChange: num("room_extended_secs", 30, 86400), style: "width: 150px" })}
+      </div>
+      ${uiField({ label: "Other sensors that mean someone is here (entity ids)", value: Array.isArray(item.inputs) ? item.inputs.join(", ") : item.inputs ?? "",
+        placeholder: "binary_sensor.kitchen_motion, media_player.kitchen", onChange: text("inputs"), style: "width: 100%" })}
+      ${uiField({ label: "Door contact (entity id)", value: item.door ?? "", placeholder: "binary_sensor.bedroom_door", onChange: text("door"), style: "width: 100%" })}
+      <div class="muted small">Blank timings use the Tuning page's. A motion, media player or presence sensor listed here keeps the room occupied while it is on, so a guest with no beacon counts. With a door contact, someone who stays in the room for a while after the door closes keeps it occupied until the door opens.</div>`;
+  }
+
   /** Rooms named exactly like an area (whatever the case) are linked to it; linked rooms are left alone. */
   _linkAreasByName() {
     const f = this._floorObj();
@@ -1405,6 +1424,7 @@ class SextantEdit extends LitElement {
       ${sel.kind === "zone" ? uiSwitch({ label: "No-go area (things can never be here)", checked: !!item.no_go, onChange: (v) => this._edit("no_go", v) }) : nothing}
       ${sel.kind === "zone" && !item.no_go ? html`<div class="row">${uiColour({ host: this, value: item.color || null, auto: "Automatic (from the name)", autoSwatch: `hsl(${thingHue(item.entity_id || "")}, 60%, 55%)`, custom: this._customColourFor === item, onCustom: (on) => { this._customColourFor = on ? item : null; this.requestUpdate(); }, onChange: (v) => this._edit("color", v || undefined) })}</div>` : nothing}
       ${sel.kind === "zone" && !item.no_go ? this._renderAreaLink(item) : nothing}
+      ${sel.kind === "zone" && !item.no_go ? this._renderOccupancyOptions(item) : nothing}
       ${sel.kind === "zone" && !item.no_go && (this._floorObj()?.radars || []).length ? html`
         <div class="row">
           ${uiField({ label: "Stays occupied for (s)", type: "number", step: 1, min: 0, max: 3600, value: item.hold_s ?? "", placeholder: String(this.data?.layout?.tuning?.mmwave_hold_s ?? this.data?.tuning_spec?.mmwave_hold_s?.default ?? 10), onChange: (v) => this._edit("hold_s", v), style: "width: 200px" })}

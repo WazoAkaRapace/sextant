@@ -2460,3 +2460,48 @@ def test_a_faint_dog_reads_outside_with_its_fix_in_a_room_and_comes_back_near_a_
     assert s._outside_election("dog", None, 0.0, 45.0, 600.0, "out") is False
     assert s._outside_election("dog", None, 0.0, 45.0, 646.0, "out") is True
     assert s._outside_election("cat", None, 0.0, 45.0, 700.0, None) is False
+
+
+def test_a_habit_tips_a_close_room_switch_but_a_clear_one_needs_nothing():
+    from sextant import habits
+    base = 1_800_000_000.0
+    layout = {"tuning": {"zone_lock_warmup_secs": 0.0, "zone_prob_smoothing": 0.0, "stationary_secs": 600.0,
+                         "zone_switch_margin": 0.6, "zone_switch_secs": 5.0, "habit_margin_gain": 0.3}}
+
+    def run(entity, x_end):
+        sextant._zone_state.clear()
+        zone = None
+        for i in range(30):
+            x = 50.0 if i < 5 else x_end
+            instant = "Kitchen" if x < 100 else "Dining"
+            zone = sextant._elect_zone(entity, "F", instant, Point(x, 50.0), _kf(x, 50.0, sigma_px=10.0), _two_rooms(), 100.0,
+                                       layout, now=base + i * 2.0)[0]
+        return zone
+
+    sextant._habits.clear()
+    assert run("p", 103.0) == "Kitchen"                      # a close call, no routine: the incumbent holds
+    for i in range(80):                                      # this hour is usually spent in the Dining room
+        habits.learn(sextant._habits, "p", sextant._habit_zone("F", "Dining"), base + 30 * (i + 1), base + 30 * i, sextant._local_tz)
+    assert run("p", 103.0) == "Dining"
+    sextant._habits.clear()
+    for i in range(80):
+        habits.learn(sextant._habits, "p", sextant._habit_zone("F", "Kitchen"), base + 30 * (i + 1), base + 30 * i, sextant._local_tz)
+    assert run("p", 140.0) == "Dining"                       # clear evidence beats the routine
+    sextant._habits.clear()
+
+
+def test_a_habit_never_makes_a_unanimous_challenger_unable_to_win():
+    from sextant import habits
+    base = 1_800_000_000.0
+    layout = {"tuning": {"zone_lock_warmup_secs": 0.0, "zone_prob_smoothing": 0.0, "stationary_secs": 600.0,
+                         "zone_switch_margin": 0.8, "zone_switch_secs": 5.0, "habit_margin_gain": 0.3}}
+    sextant._zone_state.clear(); sextant._habits.clear()
+    for i in range(80):
+        habits.learn(sextant._habits, "p", sextant._habit_zone("F", "Kitchen"), base + 30 * (i + 1), base + 30 * i, sextant._local_tz)
+    zone = None
+    for i in range(30):
+        x = 50.0 if i < 5 else 300.0
+        zone = sextant._elect_zone("p", "F", "Kitchen" if x < 100 else "Dining", Point(x, 50.0), _kf(x, 50.0, sigma_px=5.0),
+                                   _two_rooms(), 100.0, layout, now=base + i * 2.0)[0]
+    sextant._habits.clear()
+    assert zone == "Dining"

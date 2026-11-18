@@ -14,6 +14,7 @@ do the plumbing.
 from __future__ import annotations
 
 import hashlib
+import math
 import re
 
 PET_CLASSES = frozenset({"cat", "dog", "paw"})
@@ -48,8 +49,54 @@ def room_keys(layout) -> list[dict]:
                 continue
             area = zone.get("area_id")
             out.append({"floor": floor["name"], "room": zone["entity_id"],
-                        "area_id": area if isinstance(area, str) and area else None, "floor_id": floor_id})
+                        "area_id": area if isinstance(area, str) and area else None, "floor_id": floor_id,
+                        **room_options(zone)})
     return out
+
+
+def _secs(value, low, high):
+    ok = isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and low <= value <= high
+    return float(value) if ok else None
+
+
+def _entity_ids(value) -> list[str]:
+    """Entity ids from a list or a comma/space separated string; anything else is dropped."""
+    if isinstance(value, str):
+        value = re.split(r"[,\s]+", value)
+    return [v.strip() for v in value if isinstance(v, str) and re.fullmatch(r"[a-z0-9]+(_[a-z0-9]+)*\.[a-z0-9]+(_[a-z0-9]+)*", v.strip())] if isinstance(value, list) else []
+
+
+def room_options(zone) -> dict:
+    """A room's own settings, read from its zone (``room_hold_secs``, ``room_extended_secs``,
+    ``inputs``, ``door``) and made safe: ``hold_secs`` and
+    ``extended_secs`` (None = the global tuning), ``inputs`` (other entities that
+    say someone is in the room: motion, media players, a presence sensor) and
+    ``door`` (a contact entity whose closed state keeps the room occupied)."""
+    door = _entity_ids(zone.get("door"))
+    # Never a Sextant occupancy sensor (it would hold itself on) nor the door (an open door is not a person).
+    inputs = [e for e in _entity_ids(zone.get("inputs")) if not re.search(r"sextant.*occupancy$", e) and e not in door]
+    return {"hold_secs": _secs(zone.get("room_hold_secs"), 0.0, 3600.0), "extended_secs": _secs(zone.get("room_extended_secs"), 30.0, 86400.0),
+            "inputs": inputs, "door": door[0] if door else None}
+
+
+# States that say "someone is here" for a motion/presence/occupancy sensor, a
+# person or tracker, and a media player. Contact sensors are not inputs: a door
+# is the room's ``door``, not evidence of a person.
+ACTIVE_STATES = {"on", "home", "playing", "occupied", "detected"}
+
+
+def inputs_on(inputs, get_state) -> list[str]:
+    """The ``inputs`` whose state says someone is there; ``get_state(entity_id)`` gives the state string."""
+    return [e for e in inputs or [] if str(get_state(e) or "").lower() in ACTIVE_STATES]
+
+
+def door_closed(state):
+    """True closed, False open, None unknown (no door, unavailable): a contact
+    binary sensor reads ``on`` when open; a cover or lock says closed/open."""
+    state = str(state or "").lower()
+    if state in ("off", "closed", "locked"):
+        return True
+    return False if state in ("on", "open", "unlocked") else None
 
 
 def ids_for(keys) -> dict[tuple[str, str], dict]:
@@ -208,20 +255,55 @@ def floor_ids(keys) -> dict[str, dict]:
     return out
 
 
-def settle(prev, raw_on, now, hold_s=0.0, extended_s=600.0) -> dict:
+def settle(prev, raw_on, now, hold_s=0.0, extended_s=600.0, door=None, door_settle_s=90.0, door_max_s=28800.0) -> dict:
     """A room's published state from this reading's ``raw_on``.
 
     ``on`` stays up for ``hold_s`` after the last reading that said occupied
     (Magic Areas' "clear after"), and ``state`` is ``occupied``, ``extended``
     once occupied for ``extended_s`` (a long stay: lights and climate can
     treat it differently) or ``clear``. ``since`` is when ``on`` last flipped.
+
+    ``door`` is the room door's state (True closed, False open, None none or
+    unknown). Someone who stays in the room for ``door_settle_s`` after the
+    door closed has shut themselves in (a bedroom at night, a bathroom): the
+    room stays on, however still they are, until the door opens or
+    ``door_max_s`` passes. The wait is what tells them from someone who shut
+    the door on the way out, who stops reading in the room within it.
     """
     prev = prev or {}
     last_raw = now if raw_on else prev.get("last_raw")
-    on = bool(raw_on) or (hold_s > 0 and last_raw is not None and now - last_raw < hold_s)
+    shut, shut_at, closed_since = bool(prev.get("door_hold")), prev.get("door_at"), prev.get("door_closed_at")
+    if door is None:
+        pass   # unavailable or no door: keep what was known (a sleeper's hold survives a flaky contact sensor)
+    elif door is False:
+        shut = False
+        closed_since = None
+    else:
+        if closed_since is None:
+            closed_since = now
+            shut = False
+            shut_at = None
+        if not raw_on and not shut:
+            closed_since = float("inf")   # it left before the wait was up: not shut in, until the door reopens
+        elif raw_on and not shut and closed_since != float("inf") and now - closed_since >= door_settle_s:
+            shut, shut_at = True, now
+    if shut and now - (shut_at if shut_at is not None else now) >= door_max_s:
+        shut, closed_since = False, float("inf")   # a door that never opened (or whose sensor is gone): let go, and do not take hold again
+    on = bool(raw_on) or shut or (hold_s > 0 and last_raw is not None and now - last_raw < hold_s)
     since = prev.get("since") if prev.get("on") == on and prev.get("since") is not None else now
     state = "clear" if not on else ("extended" if now - since >= extended_s else "occupied")
-    return {"on": on, "state": state, "since": since, "last_raw": last_raw}
+    return {"on": on, "state": state, "since": since, "last_raw": last_raw,
+            "door_hold": shut, "door_at": shut_at if shut else None, "door_closed_at": closed_since}
+
+
+def release_if_elsewhere(memory, held_people, elsewhere) -> bool:
+    """Let a door hold go when everyone it was holding for is now placed in
+    another room (they left and shut the door behind them). Edits ``memory``
+    (a settle() result) and says whether it did."""
+    if memory.get("door_hold") and held_people and set(held_people) <= set(elsewhere):
+        memory.update(door_hold=False, door_at=None, door_closed_at=float("inf"))
+        return True
+    return False
 
 
 def aggregate(keys, answers) -> tuple[dict, tuple[bool, dict]]:
