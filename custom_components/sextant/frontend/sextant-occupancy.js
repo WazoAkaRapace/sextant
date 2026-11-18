@@ -1,7 +1,7 @@
 /** Occupancy tab: floors stacked like the house, a tile per room with who is in it and why it is on. Read only. */
 import { LitElement, html, css, nothing } from "./lit.js";
 import { sharedStyles, fmtAge } from "./sextant-ui.js";
-import { occupancyByFloor, chipDetail, SOURCE_ICON, SOURCE_LABEL, WHERE_SOURCE } from "./sextant-occupancy-data.js";
+import { occupancyByFloor, chipDetail, firstName, SOURCE_ICON, SOURCE_LABEL, WHERE_SOURCE } from "./sextant-occupancy-data.js";
 
 class SextantOccupancy extends LitElement {
   static properties = { hass: {}, data: {}, _open: { state: true }, _readings: { state: true } };
@@ -65,7 +65,7 @@ class SextantOccupancy extends LitElement {
     this._readings = { ...this._readings, [thing]: res };
   }
 
-  _chip(r, name, icon) {
+  _chip(r, name, icon, label = name) {
     const d = chipDetail(this.hass?.states, name, r.ids);
     const key = `${r.floor}|${r.room}|${name}`;
     const spot = d?.spot && d.room === r.room ? d.spot : null;
@@ -74,7 +74,7 @@ class SextantOccupancy extends LitElement {
         @pointerenter=${(e) => { if (e.pointerType === "mouse") this._show(key, bt, false); }}
         @pointerleave=${(e) => { if (e.pointerType === "mouse" && !this._pinned && this._open === key) this._close(); }}>
       <button class="chip" aria-expanded=${this._open === key} @click=${() => this._show(key, bt, true)}>
-        <ha-icon icon=${icon}></ha-icon>${name}${spot ? html`<span class="spot">&nbsp;· ${spot}</span>` : nothing}</button>
+        <ha-icon icon=${icon}></ha-icon>${label}${spot ? html`<span class="spot">&nbsp;· ${spot}</span>` : nothing}</button>
       ${this._open === key ? this._pop(name, d, bt) : nothing}
     </span>`;
   }
@@ -112,7 +112,7 @@ class SextantOccupancy extends LitElement {
         <div class="grid">${f.rooms.map((r) => html`
           <div class="room ${r.on ? (r.peopleOn ? "on" : "pets") : ""}">
             <div class="rn">${r.room}</div>
-            ${r.people.map((p) => this._chip(r, p, "mdi:account"))}
+            ${r.people.map((p) => this._chip(r, p, "mdi:account", firstName(p)))}
             ${r.pets.map((p) => this._chip(r, p, "mdi:paw"))}
             ${r.on && r.sources.length ? html`<div class="src">${r.sources.map((x) => html`<ha-icon icon=${SOURCE_ICON[x] || "mdi:help-circle-outline"} title=${SOURCE_LABEL[x] || x}></ha-icon>`)}</div>` : nothing}
           </div>`)}</div>

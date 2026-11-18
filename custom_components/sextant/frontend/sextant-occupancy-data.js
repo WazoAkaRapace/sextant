@@ -52,3 +52,6 @@ export function chipDetail(states, name, ids) {
     heardAt: heard ? Date.parse(heard) : null,
   };
 }
+
+/** A person's chip label: the first word of their name, capitalised ("david coulson" -> "David"). */
+export const firstName = (name) => { const w = String(name ?? "").trim().split(/\s+/)[0]; return w ? w[0].toUpperCase() + w.slice(1) : String(name ?? ""); };

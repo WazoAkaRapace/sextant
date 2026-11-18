@@ -42,3 +42,11 @@ test("chipDetail finds a pet's spot through its person, and a bare thing through
   assert.equal(david.thing, null); assert.equal(david.source, "wifi"); assert.equal(david.accessPoint, "Hall AP");
   assert.equal(chipDetail(states, "Nobody", {}), null);
 });
+
+test("firstName keeps the first word, capitalised", async () => {
+  const { firstName } = await import("../../custom_components/sextant/frontend/sextant-occupancy-data.js");
+  assert.equal(firstName("david coulson"), "David");
+  assert.equal(firstName("Eilee"), "Eilee");
+  assert.equal(firstName("  meg  "), "Meg");
+  assert.equal(firstName(""), "");
+});
