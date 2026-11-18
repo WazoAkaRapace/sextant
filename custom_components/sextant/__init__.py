@@ -5482,7 +5482,7 @@ def _publish_rooms(hass):
         grace = _restoring(sensor, sensed, now)
         door = rooms_mod.door_closed(state_of(link["door"])) if link.get("door") else None
         own_hold, own_ext = link.get("hold_secs"), link.get("extended_secs")
-        sensor.memory = rooms_mod.settle(getattr(sensor, "memory", None), sensed or forced or grace, now,
+        sensor.memory = rooms_mod.settle(getattr(sensor, "memory", None), sensed or forced, now,
                                          hold if own_hold is None else own_hold, extended if own_ext is None else own_ext,
                                          door, door_settle, door_max)
         if sensed and attrs.get("people"):
@@ -5496,9 +5496,10 @@ def _publish_rooms(hass):
                  "state": m["state"], "since": since, "forced": forced, "inputs": inputs, "door_hold": m["door_hold"],
                  "hold_over": m["on"] and not sensed and not forced and not m["door_hold"]}
         attrs["sources"] = rooms_mod.sources(bool(is_on), seen["count"] > 0, inputs, forced, m["door_hold"],
-                                             grace and not sensed, attrs["hold_over"])
-        sensor.set_occupancy(m["on"], attrs)
-        published[key] = (m["on"], attrs)
+                                             grace and not m["on"], attrs["hold_over"])
+        on = m["on"] or grace          # a restart's carried-over state shows, but never feeds the hold or the door latch
+        sensor.set_occupancy(on, attrs)
+        published[key] = (on, attrs)
         who = people_sensors.get(key)
         if who is not None:
             # Radars, inputs and the force switch cannot tell a pet from a person, so they count as people here.
@@ -5506,7 +5507,7 @@ def _publish_rooms(hass):
             if humans and attrs.get("people"):
                 who.door_people = list(attrs["people"])
             who_grace = _restoring(who, humans, now)
-            who.memory = rooms_mod.settle(getattr(who, "memory", None), humans or forced or who_grace, now,
+            who.memory = rooms_mod.settle(getattr(who, "memory", None), humans or forced, now,
                                           hold if own_hold is None else own_hold, extended if own_ext is None else own_ext,
                                           door, door_settle, door_max)
             if not humans and rooms_mod.release_if_elsewhere(who.memory, getattr(who, "door_people", None), elsewhere(key)):
@@ -5514,9 +5515,9 @@ def _publish_rooms(hass):
                                               extended if own_ext is None else own_ext, door, door_settle, door_max)
             wm = who.memory
             hold_over = wm["on"] and not humans and not forced and not wm["door_hold"]
-            who.set_occupancy(wm["on"], {**attrs, "state": wm["state"],
+            who.set_occupancy(wm["on"] or who_grace, {**attrs, "state": wm["state"],
                                          "sources": rooms_mod.sources(bool(attrs.get("humans") or attrs.get("people")), seen["count"] > 0, inputs, forced,
-                                                                      wm["door_hold"], who_grace and not humans, hold_over),
+                                                                      wm["door_hold"], who_grace and not wm["on"], hold_over),
                                          "since": datetime.fromtimestamp(wm["since"], timezone.utc).isoformat(timespec="seconds"),
                                          "door_hold": wm["door_hold"],
                                          "hold_over": hold_over})

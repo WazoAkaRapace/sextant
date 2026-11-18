@@ -483,6 +483,12 @@ def test_a_room_that_was_on_stays_on_over_a_restart_until_the_grace_runs_out(has
     anyone.restore_until = people.restore_until = 1.0       # grace over
     sextant._publish_rooms(hass)
     assert anyone._attr_is_on is False and people._attr_is_on is False
+    # a reload after the deadline gets no new grace; the sensors' own memory was never fed by it
+    hass.data["sextant_restore_deadline"] = 1.0
+    anyone._attr_is_on = False
+    anyone._test_last_state = types.SimpleNamespace(state="on", attributes={})
+    asyncio.run(anyone.async_added_to_hass())
+    assert anyone._attr_is_on is False and not getattr(anyone, "restore_until", 0)
 
 
 def test_sources_say_why_a_room_is_on():

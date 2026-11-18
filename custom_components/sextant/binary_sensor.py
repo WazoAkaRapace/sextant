@@ -54,9 +54,11 @@ class SextantRoomOccupancy(BinarySensorEntity, RestoreEntity):
         expose(self.hass, self.entity_id)
         # A restart finds nothing placed yet: a room that was on stays on for RESTORE_GRACE_S unless the cycle says it is occupied (carried over, not cleared).
         last = await self.async_get_last_state()
-        if last is not None and last.state == "on":
+        # One deadline per Home Assistant process: a reload or rename must not grant a fresh grace.
+        until = self.hass.data.setdefault("sextant_restore_deadline", time.time() + RESTORE_GRACE_S)
+        if last is not None and last.state == "on" and time.time() < until:
             self._attr_is_on = True
-            self.restore_until = time.time() + RESTORE_GRACE_S
+            self.restore_until = until
             self.async_write_ha_state()
 
     def set_occupancy(self, is_on, attrs):
@@ -91,6 +93,9 @@ class SextantAggregateOccupancy(SextantRoomOccupancy):
         self._attr_extra_state_attributes = {"rooms": [], "people": [], "pets": [], "count": 0}
         self._attr_device_info = DeviceInfo(identifiers={("sextant", ids["unique_id"])}, name=device_name,
                                             manufacturer="Sextant", model="Occupancy")
+
+    async def async_added_to_hass(self):
+        expose(self.hass, self.entity_id)     # computed from the rooms each publish: nothing to restore
 
 
 @callback
