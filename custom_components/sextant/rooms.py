@@ -66,15 +66,32 @@ def _entity_ids(value) -> list[str]:
     return [v.strip() for v in value if isinstance(v, str) and re.fullmatch(r"[a-z0-9]+(_[a-z0-9]+)*\.[a-z0-9]+(_[a-z0-9]+)*", v.strip())] if isinstance(value, list) else []
 
 
+_ENTITY = r"[a-z0-9]+(?:_[a-z0-9]+)*\.[a-z0-9]+(?:_[a-z0-9]+)*"
+_SPEC = re.compile(rf"({_ENTITY})(?:(>=|<=|>|<)(-?[0-9]+(?:\.[0-9]+)?))?")
+
+
+def _input_specs(value) -> list[str]:
+    """Inputs from a list or a comma/space separated string: an entity id, or one with a
+    number test (``sensor.tv_power>20``, ``sensor.lux<5``); anything else is dropped."""
+    if isinstance(value, str):
+        value = re.split(r"[,\s]+", re.sub(r"\s*(>=|<=|>|<)\s*", r"\1", value))
+    return [v.strip() for v in value if isinstance(v, str) and _SPEC.fullmatch(v.strip())] if isinstance(value, list) else []
+
+
+def spec_entity(spec: str) -> str:
+    return _SPEC.fullmatch(spec).group(1)
+
+
 def room_options(zone) -> dict:
     """A room's own settings, read from its zone (``room_hold_secs``, ``room_extended_secs``,
     ``inputs``, ``door``) and made safe: ``hold_secs`` and
     ``extended_secs`` (None = the global tuning), ``inputs`` (other entities that
-    say someone is in the room: motion, media players, a presence sensor) and
+    say someone is in the room: motion, media players, a presence sensor, or a
+    number past a threshold such as a TV's power draw) and
     ``door`` (a contact entity whose closed state keeps the room occupied)."""
     door = _entity_ids(zone.get("door"))
     # Never a Sextant occupancy sensor (it would hold itself on) nor the door (an open door is not a person).
-    inputs = [e for e in _entity_ids(zone.get("inputs")) if not re.search(r"sextant.*occupancy$", e) and e not in door]
+    inputs = [e for e in _input_specs(zone.get("inputs")) if not re.search(r"sextant.*occupancy$", spec_entity(e)) and spec_entity(e) not in door]
     return {"hold_secs": _secs(zone.get("room_hold_secs"), 0.0, 3600.0), "extended_secs": _secs(zone.get("room_extended_secs"), 30.0, 86400.0),
             "inputs": inputs, "door": door[0] if door else None}
 
@@ -85,9 +102,61 @@ def room_options(zone) -> dict:
 ACTIVE_STATES = {"on", "home", "playing", "occupied", "detected"}
 
 
+def _input_on(spec, state) -> bool:
+    m = _SPEC.fullmatch(spec)
+    if not m.group(2):
+        return str(state or "").lower() in ACTIVE_STATES
+    try:
+        value, limit = float(state), float(m.group(3))
+    except (TypeError, ValueError):
+        return False   # unavailable or text: not evidence
+    if not (math.isfinite(value) and math.isfinite(limit)):
+        return False
+    return {">": value > limit, ">=": value >= limit, "<": value < limit, "<=": value <= limit}[m.group(2)]
+
+
 def inputs_on(inputs, get_state) -> list[str]:
     """The ``inputs`` whose state says someone is there; ``get_state(entity_id)`` gives the state string."""
-    return [e for e in inputs or [] if str(get_state(e) or "").lower() in ACTIVE_STATES]
+    return [e for e in inputs or [] if _input_on(e, get_state(spec_entity(e)))]
+
+
+def sensor_problems(keys, get, now, stuck_s, gone_s, bad_since=None) -> dict[str, dict]:
+    """Room sensors (inputs and doors) that look broken, by entity id: ``{"kind", "age", "rooms"}``.
+
+    ``missing``: no such entity for ``gone_s``. ``gone``: unavailable or unknown (either, in
+    any order) for ``gone_s``. ``stuck``: a binary sensor that has read on for ``stuck_s`` - it
+    keeps its room occupied, so a motion sensor with a dead battery or a wedged mmWave shows here.
+    Numbers (they change all the time), media players and trackers (a person can be home for
+    days) are never called stuck. ``get(entity_id)`` gives a state object or None; ``bad_since``
+    (kept by the caller between calls) times how long each has been missing or unavailable.
+    shortcut: last_changed and ``bad_since`` restart with Home Assistant, so a restart resets the clocks; fine for hours-long limits.
+    """
+    bad_since = {} if bad_since is None else bad_since
+    out: dict[str, dict] = {}
+    seen_bad = set()
+    for key in keys:
+        room = f"{key['room']} ({key['floor']})"
+        for spec in (key.get("inputs") or []) + ([key["door"]] if key.get("door") else []):
+            ent = spec_entity(spec)
+            st = get(ent)
+            found = None
+            if st is None or str(st.state).lower() in ("unavailable", "unknown"):
+                seen_bad.add(ent)
+                since = bad_since.setdefault(ent, now)
+                age = now - since if st is None else max(now - since, now - st.last_changed.timestamp())
+                if age >= gone_s:
+                    found = {"kind": "missing" if st is None else "gone", "age": max(0.0, age)}
+            elif ent.startswith("binary_sensor.") and spec == ent and ent != key.get("door") and str(st.state).lower() == "on":
+                age = max(0.0, now - st.last_changed.timestamp())
+                if age >= stuck_s:
+                    found = {"kind": "stuck", "age": age}
+            if found:
+                rooms = out.setdefault(ent, {**found, "rooms": []})["rooms"]
+                if room not in rooms:
+                    rooms.append(room)
+    for ent in set(bad_since) - seen_bad:
+        del bad_since[ent]
+    return out
 
 
 def door_closed(state):

@@ -60,6 +60,8 @@ distances in metres.
 | `zone_switch_secs` | 20 | held that long before switching |
 | `far_move_margin` | 0.3 | the lead a room that is not next door needs (the larger of this and `zone_switch_margin`) |
 | `habit_margin_gain` | 0.1 | how far a thing's usual room at this hour (weekday or weekend, learned over weeks) eases the lead a challenger room needs: at most this much, and only for a close call. 0 turns it off |
+| `sensor_gone_secs` | 21600 | raise a repair for a room's input or door sensor that has been unavailable this long |
+| `sensor_stuck_secs` | 86400 | raise a repair for a room's binary-sensor input that has read on this long, since it holds the room occupied |
 | `far_move_secs` | 45 | held that long before a far move; 0 = no longer than any move |
 | `stationary_speed` | 0.3 | m/s; slower is "still" |
 | `stationary_secs` | 20 | still this long locks the room |
