@@ -539,3 +539,8 @@ def test_review_two_fixes_in_rooms():
     # no Sextant occupancy sensor (room, floor or house) and no malformed id is an input
     o = rooms.room_options({"inputs": "binary_sensor.sextant_house_occupancy, binary_sensor.a_sextant_floor_occupancy, binary_sensor._motion, binary_sensor.ok"})
     assert o["inputs"] == ["binary_sensor.ok"]
+
+
+def test_room_inputs_drop_suffixed_sextant_occupancy_entities():
+    zone = {"inputs": ["binary_sensor.den_sextant_people_occupancy_2", "binary_sensor.motion"]}
+    assert rooms.room_options(zone)["inputs"] == ["binary_sensor.motion"]

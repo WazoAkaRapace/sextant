@@ -130,7 +130,6 @@ def ensure_aggregate_sensors(hass, layout):
     uids = {ids["unique_id"] for ids, _d in wanted.values()}
     for entry in list(ent_reg.entities.values()):
         if (entry.platform == "sextant" and entry.domain == "binary_sensor" and isinstance(entry.unique_id, str)
-                and entry.entity_id.endswith(("_sextant_floor_occupancy", "_sextant_house_occupancy", "_sextant_floor_people_occupancy", "_sextant_house_people_occupancy"))
                 and entry.unique_id not in uids and entry.unique_id.startswith(("sextant_floor_occupancy_", "sextant_house_occupancy", "sextant_floor_people_occupancy_", "sextant_house_people_occupancy"))):
             ent_reg.async_remove(entry.entity_id)
     if new:

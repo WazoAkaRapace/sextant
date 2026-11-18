@@ -91,7 +91,7 @@ def room_options(zone) -> dict:
     ``door`` (a contact entity whose closed state keeps the room occupied)."""
     door = _entity_ids(zone.get("door"))
     # Never a Sextant occupancy sensor (it would hold itself on) nor the door (an open door is not a person).
-    inputs = [e for e in _input_specs(zone.get("inputs")) if not re.search(r"sextant.*occupancy$", spec_entity(e)) and spec_entity(e) not in door]
+    inputs = [e for e in _input_specs(zone.get("inputs")) if not re.search(r"sextant.*occupancy(_\d+)?$", spec_entity(e)) and spec_entity(e) not in door]
     return {"hold_secs": _secs(zone.get("room_hold_secs"), 0.0, 3600.0), "extended_secs": _secs(zone.get("room_extended_secs"), 30.0, 86400.0),
             "inputs": inputs, "door": door[0] if door else None}
 
