@@ -5494,7 +5494,7 @@ def _publish_rooms(hass):
         if attrs is None:
             link = links.get(key) or {}
             attrs = {"room": key[1], "floor": key[0], "area_id": link.get("area_id"), "floor_id": link.get("floor_id"),
-                     "count": 0, "people": [], "pets": [], "things": [], "spots": [], "presence": None}
+                     "count": 0, "people": [], "pets": [], "things": [], "ids": {}, "spots": [], "presence": None}
         seen = radar.get(key) or {"count": 0, "held": 0}
         forced = bool(getattr(switches.get(key), "_attr_is_on", False))
         link = links.get(key) or {}

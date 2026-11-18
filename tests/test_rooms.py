@@ -61,6 +61,7 @@ def test_occupancy_counts_the_things_placed_in_each_room():
     assert on and kitchen["count"] == 2                      # the phone and the cat; not the wallet
     assert kitchen["things"] == ["Alex Phone", "Wallet", "Meg"]   # here before quiet, everything listed
     assert kitchen["pets"] == ["Meg"] and kitchen["people"] == ["Alex"]
+    assert kitchen["ids"] == {"Alex Phone": "alex_phone", "Wallet": "wallet", "Meg": "meg"}
     assert kitchen["spots"] == ["Peninsula"] and kitchen["presence"] == "here"   # the wallet's Pantry is not a spot in use
     assert kitchen["area_id"] == "kitchen" and kitchen["floor_id"] == "ground"
     # Two rooms called Office, told apart by floor.

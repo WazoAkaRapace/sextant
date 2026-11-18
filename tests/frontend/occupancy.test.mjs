@@ -22,3 +22,23 @@ test("rooms group by floor, top floor first, with people and pets counted", () =
   assert.equal(g.rooms.find((r) => r.room === "Kitchen").peopleOn, false);
   assert.deepEqual(g.rooms.find((r) => r.room === "Great Room").sources, ["bluetooth", "media_player"]);
 });
+
+test("chipDetail finds a pet's spot through its person, and a bare thing through the room's ids", async () => {
+  const { chipDetail } = await import("../../custom_components/sextant/frontend/sextant-occupancy-data.js");
+  const states = {
+    "person.fry": { state: "home", attributes: { friendly_name: "Fry" } },
+    "sensor.fry_sextant_pet_location": { state: "Meg's Cafe", attributes: { room: "Catwalk", spot: "Meg's Cafe", floor: "Second Floor", conf: 0.72, source: "ble", via: "fry_tag" } },
+    "sensor.fry_tag_sextant_location": { state: "Meg's Cafe", attributes: { room: "Catwalk", spot: "Meg's Cafe", last_heard: "2026-11-18T18:30:26+00:00" } },
+    "sensor.cat_tag_sextant_location": { state: "Kitchen", attributes: { room: "Kitchen", spot: null, floor: "Ground", conf: 0.5 } },
+    "person.david": { state: "home", attributes: { friendly_name: "David" } },
+    "sensor.david_sextant_person_location": { state: "home", attributes: { room: "unknown", floor: "Ground", source: "wifi", via: "device_tracker.david_phone", access_point: "Hall AP" } },
+  };
+  const fry = chipDetail(states, "Fry", {});
+  assert.equal(fry.spot, "Meg's Cafe"); assert.equal(fry.thing, "fry_tag");
+  assert.equal(fry.heardAt, Date.parse("2026-11-18T18:30:26+00:00"));
+  const cat = chipDetail(states, "Cat", { Cat: "cat_tag" });
+  assert.equal(cat.room, "Kitchen"); assert.equal(cat.spot, null); assert.equal(cat.source, "ble");
+  const david = chipDetail(states, "David", {});
+  assert.equal(david.thing, null); assert.equal(david.source, "wifi"); assert.equal(david.accessPoint, "Hall AP");
+  assert.equal(chipDetail(states, "Nobody", {}), null);
+});

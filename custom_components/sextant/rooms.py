@@ -258,6 +258,8 @@ def occupancy(keys, rows, presence_of, classes=None, names=None, person_rooms=No
         out[key] = (bool(counted) or bool(people), {
             "room": k["room"], "floor": k["floor"], "area_id": k["area_id"], "floor_id": k["floor_id"],
             "count": len(counted), "people": people, "pets": pets, "things": things,
+            # Display name -> thing slug, so the panel can find each chip's sensors.
+            "ids": {names.get(ent, ent): ent for ent, _p, _s, _c in here},
             "humans": sum(1 for t in counted if classes.get(t[0]) not in PET_CLASSES),
             "spots": sorted({s for _e, _p, s, _c in counted if s}),
             "presence": presence,
