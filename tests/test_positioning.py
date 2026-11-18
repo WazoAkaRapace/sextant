@@ -908,6 +908,13 @@ def test_median_distance_matches_bermudas_path_loss_model():
     assert abs(dist_off - 10 ** ((-55 + 63) / 30)) < 1e-9
 
 
+def test_median_distance_ignores_androids_127_no_rssi():
+    hist = [[127, 100.0], [-65, 99.5], [127, 99.0], [-65, 98.5], [-65, 98.0]]
+    dist, _q = sextant._median_distance(_reading(hist), 15.0, 3)
+    assert abs(dist - 10 ** (10 / 30)) < 1e-9
+    assert sextant._median_distance(_reading([[127, 100.0], [127, 99.0], [-65, 98.0]]), 15.0, 2) is None
+
+
 def test_median_distance_respects_window_and_minimum():
     # age 1 s; samples at 100, 99 are fresh, 80 is 21 s old.
     hist = [[-60, 100.0], [-62, 99.0], [-99, 80.0]]

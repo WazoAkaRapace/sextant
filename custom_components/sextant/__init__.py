@@ -1236,6 +1236,8 @@ def _median_distance(reading, window_secs, min_samples):
             rssi, stamp = float(item[0]), float(item[1])
         except (TypeError, ValueError, IndexError):
             continue
+        if rssi >= 0:
+            continue    # Android's 127 = "no RSSI", relayed as +127 dBm by some proxies; no BLE reading is >= 0 dBm
         if newest is None:
             newest = stamp
         if age + (newest - stamp) <= window_secs:
