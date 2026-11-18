@@ -5545,30 +5545,15 @@ def _publish_rooms(hass):
             sensor.set_occupancy(on, attrs)
 
 
-NEAR_ZERO_M = 0.3            # a range this short says the thing is at the receiver
-NEAR_ZERO_SLACK_M = 2.0      # how far a neighbour's range may be off the receiver-to-receiver distance before it disagrees
+INVALID_RANGE_M = 0.05       # no RSSI model reads a thing this close: it is a sentinel, not a measurement
 
 
-def _drop_contradicted_zero_ranges(entries, scale):
-    """Drop a near-zero range the other receivers contradict.
-
-    A scanner that reads the thing at ~0 m pins the fix to its own spot (a wall
-    tablet did this to a phone across the house, 5 % of cycles). Such a reading
-    stays only if at least half of the others (and one at least) agree the
-    thing could be at that receiver: its distance to each of them is within
-    NEAR_ZERO_SLACK_M or half the range they read. ``entries`` are
-    ``(distance_m, (x, y, ...), name)``; ``scale`` is pixels per metre."""
-    near = [e for e in entries if e[0] < NEAR_ZERO_M]
-    if not near or not scale:
-        return entries
-    drop = set()
-    for e in near:
-        others = [o for o in entries if o[0] >= NEAR_ZERO_M]
-        agree = sum(1 for o in others
-                    if abs(math.hypot(o[1][0] - e[1][0], o[1][1] - e[1][1]) / scale - o[0]) <= max(NEAR_ZERO_SLACK_M, 0.5 * o[0]))
-        if others and agree * 2 < len(others):
-            drop.add(id(e))
-    return [e for e in entries if id(e) not in drop]
+def _drop_invalid_ranges(entries):
+    """Leave out ranges under INVALID_RANGE_M. A wall tablet scanner read a phone
+    at 0.0 m in 5 % of cycles from across the house, and each one pinned the fix
+    to the tablet (spot proxies, anchors and fingerprints already skip exact 0.0).
+    ``entries`` are ``(distance_m, point, name)``."""
+    return [e for e in entries if e[0] >= INVALID_RANGE_M]
 
 
 def extract_candidate_floors(new_global_data, tmpentity):
@@ -5616,7 +5601,7 @@ def extract_candidate_floors(new_global_data, tmpentity):
                     receiver["cords"]["x"], receiver["cords"]["y"],
                     receiver["cords"]["r"], distance * floor["scale"], float(quality),
                 ), receiver.get("entity_id")))
-            entries = _drop_contradicted_zero_ranges(entries, floor["scale"])
+            entries = _drop_invalid_ranges(entries)
             # Nearest-K cap: with thirty receivers on a floor, the far ones
             # contribute mostly noise, and 1/r^2 does not zero them out.
             cords, heard = _select_receivers(entries, max_receivers, max_range, near_always)

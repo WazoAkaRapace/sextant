@@ -887,26 +887,11 @@ def test_extract_candidate_floors_applies_the_cap_and_carries_quality():
     assert pts[0][4] == 0.5 and pts[1][4] == 1.0
 
 
-def _floor_with(readings):
-    rx = [{"entity_id": f"r{i}", "cords": {"x": x * SCALE, "y": 0.0, "r": d * SCALE}, "distance": d} for i, (x, d) in enumerate(readings)]
-    return {"floor": [{"name": "F", "scale": SCALE, "receivers": rx}]}
-
-
-def test_a_zero_range_the_other_receivers_contradict_is_dropped():
-    # r0 reads 0.0 m but sits 10 m from three receivers that each read about 3 m
-    cands = sextant.extract_candidate_floors([{"entity": "e", "data": _floor_with([(0, 0.0), (10, 3.0), (11, 3.2), (9, 2.8)])}], "e")
-    assert len(cands[0]["cords"]) == 3 and cands[0]["nearest_m"] == 2.8
-
-
-def test_a_zero_range_the_others_support_is_kept():
-    # the thing is at r0: neighbours 2 m, 3 m and 4 m away read 2, 3 and 4 m
-    cands = sextant.extract_candidate_floors([{"entity": "e", "data": _floor_with([(0, 0.0), (2, 2.0), (3, 3.0), (4, 4.0)])}], "e")
-    assert len(cands[0]["cords"]) == 4 and cands[0]["nearest_m"] == 0.0
-
-
-def test_a_zero_range_with_no_neighbours_is_kept():
-    cands = sextant.extract_candidate_floors([{"entity": "e", "data": _floor_with([(0, 0.0)])}], "e")
-    assert len(cands[0]["cords"]) == 1
+def test_a_zero_range_is_left_out_of_the_fix():
+    rx = [{"entity_id": f"r{i}", "cords": {"x": i * 100.0, "y": 0.0, "r": d * SCALE}, "distance": d}
+          for i, d in enumerate([0.0, 3.0, 3.2, 2.8, 0.04, 0.2])]
+    cands = sextant.extract_candidate_floors([{"entity": "e", "data": {"floor": [{"name": "F", "scale": SCALE, "receivers": rx}]}}], "e")
+    assert sorted(p[0] for p in cands[0]["cords"]) == [100.0, 200.0, 300.0, 500.0] and cands[0]["nearest_m"] == 0.2
 
 
 # ---------------------------------------------------------------------------
