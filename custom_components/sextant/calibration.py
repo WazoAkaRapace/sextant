@@ -25,7 +25,7 @@ uniformly rescale every thing distance and shift all positions (learned the
 hard way: zones all went "unknown" the moment the first corrections landed).
 """
 
-from .const import DOMAIN
+from .const import DOMAIN, INVALID_RANGE_M
 import asyncio
 import json
 import logging
@@ -458,7 +458,7 @@ def _ingest_dump(cal: dict, devices: dict) -> None:
             if not isinstance(stamp, (int, float)) or newest - stamp > STALE_ADVERT_SECS:
                 continue
             distance = advert.get("rssi_distance_raw")
-            if not isinstance(distance, (int, float)) or distance <= 0:
+            if not isinstance(distance, (int, float)) or not math.isfinite(distance) or distance < INVALID_RANGE_M:
                 continue
             cal["samples"].setdefault(f"{tx_slug}|{rx_slug}", SampleWindow()).append(distance)
 
@@ -503,7 +503,7 @@ def _ingest_ranging(cal: dict, ranging, directory) -> None:
             if isinstance(age, (int, float)) and age > STALE_ADVERT_SECS:
                 continue
             distance = reading.get("distance_raw")
-            if not isinstance(distance, (int, float)) or distance <= 0:
+            if not isinstance(distance, (int, float)) or not math.isfinite(distance) or distance < INVALID_RANGE_M:
                 continue
             cal["samples"].setdefault(f"{tx_slug}|{rx_slug}", SampleWindow()).append(distance)
 

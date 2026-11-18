@@ -39,6 +39,7 @@ except ImportError:  # very old shapely
     shapely_make_valid = None
 from asyncio import wait_for, TimeoutError
 
+from .const import INVALID_RANGE_M
 from .const import DOMAIN, DEFAULT_UPDATE_INTERVAL, FIT_ATTRIBUTES, OPTION_SHOW_SIDEBAR_PANEL, OPTION_UPDATE_INTERVAL
 from .calibration import (
     DUMP_DEVICES_TIMEOUT_S,
@@ -1236,6 +1237,8 @@ def _median_distance(reading, window_secs, min_samples):
             rssi, stamp = float(item[0]), float(item[1])
         except (TypeError, ValueError, IndexError):
             continue
+        if not math.isfinite(rssi) or rssi >= 0:
+            continue    # Android's 127 = "no RSSI", relayed as +127 dBm by some proxies; no BLE reading is >= 0 dBm
         if newest is None:
             newest = stamp
         if age + (newest - stamp) <= window_secs:
@@ -2605,8 +2608,10 @@ async def update_receiver_radii(hass, eids):
 
             # A distance must be a positive, finite number of metres: -1 is a
             # common "no reading" sentinel, and a NaN would carry through the
-            # solve into the Kalman state and stay there.
-            if not (isinstance(distance_m, (int, float)) and math.isfinite(distance_m) and distance_m > 0):
+            # solve into the Kalman state and stay there. A raw range under
+            # INVALID_RANGE_M is one too: a wall tablet read a phone across the
+            # house at ~0 m, and each one anchored the phone to the tablet.
+            if not (isinstance(distance_m, (int, float)) and math.isfinite(distance_m) and distance_m >= INVALID_RANGE_M):
                 receiver.pop("distance", None)
                 continue
 
