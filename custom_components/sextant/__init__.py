@@ -5277,7 +5277,8 @@ def _update_person_sensors(hass):
             outrun = {
                 a["entity"] for a in (view.get("assigned") or {}).get(person) or []
                 if persons_mod.wifi_outrun(
-                    gps, wifi_mod.heard_at(wifi_clients.get(((view.get("candidates") or {}).get(a["entity"]) or {}).get("mac"))),
+                    # shortcut: last_seen, not wifi.heard_at - a phone asleep at home shows idle too; switch once the person log's idle numbers set a threshold.
+                    gps, (wifi_clients.get(((view.get("candidates") or {}).get(a["entity"]) or {}).get("mac")) or {}).get("last_seen"),
                     home, _tuning(layout, "gps_leave_m"))
             }
             if outrun:

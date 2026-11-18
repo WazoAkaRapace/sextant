@@ -305,12 +305,10 @@ def test_wifi_stands_on_an_arrival_or_without_a_last_seen_time():
     assert not persons.wifi_outrun(_fix(zone="home"), NOW - 200, HOME)
 
 
-def test_a_watch_the_ap_still_lists_but_has_not_heard_is_dated_by_idletime():
-    """David's departure: the garage AP reported his watch 3 s ago, idle for minutes."""
+def test_heard_at_is_last_seen_less_idletime():
+    """For the person log: the garage AP reported a watch 3 s ago that it had not heard for minutes."""
     from custom_components.sextant import wifi
-    raw = {"last_seen": NOW - 3, "idletime": 150}
-    assert not persons.wifi_outrun(_fix(), raw["last_seen"], HOME)       # last_seen alone keeps Wi-Fi home
-    assert persons.wifi_outrun(_fix(), wifi.heard_at(raw), HOME)         # the real sighting is older than the fix
+    assert wifi.heard_at({"last_seen": NOW - 3, "idletime": 150}) == NOW - 153
     assert wifi.heard_at({"last_seen": NOW - 3}) == NOW - 3              # no idletime: last_seen as before
     assert wifi.heard_at({"last_seen": NOW - 3, "idletime": -1}) == NOW - 3
     assert wifi.heard_at({"last_seen": NOW - 3, "idletime": True}) == NOW - 3
