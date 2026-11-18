@@ -336,6 +336,18 @@ def floor_ids(keys) -> dict[str, dict]:
     return out
 
 
+def people_aggregate_ids(ids) -> dict:
+    """The people-only twin of a floor's or the house's occupancy ids; it shares their device."""
+    head, _, tail = ids["entity_id"].rpartition("_occupancy")
+    uid = ids["unique_id"]
+    for old, new in (("sextant_floor_occupancy_", "sextant_floor_people_occupancy_"), ("sextant_house_occupancy", "sextant_house_people_occupancy")):
+        if uid.startswith(old):
+            uid = new + uid[len(old):]
+            break
+    return {**ids, "unique_id": uid, "entity_id": f"{head}_people_occupancy{tail}",
+            "name": ids["name"].replace("Occupancy", "People Occupancy"), "device_id": ids["unique_id"]}
+
+
 def sources(things, radar, inputs, forced, door_hold, restoring, hold_over) -> list:
     """Why a room is on, for its ``sources`` attribute: ``bluetooth`` (a tracked
     thing placed there), ``radar``, ``media_player`` / ``sensor`` (an input, named

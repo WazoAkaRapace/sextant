@@ -157,6 +157,9 @@ After a Home Assistant restart a room that was `on` stays `on` for up to ten
 minutes while Sextant places things again, unless the first readings say it
 is occupied; both room sensors carry over this way.
 
+Floors and the house have people-only twins too: `binary_sensor.<floor>_sextant_floor_people_occupancy` and
+`binary_sensor.sextant_house_people_occupancy`, rolled up from the rooms' people-only sensors.
+
 Each room on the plan gets `binary_sensor.<room>_sextant_occupancy`
 (device class occupancy): `on` while Sextant places a person or a pet in
 it. What counts is the thing speaking for each person ([People](#people))
