@@ -97,7 +97,6 @@ class SextantPanel extends LitElement {
     // HA's form elements are loaded by HA itself; make sure they exist before
     // the first render so the modes pick them instead of the plain fallbacks.
     ensureHaComponents().then(() => this.requestUpdate());
-    askStrimmer(this.hass?.connection);
     this._load();
     this._subscribe();
     this._clock = setInterval(() => { this._now = Date.now() / 1000; }, 1000);
@@ -110,6 +109,8 @@ class SextantPanel extends LitElement {
   }
 
   willUpdate(changed) {
+    // Here, not connectedCallback: hass can arrive later, and with a new connection after a re-login.
+    if (changed.has("hass")) askStrimmer(this.hass?.connection);
     // A page remembered in this browser may be one this user cannot open (an
     // admin used it last): Live instead, as the tabs offer.
     if (changed.has("hass") && this.hass?.user && !this._modes().some(([id]) => id === this._mode)) this._mode = "live";
