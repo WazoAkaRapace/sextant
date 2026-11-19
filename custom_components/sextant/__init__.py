@@ -5446,7 +5446,8 @@ def _update_room_sensors(hass):
         presences[name] = st.attributes.get("presence") or "away"
         if presences[name] == "away" and st.attributes.get("source") == "wifi":
             presences[name] = "wifi"       # BLE lost them, Wi-Fi still has them in the house
-        if st.attributes.get("via") and st.attributes.get("source") in ("ble", "held"):
+        # Gone out (kind outside): the thing left in the room speaks for no one there.
+        if st.attributes.get("via") and st.attributes.get("source") in ("ble", "held") and st.attributes.get("kind") != "outside":
             speaking.add(st.attributes["via"])
         if things and all(classes.get(t) in rooms_mod.PET_CLASSES for t in things):
             pet_persons.add(name)
