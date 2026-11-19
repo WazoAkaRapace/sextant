@@ -2432,8 +2432,11 @@ def test_outside_needs_distance_and_time(monkeypatch):
     s._outside_state.clear()
     assert s._outside_election("a", 5.0, 2.0, 45.0, 0.0) is False
     assert s._outside_election("a", 5.0, 2.0, 45.0, 46.0) is True
+    assert s._outside_state["a"]["outside_at"] == 0.0                   # the spell began when it first read far
     assert s._outside_election("a", 0.5, 2.0, 45.0, 50.0) is True      # back inside, not yet for long
+    assert s._outside_state["a"]["outside_at"] == 0.0
     assert s._outside_election("a", 0.5, 2.0, 45.0, 100.0) is False
+    assert s._outside_state["a"]["outside_at"] is None
     assert s._outside_election("a", 5.0, 0.0, 45.0, 200.0) is False    # margin 0 = off
 
 
