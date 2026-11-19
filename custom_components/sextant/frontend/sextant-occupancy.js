@@ -75,6 +75,7 @@ class SextantOccupancy extends LitElement {
   _chip(r, name, icon, label = name) {
     const d = chipDetail(this.hass?.states, name, r.ids, this.data?.layout?.thing_classes);
     // A person's chip shows what is tracking them (phone, watch) when that thing has a class.
+    const pet = icon === "mdi:paw";   // before a person's icon becomes their device's
     if (icon === "mdi:account" && d?.thingClass) icon = classIcon(d.thingClass) || icon;
     const key = `${r.floor}|${r.room}|${name}`;
     const spot = d?.spot && d.room === r.room ? spotInRoom(d.spot, r.room, name) : null;
@@ -83,7 +84,7 @@ class SextantOccupancy extends LitElement {
         @pointerleave=${(e) => { if (e.pointerType === "mouse" && !this._pinned && this._open === key) this._close(); }}>
       <button class="chip" aria-expanded=${this._open === key} @click=${() => this._show(key, true)}>
         <ha-icon icon=${icon}></ha-icon>${label}${spot ? html`<span class="spot">&nbsp;· ${spot}</span>` : nothing}</button>
-      ${this._open === key ? this._pop(name, d, icon === "mdi:paw") : nothing}
+      ${this._open === key ? this._pop(name, d, pet) : nothing}
     </span>`;
   }
 
