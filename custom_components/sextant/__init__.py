@@ -830,6 +830,10 @@ TUNING_SPEC = {
     # its own accuracy), when they are away now (persons.gps_left). Far enough
     # that a fix wandering about the property line never counts. 0 = off.
     "gps_leave_m": (200.0, float, 0.0, 100000.0),
+    # A person who goes quiet in a room with an outside door (the Edit page's
+    # "Has an outside door") went out of it: after this long unheard they read
+    # Outside instead of being held in that room. 0 = off.
+    "exit_quiet_secs": (120.0, float, 0.0, 3600.0),
     # A Wi-Fi tracker reading home must stand this long before it starts a
     # visit for someone BLE has lost (persons.wifi_gate): a router holds a
     # client minutes after it left, which made false arrivals. 0 = off.
@@ -5266,6 +5270,13 @@ def _update_person_sensors(hass):
         # now rather than when away_after_secs runs out (persons.gps_left).
         if best is None and presence == "quiet" and persons_mod.gps_left(gps, last_heard, home, _tuning(layout, "gps_leave_m")):
             presence, held, held_why = "away", None, None
+        # Last heard in a room with an outside door, and quiet since: out of
+        # it, not asleep in it. Every proxy losing a phone at once is a phone
+        # leaving the house; one dying on the dryer reads Outside too.
+        exit_secs = _tuning(layout, "exit_quiet_secs")
+        if (best is None and presence == "quiet" and held and last_heard and exit_secs > 0
+                and now - last_heard >= exit_secs and persons_mod.has_exit(layout, held.get("floor"), held.get("zone"))):
+            held = {**held, "outside": True, "since": last_heard}
         if _tuning(layout, "gps_leave_m") > 0 and persons_mod.should_ask_gps(
                 presence, best is not None, last_heard, _gps_asked.get(person)):
             if _ask_phones_for_location(hass, layout, person):

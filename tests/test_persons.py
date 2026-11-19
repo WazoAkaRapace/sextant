@@ -251,3 +251,18 @@ def test_keep_since_holds_the_persons_time_across_a_device_handover():
     # Away and back to the same room: the held fix's times are from before this visit home.
     d = keep_since(prev, {"floor": "Up", "room": "Office", "spot": "Desk", "since": 900.0, "spot_since": 950.0}, arrived=800.0)
     assert (d["since"], d["spot_since"]) == (900.0, 950.0)
+
+
+def test_has_exit_finds_the_rooms_outside_door():
+    layout = {"floor": [{"name": "Ground", "zones": [{"entity_id": "Laundry Room", "exit": True}, {"entity_id": "Kitchen"},
+                                                     {"entity_id": "Void", "exit": True, "no_go": True}]}]}
+    assert persons.has_exit(layout, "Ground", "Laundry Room")
+    assert not persons.has_exit(layout, "Ground", "Kitchen")
+    assert not persons.has_exit(layout, "Ground", "Void")
+    assert not persons.has_exit(layout, "Upper", "Laundry Room")
+    assert not persons.has_exit(None, "Ground", "Laundry Room")
+    # Held outside: the location reads Outside, out since the last sighting.
+    out = persons.fuse(None, [], "quiet", {"ent": "phone", "zone": "Laundry Room", "floor": "Ground", "outside": True, "since": 100.0},
+                       None, [])
+    state, attrs = out["sextant_person_location"]
+    assert state == "Outside" and attrs["kind"] == "outside" and attrs["since"] == 100.0 and attrs["source"] == "held"
