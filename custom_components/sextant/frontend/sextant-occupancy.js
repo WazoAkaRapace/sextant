@@ -83,15 +83,16 @@ class SextantOccupancy extends LitElement {
         @pointerleave=${(e) => { if (e.pointerType === "mouse" && !this._pinned && this._open === key) this._close(); }}>
       <button class="chip" aria-expanded=${this._open === key} @click=${() => this._show(key, true)}>
         <ha-icon icon=${icon}></ha-icon>${label}${spot ? html`<span class="spot">&nbsp;· ${spot}</span>` : nothing}</button>
-      ${this._open === key ? this._pop(name, d) : nothing}
+      ${this._open === key ? this._pop(name, d, icon === "mdi:paw") : nothing}
     </span>`;
   }
 
-  _pop(name, d) {
+  _pop(name, d, pet = false) {
     if (!d) return html`<div class="pop" role="tooltip"><b>${name}</b>No Sextant location sensor found.</div>`;
     const row = (k, v) => (v == null || v === "" ? nothing : html`<div><span class="k">${k}</span>${v}</div>`);
     const age = d.heardAt ? fmtAge((Date.now() - d.heardAt) / 1000) + " ago" : null;
-    const device = d.thing ? (THING_CLASSES.find(([k]) => k && k === d.thingClass) || [])[1] || d.thing : d.tracker;
+    // A pet is its own tag: "Tracked by Cat" says nothing.
+    const device = pet ? null : d.thing ? (THING_CLASSES.find(([k]) => k && k === d.thingClass) || [])[1] || d.thing : d.tracker;
     let src = WHERE_SOURCE[d.source] || d.source;
     if (d.source === "wifi" && d.accessPoint) src += ` (${d.accessPoint})`;
     if (d.source === "gps" && d.gpsAccuracy != null) src += ` (±${fmtLen(d.gpsAccuracy, this.hass, 0)})`;
