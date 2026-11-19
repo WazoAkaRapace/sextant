@@ -72,13 +72,18 @@ export function chipDetail(states, name, ids) {
 /** A person's chip label: the first word of their name, capitalised ("david coulson" -> "David"). */
 export const firstName = (name) => { const w = String(name ?? "").trim().split(/\s+/)[0]; return w ? w[0].toUpperCase() + w.slice(1) : String(name ?? ""); };
 
-// A spot named after its room ("Eilee Bedside Table" in Eilee's Room) drops the room's name from its front:
-// the room's words in order ("Room Divider" in Living Room stays), never the whole spot.
-export function spotInRoom(spot, room) {
+// A spot named after its room or the one in it ("Eilee Bedside Table" in Eilee's Room, "David Bedside Table"
+// for David) drops that name from its front: its words in order ("Room Divider" in Living Room stays),
+// room first, then the person, and never the whole spot.
+export function spotInRoom(spot, room, who) {
   const norm = (w) => w.toLowerCase().replace(/['’]s$/, "");
-  const roomWords = String(room ?? "").split(/\s+/).filter(Boolean).map(norm);
-  const words = String(spot ?? "").split(/\s+/).filter(Boolean);
-  let i = 0;
-  while (i < words.length && i < roomWords.length && norm(words[i]) === roomWords[i]) i++;
-  return i > 0 && i < words.length ? words.slice(i).join(" ") : words.join(" ");
+  const split = (s) => String(s ?? "").split(/\s+/).filter(Boolean);
+  let words = split(spot);
+  for (const name of [room, who]) {
+    const lead = split(name).map(norm);
+    let i = 0;
+    while (i < words.length && i < lead.length && norm(words[i]) === lead[i]) i++;
+    if (i < words.length) words = words.slice(i);
+  }
+  return words.join(" ");
 }

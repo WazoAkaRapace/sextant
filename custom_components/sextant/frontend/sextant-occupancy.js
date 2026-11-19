@@ -73,7 +73,7 @@ class SextantOccupancy extends LitElement {
   _chip(r, name, icon, label = name) {
     const d = chipDetail(this.hass?.states, name, r.ids);
     const key = `${r.floor}|${r.room}|${name}`;
-    const spot = d?.spot && d.room === r.room ? spotInRoom(d.spot, r.room) : null;
+    const spot = d?.spot && d.room === r.room ? spotInRoom(d.spot, r.room, name) : null;
     return html`<span class="who"
         @pointerenter=${(e) => { if (e.pointerType === "mouse") this._show(key, false); }}
         @pointerleave=${(e) => { if (e.pointerType === "mouse" && !this._pinned && this._open === key) this._close(); }}>
