@@ -876,6 +876,7 @@ class SextantEdit extends LitElement {
       ${uiField({ label: "Other sensors that mean someone is here (entity ids)", value: Array.isArray(item.inputs) ? item.inputs.join(", ") : item.inputs ?? "",
         placeholder: "binary_sensor.kitchen_motion, media_player.kitchen, sensor.tv_power>20", onChange: text("inputs"), style: "width: 100%" })}
       ${uiField({ label: "Door contact (entity id)", value: item.door ?? "", placeholder: "binary_sensor.bedroom_door", onChange: text("door"), style: "width: 100%" })}
+      ${uiSwitch({ label: "Has an outside door (someone whose phone goes quiet here has gone out)", checked: !!item.exit, onChange: (v) => this._edit("exit", v || undefined) })}
       <div class="muted small">Blank timings use the Tuning page's. A motion, media player or presence sensor listed here keeps the room occupied while it is on, so a guest with no beacon counts. With a door contact, someone who stays in the room for a while after the door closes keeps it occupied until the door opens.</div>`;
   }
 

@@ -338,6 +338,15 @@ def choose_gps(get_state, layout, person, now, stale_secs=GPS_STALE_SECS):
     return chosen, ignored
 
 
+def has_exit(layout, floor, room) -> bool:
+    """Whether the room has an outside door (its zone's ``exit``, set on the Edit page)."""
+    for f in (layout or {}).get("floor") or []:
+        if isinstance(f, dict) and f.get("name") == floor:
+            return any(isinstance(z, dict) and z.get("entity_id") == room and z.get("exit") and not z.get("no_go")
+                       for z in f.get("zones") or [])
+    return False
+
+
 def presence_of_things(presences) -> str:
     """A person is as present as their most present thing."""
     return min(presences, key=lambda p: _PRESENCE_RANK.get(p, 9)) if presences else "away"
