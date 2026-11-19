@@ -16,6 +16,7 @@ import { LitElement, html, css, nothing } from "./lit.js";
 import { signalColour, distanceColour, SextantMap, thingColor, thingHue, staleness, shortAge, heatCells, pointInPolygon, polygonCentroid } from "./sextant-map.js";
 import { sharedStyles, widgetStyles, fmtAge, fmtNum, toast, confirmAsync, ensureHaComponents, uiSelect, uiButton, callWS, sortFloors, thingName, proxyName, fmtLen, fmtSpeed, classIcon, pronounsFor, uiIconButton, uiSegmented, isImperial, mapOverlayStyles, renderScaleBar, signalLegend, mapUrlFor, retryWait, loadLayout, subscribePositions } from "./sextant-ui.js";
 import { personGroups } from "./sextant-groups.js";
+import { spotInRoom } from "./sextant-occupancy-data.js";
 
 // What this page is running: the version of the files it was loaded from
 // (sextant-version.js), not the one in its URL - see that file.
@@ -1846,7 +1847,7 @@ class SextantLive extends LitElement {
     const from = stays[0].start, to = stays[stays.length - 1].end;
     const span = Math.max(1, to - from);
     const at = (s) => new Date(s * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-    const place = (s) => s.unheard ? "not heard" : `${s.room || "unknown"}${s.spot ? ` · ${s.spot}` : ""}`;
+    const place = (s) => s.unheard ? "not heard" : `${s.room || "unknown"}${s.spot ? ` · ${spotInRoom(s.spot, s.room)}` : ""}`;
     const colour = (s) => s.unheard ? "transparent" : `hsl(${thingHue(s.room || "?")}, 55%, ${s.spot ? 42 : 58}%)`;
     const newest = stays.slice().reverse();
     const shown = this._timelineAll ? newest : newest.slice(0, 8);

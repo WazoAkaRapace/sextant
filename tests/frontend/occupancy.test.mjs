@@ -71,4 +71,9 @@ test("a spot drops its room's name from its front, but never down to nothing", (
   assert.equal(spotInRoom("Desk", "Office"), "Desk");
   assert.equal(spotInRoom("Kitchen", "Kitchen"), "Kitchen");
   assert.equal(spotInRoom("Bed by the Room door", "Eilee's Room"), "Bed by the Room door");
+  assert.equal(spotInRoom("Room Divider", "Living Room"), "Room Divider");
+  assert.equal(spotInRoom("Living Room Couch", "Living Room"), "Couch");
+  assert.equal(spotInRoom("Living Room", "Living Room"), "Living Room");
+  assert.equal(spotInRoom("Eilee’s Desk", "Eilee's Room"), "Desk");
+  assert.equal(spotInRoom(undefined, "Kitchen"), "");
 });
