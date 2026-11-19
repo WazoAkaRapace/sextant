@@ -2526,3 +2526,27 @@ def test_a_stale_smoothed_lead_does_not_win_the_floor_when_this_cycles_scores_di
     assert floor == "b" and ch is not None            # dwell is over but this cycle disagrees: held, challenge kept
     floor, ch = sextant._elect_floor(probs, "b", {"a", "b"}, ch, now=21.0, switch_secs=15.0, margin=0.15, scores={"a": 0.9, "b": 0.1})
     assert floor == "a"                                # a cycle that agrees completes the switch: a real move is not blocked
+
+
+def test_an_anchor_moves_the_room_at_once_even_through_a_lock():
+    """On a proxy, the room is that proxy's room: no smoothing lag, dwell or lock."""
+    sextant._zone_state.clear()
+    layout = {"tuning": {"zone_lock_warmup_secs": 0.0}}
+
+    def elect(x, t, anchored=False, hold=False, tuning=None, filtered=None):
+        # filtered: where the lagging filter still puts it; the proxy itself is at x.
+        fx = x if filtered is None else filtered
+        instant = "Kitchen" if fx < 100 else "Hall" if fx < 400 else "Office"
+        lay = {"tuning": {**layout["tuning"], **(tuning or {})}}
+        kf = None if anchored else _kf(fx, 50.0, sigma_px=5.0)
+        return sextant._elect_zone("e", "F", instant, Point(fx, 50.0), kf, _three_rooms(), 100.0, lay,
+                                   now=t, hold=hold, anchor_point=Point(x, 50.0) if anchored else None)
+
+    for t in range(0, 60, 5):
+        elect(50, float(t))
+    assert elect(50, 60.0)[:2] == ("Kitchen", True)          # still on the counter: locked
+    assert elect(450, 61.0, anchored=True, hold=True)[0] == "Kitchen"   # floor challenge still holds it
+    assert elect(450, 62.0, anchored=True, tuning={"zone_anchor_inset_m": 0.0})[0] == "Kitchen"  # off: the lock holds
+    assert elect(405, 62.5, anchored=True)[0] == "Kitchen"              # a proxy on the wall: no say
+    assert elect(450, 63.0, anchored=True, filtered=50)[:2] == ("Office", False)  # the proxy's room, though the filter lags in the Kitchen
+    assert elect(450, 64.0)[0] == "Office"                              # anchor gone: the shares carry it
