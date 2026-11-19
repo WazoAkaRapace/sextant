@@ -68,6 +68,12 @@ test("outsideNow lists people and pets whose location is Outside", async () => {
 test("a spot drops its room's name from its front, but never down to nothing", () => {
   assert.equal(spotInRoom("Eilee Bedside Table", "Eilee's Room"), "Bedside Table");
   assert.equal(spotInRoom("Kitchen Island", "Kitchen"), "Island");
+  assert.equal(spotInRoom("David Bedside Table", "Master Bedroom", "David"), "Bedside Table");
+  assert.equal(spotInRoom("Meg's Cafe", "Catwalk", "Meg"), "Cafe");
+  assert.equal(spotInRoom("Eilee Bedside Table", "Eilee's Room", "Eilee"), "Bedside Table");
+  assert.equal(spotInRoom("David", "Office", "David"), "David");
+  assert.equal(spotInRoom("David Bedside Table", "Master Bedroom", "david_coulson"), "Bedside Table");
+  assert.equal(spotInRoom("Michelle Bedside Table", "Master Bedroom", "Michelle Coulson"), "Bedside Table");
   assert.equal(spotInRoom("Desk", "Office"), "Desk");
   assert.equal(spotInRoom("Kitchen", "Kitchen"), "Kitchen");
   assert.equal(spotInRoom("Bed by the Room door", "Eilee's Room"), "Bed by the Room door");
