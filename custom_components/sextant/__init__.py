@@ -5321,7 +5321,9 @@ def _update_person_sensors(hass):
             sensor_id = persons_mod.sensor_entity_id(slug, suffix, person in pets)
             if suffix == "sextant_person_location":
                 prev = hass.states.get(sensor_id)
-                persons_mod.keep_since(prev.attributes if prev else None, attrs)
+                # Away last cycle (a visit with no arrival): nothing from before carries over.
+                visit = _person_visits.get(person)
+                persons_mod.keep_since(prev.attributes if prev else None, attrs, (visit.get("arrived") or now) if visit else None)
             update_sextant_sensor_state(hass, sensor_id, state, attrs)
             if suffix == "sextant_person_location":
                 logged = (state, attrs.get("source"))

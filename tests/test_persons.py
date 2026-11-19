@@ -248,3 +248,6 @@ def test_keep_since_holds_the_persons_time_across_a_device_handover():
     c = keep_since(prev, {"floor": "Up", "room": "Hall", "spot": None, "since": 900.0})
     assert c["since"] == 900.0
     assert keep_since(None, {"room": "Hall", "since": 5.0})["since"] == 5.0
+    # Away and back to the same room: the held fix's times are from before this visit home.
+    d = keep_since(prev, {"floor": "Up", "room": "Office", "spot": "Desk", "since": 900.0, "spot_since": 950.0}, arrived=800.0)
+    assert (d["since"], d["spot_since"]) == (900.0, 950.0)
