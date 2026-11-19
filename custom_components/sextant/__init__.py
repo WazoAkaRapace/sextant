@@ -5228,7 +5228,7 @@ def _update_person_sensors(hass):
             candidates.append({
                 "ent": ent, "cls": classes.get(ent), "updated": _graced(row.get("updated"), now),
                 "arrived": _arrived_at(hass, layout, ent, row, now),
-                "zone": row.get("zone"), "sub_zone": row.get("sub_zone"), "floor": row.get("floor"),
+                "zone": row.get("zone"), "zone_raw": row.get("zone_raw"), "sub_zone": row.get("sub_zone"), "floor": row.get("floor"),
                 "outside": bool(row.get("outside")), **{k: row.get(k) for k in persons_mod.FIT_KEYS},
                 "area": room_area(layout, row.get("floor"), row.get("zone")),
                 "on_charger": bool(chargers.get(ent)) and persons_mod.on_charger(
@@ -5272,10 +5272,13 @@ def _update_person_sensors(hass):
             presence, held, held_why = "away", None, None
         # Last heard in a room with an outside door, and quiet since: out of
         # it, not asleep in it. Every proxy losing a phone at once is a phone
-        # leaving the house; one dying on the dryer reads Outside too.
+        # leaving the house; one dying on the dryer reads Outside too. The last
+        # fix's own room counts as well: walking out fast, the election can
+        # still be holding the room before (Kitchen) when the phone goes quiet.
         exit_secs = _tuning(layout, "exit_quiet_secs")
         if (best is None and presence == "quiet" and held and last_heard and exit_secs > 0
-                and now - last_heard >= exit_secs and persons_mod.has_exit(layout, held.get("floor"), held.get("zone"))):
+                and now - last_heard >= exit_secs
+                and persons_mod.held_by_exit(layout, held)):
             held = {**held, "outside": True, "since": last_heard}
         if _tuning(layout, "gps_leave_m") > 0 and persons_mod.should_ask_gps(
                 presence, best is not None, last_heard, _gps_asked.get(person)):
