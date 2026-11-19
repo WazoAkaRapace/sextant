@@ -99,10 +99,11 @@ class SextantOccupancy extends LitElement {
     if (d.source === "gps" && d.gpsAccuracy != null) src += ` (±${fmtLen(d.gpsAccuracy, this.hass, 0)})`;
     return html`<div class="pop" role="tooltip"><b>${name}</b>
       ${d.source ? html`<ha-icon class="si" icon=${WHERE_ICON[d.source] || "mdi:help-circle-outline"} title=${src}></ha-icon>` : nothing}
-      ${row("Room", d.room && d.room !== "unknown" ? d.room : "Unknown")}
-      ${row("Spot", d.spot)}
-      ${row("Floor", d.floor && d.floor !== "unknown" ? d.floor : null)}
-      ${row("Here for", d.since ? fmtAge((Date.now() - d.since) / 1000) : null)}
+      ${d.outside ? row("Where", "Outside") : html`
+        ${row("Room", d.room && d.room !== "unknown" ? d.room : "Unknown")}
+        ${row("Spot", d.spot)}
+        ${row("Floor", d.floor && d.floor !== "unknown" ? d.floor : null)}`}
+      ${row(d.outside ? "Out for" : "Here for", d.since ? fmtAge((Date.now() - d.since) / 1000) : null)}
       ${row("Tracked by", device)}
       ${row("Confidence", d.conf != null ? `${Math.round(d.conf * 100)}%` : null)}
       ${row("Last heard", age ? `${age}${d.presence ? ` (${d.presence})` : ""}` : d.presence)}

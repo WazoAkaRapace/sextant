@@ -591,12 +591,14 @@ def _outside_election(entity, dist_m, margin_m, secs, now, faint=None):
             st["out_since"] = now
         if not st["outside"] and now - st["out_since"] >= secs:
             st["outside"] = True
+            st["outside_at"] = st["out_since"]   # when the spell began: the Occupancy popup's "Out for"
     else:
         st["out_since"] = None
         if st["in_since"] is None:
             st["in_since"] = now
         if st["outside"] and now - st["in_since"] >= secs:
             st["outside"] = False
+            st["outside_at"] = None
     return st["outside"]
 
 
@@ -3119,7 +3121,8 @@ async def update_trilateration_and_zone(hass, new_global_data, entity):
                 "zone_locked": zone_locked,
                 # When this room and this spot were entered: kept across a
                 # restart, where the sensors' own timestamps are not.
-                "since": (_zone_state.get(entity) or {}).get("since"),
+                # Outside: when the spell outside began (not kept over a restart: the election starts again).
+                "since": (_outside_state.get(entity) or {}).get("outside_at") if is_outside else (_zone_state.get(entity) or {}).get("since"),
                 "spot_since": (_subzone_state.get(entity) or {}).get("since"),
                 "sub_zone": sub_zone,
                 # Smoothed sub-zone membership shares (name -> share, plus
