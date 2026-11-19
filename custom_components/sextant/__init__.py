@@ -3121,7 +3121,7 @@ async def update_trilateration_and_zone(hass, new_global_data, entity):
                 "zone_locked": zone_locked,
                 # When this room and this spot were entered: kept across a
                 # restart, where the sensors' own timestamps are not.
-                # Outside: when the spell outside began (None for one restored from before this was kept).
+                # Outside: when the spell outside began (not kept over a restart: the election starts again).
                 "since": (_outside_state.get(entity) or {}).get("outside_at") if is_outside else (_zone_state.get(entity) or {}).get("since"),
                 "spot_since": (_subzone_state.get(entity) or {}).get("since"),
                 "sub_zone": sub_zone,
