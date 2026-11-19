@@ -12,7 +12,7 @@ from shapely.geometry import Point, Polygon
 src_path, layout_path, log_dir = sys.argv[1:4]
 src = open(src_path).read()
 tree = ast.parse(src)
-WANT_FN = {"_step_weight", "_new_zone_state", "_covariance_samples", "_zone_membership", "_far_move", "_elect_zone", "_habit_zone", "_inset_m"}
+WANT_FN = {"_step_weight", "_new_zone_state", "_covariance_samples", "_zone_membership", "_far_move", "_elect_zone", "_habit_zone", "_inset_m", "_point_in_no_go"}
 WANT_CONST = {"SMOOTHING_REF_S", "SMOOTHING_MAX_STEP_S", "ZONE_SAMPLE_CENTER_WEIGHT", "ZONE_SAMPLE_ANGLES",
               "ZONE_AWAY_RESET_FRACTION", "ZONE_OUTVOTED_SHARE", "HABIT_CONFIDENT_SHARE", "TUNING_SPEC"}
 ns = {"np": np, "math": math, "Point": Point, "shapely": shapely, "time": __import__("time"),
@@ -40,6 +40,7 @@ SPEC = ns["TUNING_SPEC"]
 lay = json.load(open(layout_path))["data"]
 LIVE = lay.get("tuning") or {}
 floors = {}
+PROXY = {}
 for f in lay["floor"]:
     polys = []
     for z in f.get("zones", []):
@@ -51,6 +52,10 @@ for f in lay["floor"]:
             p = shapely.make_valid(p)
         polys.append((z["entity_id"], p, 0.0, bool(z.get("no_go"))))
     floors[f["name"]] = (polys, f.get("scale"))
+    for rx in f.get("receivers", []):
+        c = rx.get("cords") or {}
+        if c.get("x") is not None:
+            PROXY[rx.get("entity_id")] = Point(c["x"], c["y"])
 
 rows = []
 for fn in sorted(glob.glob(f"{log_dir}/*.jsonl")):
@@ -75,7 +80,8 @@ def run(tuning, sigma_k=0.5, anchor_fast=False):
             sig = max(0.05, (r.get("rms_m") or 1.0) * sigma_k) * scale
             sp = (r.get("speed") or 0.0) * scale
             kf = {"floor": r["floor"], "P": np.diag([sig * sig, sig * sig, 1.0, 1.0]), "x": np.array([x, y, sp, 0.0])}
-        kw = {"anchored": anchored} if anchor_fast else {}
+        # shortcut: hold (a floor challenge) is not in the log, so switches it would defer are allowed here.
+        kw = {"anchor_point": PROXY.get(r["anchor"])} if anchor_fast and anchored else {}
         z, locked, _ = ns["_elect_zone"](r["ent"], r["floor"], r["zone_raw"], Point(x, y), kf, polys, scale, layout, now=r["t"], **kw)
         out.setdefault(r["ent"], []).append((r["t"], r["floor"], z))
     return out

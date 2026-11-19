@@ -2538,7 +2538,7 @@ def test_an_anchor_moves_the_room_at_once_even_through_a_lock():
         lay = {"tuning": {**layout["tuning"], **(tuning or {})}}
         kf = None if anchored else _kf(x, 50.0, sigma_px=5.0)
         return sextant._elect_zone("e", "F", instant, Point(x, 50.0), kf, _three_rooms(), 100.0, lay,
-                                   now=t, hold=hold, anchored=anchored)
+                                   now=t, hold=hold, anchor_point=Point(x, 50.0) if anchored else None)
 
     for t in range(0, 60, 5):
         elect(50, float(t))

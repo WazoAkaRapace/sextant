@@ -3098,7 +3098,8 @@ async def update_trilateration_and_zone(hass, new_global_data, entity):
         zone, zone_locked, zone_speed = _elect_zone(
             entity, lowest_floor_name, instant_zone, test_point,
             kf_for_election, zone_polys, scale, layout, now=now,
-            hold=_floor_challenge.get(entity) is not None, anchored=anchor is not None,
+            hold=_floor_challenge.get(entity) is not None,
+            anchor_point=Point(anchor["x"], anchor["y"]) if anchor is not None else None,
         )
         # Sub-zone: only the elected zone's own sub-zones are eligible, with
         # membership smoothing, exit hysteresis, dwell and the zone lock (see
@@ -5950,7 +5951,7 @@ def _habit_zone(floor_name, zone):
     return f"{floor_name}|{zone}"
 
 
-def _elect_zone(entity, floor_name, instant_zone, point, kf_state, zone_polys, scale, layout, now=None, hold=False, anchored=False):
+def _elect_zone(entity, floor_name, instant_zone, point, kf_state, zone_polys, scale, layout, now=None, hold=False, anchor_point=None):
     """The zone to PUBLISH for a thing this cycle. Returns
     (zone, locked, speed_m_s).
 
@@ -6036,24 +6037,27 @@ def _elect_zone(entity, floor_name, instant_zone, point, kf_state, zone_polys, s
     if incumbent is None:
         st.update(zone=best, since=now, challenge=None, locked=False, away_since=None)
         return best, False, speed
-    if best == incumbent and probs[best] >= HABIT_CONFIDENT_SHARE:
-        habits_mod.learn(_habits, entity, _habit_zone(floor_name, incumbent), now, _habits_last.get(entity), _local_tz)
-    _habits_last[entity] = now
-
     # Anchored: the thing sits on a proxy (one reads it within anchor_max_m,
     # every other at least anchor_ratio farther, for anchor_secs), so its room
     # is that proxy's room - no smoothing lag, dwell or lock to wait out. Only
     # a proxy well inside its room, though: most are wall plugs, and one on a
     # shared wall anchors things on both sides of it. Replayed over 10 h of the
-    # election log, an inset of 0.5 m published 20 moves ~27 s sooner for one
-    # extra bounce; with no inset, 82 sooner but 40 extra bounces.
+    # election log, an inset of 0.5 m published 11 moves ~32 s sooner with no
+    # extra switch or bounce; 0.1 m added 33 bounces.
+    # The proxy's own position, not the filtered point: the filter lags it and
+    # a snap can move it. Before habit learning, so the room left gains nothing.
     inset = _tuning(layout, "zone_anchor_inset_m")
-    if (anchored and inset > 0 and not hold and instant_zone in valid and instant_zone != incumbent
-            and _inset_m(zone_polys, instant_zone, point, scale) >= inset):
-        st["probs"] = {instant_zone: 1.0}
-        st.update(zone=instant_zone, since=now, challenge=None, locked=False,
-                  still_since=None, away_since=None, outvoted_since=None)
-        return instant_zone, False, speed
+    if anchor_point is not None and inset > 0 and not hold and not _point_in_no_go(anchor_point, zone_polys):
+        az = next((zid for zid, p, _b, no_go in zone_polys if not no_go and p.covers(anchor_point)), None)
+        if az is not None and az != incumbent and _inset_m(zone_polys, az, anchor_point, scale) >= inset:
+            st["probs"] = {az: 1.0}
+            st.update(zone=az, since=now, challenge=None, locked=False,
+                      still_since=None, away_since=None, outvoted_since=None)
+            _habits_last[entity] = now
+            return az, False, speed
+    if best == incumbent and probs[best] >= HABIT_CONFIDENT_SHARE:
+        habits_mod.learn(_habits, entity, _habit_zone(floor_name, incumbent), now, _habits_last.get(entity), _local_tz)
+    _habits_last[entity] = now
 
     # 3b. Lock and unlock.
     stationary_secs = _tuning(layout, "stationary_secs")
