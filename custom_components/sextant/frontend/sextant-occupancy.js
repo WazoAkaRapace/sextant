@@ -1,7 +1,7 @@
 /** Occupancy tab: floors stacked like the house, a tile per room with who is in it and why it is on. Read only. */
 import { LitElement, html, css, nothing } from "./lit.js";
 import { sharedStyles, fmtAge, fmtLen } from "./sextant-ui.js";
-import { occupancyByFloor, outsideNow, chipDetail, firstName, SOURCE_ICON, SOURCE_LABEL, WHERE_SOURCE, WHERE_ICON } from "./sextant-occupancy-data.js";
+import { occupancyByFloor, outsideNow, chipDetail, firstName, spotInRoom, SOURCE_ICON, SOURCE_LABEL, WHERE_SOURCE, WHERE_ICON } from "./sextant-occupancy-data.js";
 
 class SextantOccupancy extends LitElement {
   static properties = { hass: {}, data: {}, _open: { state: true } };
@@ -73,7 +73,7 @@ class SextantOccupancy extends LitElement {
   _chip(r, name, icon, label = name) {
     const d = chipDetail(this.hass?.states, name, r.ids);
     const key = `${r.floor}|${r.room}|${name}`;
-    const spot = d?.spot && d.room === r.room ? d.spot : null;
+    const spot = d?.spot && d.room === r.room ? spotInRoom(d.spot, r.room) : null;
     return html`<span class="who"
         @pointerenter=${(e) => { if (e.pointerType === "mouse") this._show(key, false); }}
         @pointerleave=${(e) => { if (e.pointerType === "mouse" && !this._pinned && this._open === key) this._close(); }}>

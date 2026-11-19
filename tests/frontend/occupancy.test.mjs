@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { occupancyByFloor } from "../../custom_components/sextant/frontend/sextant-occupancy-data.js";
+import { occupancyByFloor, spotInRoom } from "../../custom_components/sextant/frontend/sextant-occupancy-data.js";
 
 const st = (state, room, floor, extra = {}) => ({ state, attributes: { room, floor, people: [], pets: [], sources: [], ...extra } });
 
@@ -63,4 +63,17 @@ test("outsideNow lists people and pets whose location is Outside", async () => {
   };
   assert.deepEqual(outsideNow(states), { people: ["Alex"], pets: ["Primrose"] });
   assert.deepEqual(outsideNow(undefined), { people: [], pets: [] });
+});
+
+test("a spot drops its room's name from its front, but never down to nothing", () => {
+  assert.equal(spotInRoom("Eilee Bedside Table", "Eilee's Room"), "Bedside Table");
+  assert.equal(spotInRoom("Kitchen Island", "Kitchen"), "Island");
+  assert.equal(spotInRoom("Desk", "Office"), "Desk");
+  assert.equal(spotInRoom("Kitchen", "Kitchen"), "Kitchen");
+  assert.equal(spotInRoom("Bed by the Room door", "Eilee's Room"), "Bed by the Room door");
+  assert.equal(spotInRoom("Room Divider", "Living Room"), "Room Divider");
+  assert.equal(spotInRoom("Living Room Couch", "Living Room"), "Couch");
+  assert.equal(spotInRoom("Living Room", "Living Room"), "Living Room");
+  assert.equal(spotInRoom("Eilee’s Desk", "Eilee's Room"), "Desk");
+  assert.equal(spotInRoom(undefined, "Kitchen"), "");
 });
