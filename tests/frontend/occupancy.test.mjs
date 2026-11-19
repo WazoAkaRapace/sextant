@@ -83,3 +83,25 @@ test("a spot drops its room's name from its front, but never down to nothing", (
   assert.equal(spotInRoom("Eilee’s Desk", "Eilee's Room"), "Desk");
   assert.equal(spotInRoom(undefined, "Kitchen"), "");
 });
+
+test("chipDetail reports how long it has been there and what tracks it", async () => {
+  const { chipDetail } = await import("../../custom_components/sextant/frontend/sextant-occupancy-data.js");
+  const states = {
+    "person.david": { attributes: { friendly_name: "David" } },
+    "sensor.david_sextant_person_location": { state: "Bedside Table", attributes: { room: "Master Bedroom", spot: "Bedside Table", via: "david_phone", since: 1000, spot_since: 2000 } },
+    "person.michelle": { attributes: { friendly_name: "Michelle" } },
+    "sensor.michelle_sextant_person_location": { state: "Kitchen", attributes: { room: "Kitchen", spot: null, via: "michelle_watch", since: 1500, spot_since: 3000 } },
+    "person.jack": { attributes: { friendly_name: "Jack" } },
+    "sensor.jack_sextant_person_location": { state: "home", attributes: { room: "unknown", source: "wifi", via: "device_tracker.jack_phone" } },
+    "device_tracker.jack_phone": { attributes: { friendly_name: "Jack's Pixel" } },
+  };
+  const classes = { david_phone: "phone", michelle_watch: "watch" };
+  const d = chipDetail(states, "David", {}, classes);
+  assert.equal(d.since, 2000000); assert.equal(d.thingClass, "phone");
+  const m = chipDetail(states, "Michelle", {}, classes);
+  assert.equal(m.since, 1500000); assert.equal(m.thingClass, "watch");
+  const j = chipDetail(states, "Jack", {}, classes);
+  assert.equal(j.since, null); assert.equal(j.thingClass, null); assert.equal(j.tracker, "Jack's Pixel");
+  states["sensor.david_sextant_person_location"].attributes.kind = "outside";
+  assert.equal(chipDetail(states, "David", {}, classes).since, null);   // the room's since is not Outside's
+});

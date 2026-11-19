@@ -1,6 +1,6 @@
 /** Occupancy tab: floors stacked like the house, a tile per room with who is in it and why it is on. Read only. */
 import { LitElement, html, css, nothing } from "./lit.js";
-import { sharedStyles, fmtAge, fmtLen } from "./sextant-ui.js";
+import { sharedStyles, fmtAge, fmtLen, classIcon, THING_CLASSES } from "./sextant-ui.js";
 import { occupancyByFloor, outsideNow, chipDetail, firstName, spotInRoom, SOURCE_ICON, SOURCE_LABEL, WHERE_SOURCE, WHERE_ICON } from "./sextant-occupancy-data.js";
 
 class SextantOccupancy extends LitElement {
@@ -45,10 +45,12 @@ class SextantOccupancy extends LitElement {
     .chip { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; margin: 0 4px 4px 0; padding: 2px 7px; border-radius: 10px; background: var(--card-background-color); border: 1px solid var(--divider-color); }
     .foot { font-size: 12px; color: var(--secondary-text-color); }
     .chip ha-icon { --mdc-icon-size: 14px; }
-    .who { position: relative; display: inline-block; }
+    .who { position: relative; display: inline-block; max-width: 100%; }
     button.chip { font: inherit; font-size: 12px; color: var(--primary-text-color); cursor: pointer; text-align: start; }
     button.chip:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 1px; }
-    .chip .spot { color: var(--secondary-text-color); }
+    /* One line: a long spot ends in an ellipsis rather than wrapping under the name (the popup has it whole). */
+    button.chip { max-width: 100%; white-space: nowrap; }
+    .chip .spot { color: var(--secondary-text-color); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
     .pop { position: absolute; z-index: 5; top: 100%; left: 0; width: max-content; max-width: min(280px, 80vw); padding: 8px 10px; border-radius: 8px;
       background: var(--card-background-color); color: var(--primary-text-color); border: 1px solid var(--divider-color);
       box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25); font-size: 12px; line-height: 1.5; }
@@ -71,7 +73,9 @@ class SextantOccupancy extends LitElement {
   }
 
   _chip(r, name, icon, label = name) {
-    const d = chipDetail(this.hass?.states, name, r.ids);
+    const d = chipDetail(this.hass?.states, name, r.ids, this.data?.layout?.thing_classes);
+    // A person's chip shows what is tracking them (phone, watch) when that thing has a class.
+    if (icon === "mdi:account" && d?.thingClass) icon = classIcon(d.thingClass) || icon;
     const key = `${r.floor}|${r.room}|${name}`;
     const spot = d?.spot && d.room === r.room ? spotInRoom(d.spot, r.room, name) : null;
     return html`<span class="who"
@@ -87,6 +91,7 @@ class SextantOccupancy extends LitElement {
     if (!d) return html`<div class="pop" role="tooltip"><b>${name}</b>No Sextant location sensor found.</div>`;
     const row = (k, v) => (v == null || v === "" ? nothing : html`<div><span class="k">${k}</span>${v}</div>`);
     const age = d.heardAt ? fmtAge((Date.now() - d.heardAt) / 1000) + " ago" : null;
+    const device = d.thing ? (THING_CLASSES.find(([k]) => k && k === d.thingClass) || [])[1] || d.thing : d.tracker;
     let src = WHERE_SOURCE[d.source] || d.source;
     if (d.source === "wifi" && d.accessPoint) src += ` (${d.accessPoint})`;
     if (d.source === "gps" && d.gpsAccuracy != null) src += ` (±${fmtLen(d.gpsAccuracy, this.hass, 0)})`;
@@ -95,6 +100,8 @@ class SextantOccupancy extends LitElement {
       ${row("Room", d.room && d.room !== "unknown" ? d.room : "Unknown")}
       ${row("Spot", d.spot)}
       ${row("Floor", d.floor && d.floor !== "unknown" ? d.floor : null)}
+      ${row("Here for", d.since ? fmtAge((Date.now() - d.since) / 1000) : null)}
+      ${row("Tracked by", device)}
       ${row("Confidence", d.conf != null ? `${Math.round(d.conf * 100)}%` : null)}
       ${row("Last heard", age ? `${age}${d.presence ? ` (${d.presence})` : ""}` : d.presence)}
     </div>`;

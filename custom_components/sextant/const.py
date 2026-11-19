@@ -26,7 +26,8 @@ PROBE_BEACON_UUID = "fde3b1502f6443baaee9867f75ee4a6f"
 # house" can be told from "by a wall". They move with BLE noise every cycle a
 # thing is heard, so they are neither recorded (sensor.py) nor on their own a
 # reason to write (update_sextant_sensor_state).
-FIT_ATTRIBUTES = ("outside_m", "outside_raw_m", "rms_m", "conf", "n_prox", "nearest_m")
+# since / spot_since (epoch, kept over a restart) ride along: the Occupancy popup shows how long it has been there.
+FIT_ATTRIBUTES = ("outside_m", "outside_raw_m", "rms_m", "conf", "n_prox", "nearest_m", "since", "spot_since")
 
 # No RSSI model reads a thing this close: under it a range is a sentinel (an Android proxy's
 # 127 = "no RSSI" relayed as +127 dBm is ~1e-6 m), not a measurement. A raw-input cutoff.
