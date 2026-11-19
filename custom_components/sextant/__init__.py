@@ -804,6 +804,9 @@ TUNING_SPEC = {
     "anchor_ratio": (2.0, float, 1.0, 10.0),
     "anchor_secs": (20.0, float, 0.0, 600.0),
     "anchor_release_m": (1.5, float, 0.1, 10.0),
+    # An anchored thing's room is its proxy's room at once (see _elect_zone),
+    # when that proxy sits at least this far (m) inside the room. 0 = never.
+    "zone_anchor_inset_m": (0.5, float, 0.0, 5.0),
     # How long a thing may go unheard before the Live page draws it as a
     # ghost - translucent, with how long ago it was last heard - because the
     # position shown is then a memory rather than a reading. Display only:
@@ -3095,7 +3098,7 @@ async def update_trilateration_and_zone(hass, new_global_data, entity):
         zone, zone_locked, zone_speed = _elect_zone(
             entity, lowest_floor_name, instant_zone, test_point,
             kf_for_election, zone_polys, scale, layout, now=now,
-            hold=_floor_challenge.get(entity) is not None,
+            hold=_floor_challenge.get(entity) is not None, anchored=anchor is not None,
         )
         # Sub-zone: only the elected zone's own sub-zones are eligible, with
         # membership smoothing, exit hysteresis, dwell and the zone lock (see
@@ -5947,7 +5950,7 @@ def _habit_zone(floor_name, zone):
     return f"{floor_name}|{zone}"
 
 
-def _elect_zone(entity, floor_name, instant_zone, point, kf_state, zone_polys, scale, layout, now=None, hold=False):
+def _elect_zone(entity, floor_name, instant_zone, point, kf_state, zone_polys, scale, layout, now=None, hold=False, anchored=False):
     """The zone to PUBLISH for a thing this cycle. Returns
     (zone, locked, speed_m_s).
 
@@ -6037,6 +6040,21 @@ def _elect_zone(entity, floor_name, instant_zone, point, kf_state, zone_polys, s
         habits_mod.learn(_habits, entity, _habit_zone(floor_name, incumbent), now, _habits_last.get(entity), _local_tz)
     _habits_last[entity] = now
 
+    # Anchored: the thing sits on a proxy (one reads it within anchor_max_m,
+    # every other at least anchor_ratio farther, for anchor_secs), so its room
+    # is that proxy's room - no smoothing lag, dwell or lock to wait out. Only
+    # a proxy well inside its room, though: most are wall plugs, and one on a
+    # shared wall anchors things on both sides of it. Replayed over 10 h of the
+    # election log, an inset of 0.5 m published 20 moves ~27 s sooner for one
+    # extra bounce; with no inset, 82 sooner but 40 extra bounces.
+    inset = _tuning(layout, "zone_anchor_inset_m")
+    if (anchored and inset > 0 and not hold and instant_zone in valid and instant_zone != incumbent
+            and _inset_m(zone_polys, instant_zone, point, scale) >= inset):
+        st["probs"] = {instant_zone: 1.0}
+        st.update(zone=instant_zone, since=now, challenge=None, locked=False,
+                  still_since=None, away_since=None, outvoted_since=None)
+        return instant_zone, False, speed
+
     # 3b. Lock and unlock.
     stationary_secs = _tuning(layout, "stationary_secs")
     if (
@@ -6118,6 +6136,15 @@ def _elect_zone(entity, floor_name, instant_zone, point, kf_state, zone_polys, s
     # its clock, so a challenge that lapses costs the room switch nothing.
     st["challenge"] = {"zone": best, "since": since}
     return incumbent, False, speed
+
+
+def _inset_m(zone_polys, zone, point, scale):
+    """How far (m) the point sits inside the zone's outline; 0 outside it or without a scale."""
+    poly = next((p for zid, p, _b, _n in zone_polys if zid == zone), None)
+    if poly is None or not isinstance(scale, (int, float)) or scale <= 0:
+        return 0.0
+    pt = point if isinstance(point, Point) else Point(point[0], point[1])
+    return poly.boundary.distance(pt) / scale if poly.covers(pt) else 0.0
 
 
 def _far_move(zone_polys, a, b, scale):

@@ -91,6 +91,7 @@ distances in metres.
 | `anchor_ratio` | 2 | every other proxy at least this many times farther |
 | `anchor_secs` | 20 | for this long |
 | `anchor_release_m` | 1.5 | release once the reading opens past this |
+| `zone_anchor_inset_m` | 0.5 | an anchored thing's room is its proxy's room at once (no smoothing, dwell or lock to wait out) when that proxy sits at least this far inside the room; a proxy on a shared wall anchors things on both sides of it. 0 turns it off |
 | `calibration_target` | `sextant` | where Apply writes: `sextant` or `bermuda` |
 | `correction_close_fade` | on | fade a proxy's calibration stretch out at close range (see [calibration](calibration.md#close-range)) |
 | `correction_fade_near_m` | 1.0 | a reading this close gets none of the stretch |
