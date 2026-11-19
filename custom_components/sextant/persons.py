@@ -347,6 +347,11 @@ def has_exit(layout, floor, room) -> bool:
     return False
 
 
+def held_by_exit(layout, held) -> bool:
+    """Whether a held place is at an outside door: its room, or the room its last fix fell in."""
+    return any(has_exit(layout, held.get("floor"), z) for z in (held.get("zone"), held.get("zone_raw")))
+
+
 def presence_of_things(presences) -> str:
     """A person is as present as their most present thing."""
     return min(presences, key=lambda p: _PRESENCE_RANK.get(p, 9)) if presences else "away"

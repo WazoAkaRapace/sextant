@@ -261,6 +261,10 @@ def test_has_exit_finds_the_rooms_outside_door():
     assert not persons.has_exit(layout, "Ground", "Void")
     assert not persons.has_exit(layout, "Upper", "Laundry Room")
     assert not persons.has_exit(None, "Ground", "Laundry Room")
+    # Out fast: the room still held is the Kitchen, the last fix already in the Laundry Room.
+    assert persons.held_by_exit(layout, {"floor": "Ground", "zone": "Kitchen", "zone_raw": "Laundry Room"})
+    assert persons.held_by_exit(layout, {"floor": "Ground", "zone": "Laundry Room"})
+    assert not persons.held_by_exit(layout, {"floor": "Ground", "zone": "Kitchen", "zone_raw": "Kitchen"})
     # Held outside: the location reads Outside, out since the last sighting.
     out = persons.fuse(None, [], "quiet", {"ent": "phone", "zone": "Laundry Room", "floor": "Ground", "outside": True, "since": 100.0},
                        None, [])
