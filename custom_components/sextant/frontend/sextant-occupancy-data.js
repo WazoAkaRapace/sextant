@@ -77,7 +77,7 @@ export const firstName = (name) => { const w = String(name ?? "").trim().split(/
 // room first, then the person, and never the whole spot.
 export function spotInRoom(spot, room, who) {
   const norm = (w) => w.toLowerCase().replace(/['’]s$/, "");
-  const split = (s) => String(s ?? "").split(/\s+/).filter(Boolean);
+  const split = (s) => String(s ?? "").split(/[\s_]+/).filter(Boolean);
   let words = split(spot);
   for (const name of [room, who]) {
     const lead = split(name).map(norm);
