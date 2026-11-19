@@ -102,4 +102,6 @@ test("chipDetail reports how long it has been there and what tracks it", async (
   assert.equal(m.since, 1500000); assert.equal(m.thingClass, "watch");
   const j = chipDetail(states, "Jack", {}, classes);
   assert.equal(j.since, null); assert.equal(j.thingClass, null); assert.equal(j.tracker, "Jack's Pixel");
+  states["sensor.david_sextant_person_location"].attributes.kind = "outside";
+  assert.equal(chipDetail(states, "David", {}, classes).since, null);   // the room's since is not Outside's
 });

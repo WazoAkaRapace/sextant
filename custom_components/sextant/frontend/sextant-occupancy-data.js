@@ -62,7 +62,8 @@ export function chipDetail(states, name, ids, classes) {
   const a = s.attributes || {}, t = tloc?.attributes || {};
   const heard = a.last_heard || t.last_heard;
   const spot = a.spot && a.spot !== "unknown" ? a.spot : null;
-  const since = (spot ? a.spot_since ?? t.spot_since : null) ?? a.since ?? t.since;
+  // shortcut: since is the room election's, so Outside (elected apart) shows none; publish an outside since if wanted.
+  const since = a.kind === "outside" ? null : (spot ? a.spot_since ?? t.spot_since : null) ?? a.since ?? t.since;
   const tracker = via && String(via).includes(".") ? states[via]?.attributes?.friendly_name || via : null;
   return {
     thing, thingClass: thing ? classes?.[thing] || null : null, tracker,
