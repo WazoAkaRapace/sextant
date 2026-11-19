@@ -16,7 +16,7 @@ import { LitElement, html, css, nothing } from "./lit.js";
 import { signalColour, distanceColour, SextantMap, thingColor, thingHue, staleness, shortAge, heatCells, pointInPolygon, polygonCentroid } from "./sextant-map.js";
 import { sharedStyles, widgetStyles, fmtAge, fmtNum, toast, confirmAsync, ensureHaComponents, uiSelect, uiButton, callWS, sortFloors, thingName, proxyName, fmtLen, fmtSpeed, classIcon, pronounsFor, uiIconButton, uiSegmented, isImperial, mapOverlayStyles, renderScaleBar, signalLegend, mapUrlFor, retryWait, loadLayout, subscribePositions } from "./sextant-ui.js";
 import { personGroups } from "./sextant-groups.js";
-import { spotInRoom } from "./sextant-occupancy-data.js";
+import { spotInRoom, askStrimmer } from "./sextant-occupancy-data.js";
 
 // What this page is running: the version of the files it was loaded from
 // (sextant-version.js), not the one in its URL - see that file.
@@ -109,6 +109,8 @@ class SextantPanel extends LitElement {
   }
 
   willUpdate(changed) {
+    // Here, not connectedCallback: hass can arrive later, and with a new connection after a re-login.
+    if (changed.has("hass")) askStrimmer(this.hass?.connection);
     // A page remembered in this browser may be one this user cannot open (an
     // admin used it last): Live instead, as the tabs offer.
     if (changed.has("hass") && this.hass?.user && !this._modes().some(([id]) => id === this._mode)) this._mode = "live";
