@@ -47,8 +47,9 @@ export function outsideNow(states) {
 
 /** Where a chip's person, pet or thing is, from its location sensors; null when it has none.
  *  ``ids`` is the room sensor's {display name: thing slug}; a person (or a pet that is a
- *  person) is found by the friendly name the room sensor listed them under. */
-export function chipDetail(states, name, ids) {
+ *  person) is found by the friendly name the room sensor listed them under. ``classes`` is the
+ *  layout's thing_classes, for the class of the thing doing the tracking. */
+export function chipDetail(states, name, ids, classes) {
   states = states || {};
   const person = Object.keys(states).find((id) => id.startsWith("person.") && (states[id]?.attributes?.friendly_name || id.slice(7)) === name);
   const slug = person?.slice(7);
@@ -61,8 +62,12 @@ export function chipDetail(states, name, ids) {
   const a = s.attributes || {}, t = tloc?.attributes || {};
   const heard = a.last_heard || t.last_heard;
   const spot = a.spot && a.spot !== "unknown" ? a.spot : null;
+  const since = (spot ? a.spot_since ?? t.spot_since : null) ?? a.since ?? t.since;
+  const tracker = via && String(via).includes(".") ? states[via]?.attributes?.friendly_name || via : null;
   return {
-    thing, room: a.room, spot, floor: a.floor, presence: a.presence,
+    thing, thingClass: thing ? classes?.[thing] || null : null, tracker,
+    since: typeof since === "number" ? since * 1000 : null,
+    room: a.room, spot, floor: a.floor, presence: a.presence,
     conf: a.conf ?? t.conf ?? null, source: a.source || "ble",
     accessPoint: a.access_point || null, gpsAccuracy: a.gps_accuracy ?? null,
     heardAt: heard ? Date.parse(heard) : null,
