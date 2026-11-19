@@ -75,6 +75,7 @@ class SextantOccupancy extends LitElement {
   _chip(r, name, icon, label = name) {
     const d = chipDetail(this.hass?.states, name, r.ids, this.data?.layout?.thing_classes);
     // A person's chip shows what is tracking them (phone, watch) when that thing has a class.
+    const pet = icon === "mdi:paw";   // before a person's icon becomes their device's
     if (icon === "mdi:account" && d?.thingClass) icon = classIcon(d.thingClass) || icon;
     const key = `${r.floor}|${r.room}|${name}`;
     const spot = d?.spot && d.room === r.room ? spotInRoom(d.spot, r.room, name) : null;
@@ -83,15 +84,16 @@ class SextantOccupancy extends LitElement {
         @pointerleave=${(e) => { if (e.pointerType === "mouse" && !this._pinned && this._open === key) this._close(); }}>
       <button class="chip" aria-expanded=${this._open === key} @click=${() => this._show(key, true)}>
         <ha-icon icon=${icon}></ha-icon>${label}${spot ? html`<span class="spot">&nbsp;· ${spot}</span>` : nothing}</button>
-      ${this._open === key ? this._pop(name, d) : nothing}
+      ${this._open === key ? this._pop(name, d, pet) : nothing}
     </span>`;
   }
 
-  _pop(name, d) {
+  _pop(name, d, pet = false) {
     if (!d) return html`<div class="pop" role="tooltip"><b>${name}</b>No Sextant location sensor found.</div>`;
     const row = (k, v) => (v == null || v === "" ? nothing : html`<div><span class="k">${k}</span>${v}</div>`);
     const age = d.heardAt ? fmtAge((Date.now() - d.heardAt) / 1000) + " ago" : null;
-    const device = d.thing ? (THING_CLASSES.find(([k]) => k && k === d.thingClass) || [])[1] || d.thing : d.tracker;
+    // A pet is its own tag: "Tracked by Cat" says nothing.
+    const device = pet ? null : d.thing ? (THING_CLASSES.find(([k]) => k && k === d.thingClass) || [])[1] || d.thing : d.tracker;
     let src = WHERE_SOURCE[d.source] || d.source;
     if (d.source === "wifi" && d.accessPoint) src += ` (${d.accessPoint})`;
     if (d.source === "gps" && d.gpsAccuracy != null) src += ` (±${fmtLen(d.gpsAccuracy, this.hass, 0)})`;
