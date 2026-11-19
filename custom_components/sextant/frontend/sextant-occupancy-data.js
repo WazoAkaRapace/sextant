@@ -71,3 +71,13 @@ export function chipDetail(states, name, ids) {
 
 /** A person's chip label: the first word of their name, capitalised ("david coulson" -> "David"). */
 export const firstName = (name) => { const w = String(name ?? "").trim().split(/\s+/)[0]; return w ? w[0].toUpperCase() + w.slice(1) : String(name ?? ""); };
+
+// A spot named after its room ("Eilee Bedside Table" in Eilee's Room) drops the room's words from its front.
+export function spotInRoom(spot, room) {
+  const norm = (w) => w.toLowerCase().replace(/['’]s$/, "");
+  const roomWords = new Set(String(room ?? "").split(/\s+/).filter(Boolean).map(norm));
+  const words = String(spot ?? "").split(/\s+/).filter(Boolean);
+  let i = 0;
+  while (i < words.length - 1 && roomWords.has(norm(words[i]))) i++;
+  return words.slice(i).join(" ");
+}
