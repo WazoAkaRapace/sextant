@@ -106,3 +106,19 @@ test("chipDetail reports how long it has been there and what tracks it", async (
   const out = chipDetail(states, "David", {}, classes);
   assert.equal(out.outside, true); assert.equal(out.since, 1000000);   // Outside: since is the spell's, not the spot's
 });
+
+test("askStrimmer asks once per connection, again on each reconnect, and swallows HA's refusal", async () => {
+  const { askStrimmer, STRIMMER_WANT } = await import("../../custom_components/sextant/frontend/sextant-occupancy-data.js");
+  const sent = []; let ready;
+  const conn = {
+    sendMessagePromise: (m) => { sent.push(m); return Promise.reject(new Error("unknown_command")); },
+    addEventListener: (ev, cb) => { if (ev === "ready") ready = cb; },
+  };
+  askStrimmer(conn); askStrimmer(conn);
+  assert.equal(sent.length, 1);
+  assert.deepEqual(sent[0], { type: "strimmer/want", entity_ids: STRIMMER_WANT });
+  ready();
+  assert.equal(sent.length, 2);
+  askStrimmer(undefined);
+  await new Promise((r) => setTimeout(r, 0));   // the rejections must not surface as unhandled
+});

@@ -16,7 +16,7 @@ import { LitElement, html, css, nothing } from "./lit.js";
 import { signalColour, distanceColour, SextantMap, thingColor, thingHue, staleness, shortAge, heatCells, pointInPolygon, polygonCentroid } from "./sextant-map.js";
 import { sharedStyles, widgetStyles, fmtAge, fmtNum, toast, confirmAsync, ensureHaComponents, uiSelect, uiButton, callWS, sortFloors, thingName, proxyName, fmtLen, fmtSpeed, classIcon, pronounsFor, uiIconButton, uiSegmented, isImperial, mapOverlayStyles, renderScaleBar, signalLegend, mapUrlFor, retryWait, loadLayout, subscribePositions } from "./sextant-ui.js";
 import { personGroups } from "./sextant-groups.js";
-import { spotInRoom } from "./sextant-occupancy-data.js";
+import { spotInRoom, askStrimmer } from "./sextant-occupancy-data.js";
 
 // What this page is running: the version of the files it was loaded from
 // (sextant-version.js), not the one in its URL - see that file.
@@ -97,6 +97,7 @@ class SextantPanel extends LitElement {
     // HA's form elements are loaded by HA itself; make sure they exist before
     // the first render so the modes pick them instead of the plain fallbacks.
     ensureHaComponents().then(() => this.requestUpdate());
+    askStrimmer(this.hass?.connection);
     this._load();
     this._subscribe();
     this._clock = setInterval(() => { this._now = Date.now() / 1000; }, 1000);

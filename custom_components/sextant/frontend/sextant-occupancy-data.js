@@ -94,3 +94,16 @@ export function spotInRoom(spot, room, who) {
   }
   return words.join(" ");
 }
+
+// The pages read Sextant's entities straight from hass.states, so a trimming proxy (Strimmer) that
+// only forwards what dashboards name would hide them. Ask it for them on each connection; without
+// Strimmer, Home Assistant answers unknown_command, which is ignored.
+export const STRIMMER_WANT = ["*_sextant_*", "person.*"];
+const askedConns = new WeakSet();
+export function askStrimmer(conn) {
+  if (!conn?.sendMessagePromise || askedConns.has(conn)) return;
+  askedConns.add(conn);
+  const ask = () => conn.sendMessagePromise({ type: "strimmer/want", entity_ids: STRIMMER_WANT }).catch(() => {});
+  ask();
+  conn.addEventListener?.("ready", ask);
+}
