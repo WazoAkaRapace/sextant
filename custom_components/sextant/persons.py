@@ -542,6 +542,21 @@ def fuse(best, why, presence, held, gps, ignored, home=None, wifi=None):
     }
 
 
+def keep_since(prev, attrs):
+    """A person's room and spot times are theirs, not the tracking thing's: when the
+    phone takes over from the watch in the same room, ``since`` stays when they came
+    in, not when the phone did. ``prev`` is the location sensor's last attributes."""
+    prev = prev or {}
+    if attrs.get("room") in (None, "unknown") or attrs.get("kind") == "outside":
+        return attrs
+    for key, same in (("since", ("floor", "room")), ("spot_since", ("floor", "room", "spot"))):
+        old = prev.get(key)
+        if (isinstance(old, (int, float)) and all(prev.get(k) == attrs.get(k) for k in same)
+                and (key == "since" or attrs.get("spot"))):
+            attrs[key] = old
+    return attrs
+
+
 def wifi_gate(wifi, since, prev_visit, now, confirm_secs):
     """(since, wifi): Wi-Fi's home word, held back until it has stood for
     confirm_secs when it would START a visit. A router keeps a client "home"

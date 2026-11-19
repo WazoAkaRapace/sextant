@@ -233,3 +233,18 @@ def test_room_changes_need_two_cycles_and_compare_floor():
     base, pend, ev = persons.room_changes(base, {}, {**now, "a": None}, pets=("pet",))
     base, pend, ev = persons.room_changes(base, pend, {**now, "a": None}, pets=("pet",))
     assert ev == [] and base["a"] is None
+
+
+def test_keep_since_holds_the_persons_time_across_a_device_handover():
+    from sextant.persons import keep_since
+    prev = {"floor": "Up", "room": "Office", "spot": "Desk", "since": 100.0, "spot_since": 200.0}
+    # The phone takes over from the watch: same room and spot, the phone's own times are later.
+    a = keep_since(prev, {"floor": "Up", "room": "Office", "spot": "Desk", "since": 900.0, "spot_since": 950.0})
+    assert (a["since"], a["spot_since"]) == (100.0, 200.0)
+    # Off the spot, still in the room: the room time stays, the spot time is the new one.
+    b = keep_since(prev, {"floor": "Up", "room": "Office", "spot": None, "since": 900.0, "spot_since": 950.0})
+    assert (b["since"], b["spot_since"]) == (100.0, 950.0)
+    # A new room: the new times.
+    c = keep_since(prev, {"floor": "Up", "room": "Hall", "spot": None, "since": 900.0})
+    assert c["since"] == 900.0
+    assert keep_since(None, {"room": "Hall", "since": 5.0})["since"] == 5.0

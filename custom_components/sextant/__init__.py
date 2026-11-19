@@ -5318,7 +5318,11 @@ def _update_person_sensors(hass):
         for suffix, (state, attrs) in persons_mod.fuse(best, why if best else held_why, presence, held, gps, ignored, home, wifi_home).items():
             # What kind of thing speaks for them (phone, watch, cat...), so a card need not guess from its name.
             attrs["via_class"] = classes.get(attrs["via"]) if attrs.get("via") else None
-            update_sextant_sensor_state(hass, persons_mod.sensor_entity_id(slug, suffix, person in pets), state, attrs)
+            sensor_id = persons_mod.sensor_entity_id(slug, suffix, person in pets)
+            if suffix == "sextant_person_location":
+                prev = hass.states.get(sensor_id)
+                persons_mod.keep_since(prev.attributes if prev else None, attrs)
+            update_sextant_sensor_state(hass, sensor_id, state, attrs)
             if suffix == "sextant_person_location":
                 logged = (state, attrs.get("source"))
                 room_ok = attrs.get("room") not in (None, "unknown")
