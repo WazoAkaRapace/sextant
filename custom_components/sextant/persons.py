@@ -60,10 +60,10 @@ CARRY_PRIORITY = {"cat": 4, "dog": 4, "paw": 4, "watch": 3, "phone": 2, "headpho
 LOCATES_BY_DEFAULT = {"watch", "phone", "person", "man", "woman", "child", "cat", "dog", "paw"}
 # The sensors each person gets: (suffix, label).
 PERSON_SENSOR_KINDS = [
-    ("sextant_person_location", "Sextant Location"),
-    ("sextant_person_room", "Sextant Room"),
-    ("sextant_person_floor", "Sextant Floor"),
-    ("sextant_person_sleep", "Sextant Slept In"),
+    ("sextant_person_location", "Location"),
+    ("sextant_person_room", "Room"),
+    ("sextant_person_floor", "Floor"),
+    ("sextant_person_sleep", "Slept In"),
 ]
 SLEEP_MAX_STEP_S = 300.0   # a longer gap between cycles (a restart) counts no more than this
 

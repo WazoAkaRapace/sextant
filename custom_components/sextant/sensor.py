@@ -310,7 +310,9 @@ class CustomDistanceSensor(SensorEntity, RestoreEntity):
         if device_key:
             info = DeviceInfo(
                 identifiers={("sextant", device_key)},
-                name=f"{device_name or device_key} (Sextant)",
+                # A person is only Sextant's: just their name, so HA shows "David Coulson Room".
+                # A thing keeps "(Sextant)" to tell it from its Bermuda device.
+                name=device_name if device_key.startswith("person_") and device_name else f"{device_name or device_key} (Sextant)",
                 manufacturer="Sextant",
                 model=model or "Tracked thing",
             )
@@ -494,7 +496,7 @@ def ensure_person_sensors(hass, people, pets=()):
     sensor.<pet>_sextant_pet_location / _room / _floor), grouped under a
     Sextant device for the person. "_person_" keeps them apart from a thing
     that shares the person's name (Meg the cat is person.meg and her tag meg).
-    The device is named for them ("Meg (Sextant)") and ``pets`` - the person
+    The device is named for them ("Meg") and ``pets`` - the person
     ids that are pets - get a pet's model rather than a person's.
     """
     from .persons import PERSON_SENSOR_KINDS, device_model, sensor_entity_id  # noqa: PLC0415

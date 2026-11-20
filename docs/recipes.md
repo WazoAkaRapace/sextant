@@ -328,7 +328,7 @@ title: Who is where
 content: >
   {% for p in states.sensor | selectattr('entity_id', 'search', '_sextant_person_location$') | sort(attribute='name') %}
   {% set a = p.attributes %}
-  **{{ p.name | replace(' Sextant Location', '') }}** — {{ p.state }}
+  **{{ p.name | replace(' Location', '') }}** — {{ p.state }}
   {%- if a.source == 'held' %} *(not heard for a bit)*{% endif %}
   {%- if a.source == 'gps' and a.distance_m %} *({{ (a.distance_m / 1000) | round(1) }} km away)*{% endif %}
   {%- if a.source == 'none' %} *(no location)*{% endif %}
