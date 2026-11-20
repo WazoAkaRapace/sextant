@@ -38,6 +38,9 @@ function tuningHelpLine(key, help, def, imperial) {
 }
 
 /** Plain labels for the tuning keys, with a one-line meaning; the key itself is shown under the field. */
+// The settings the room election reads (replay.ROOM_KEYS): the ones a replay can try.
+const REPLAY_KEYS = ["zone_switch_secs", "zone_switch_margin", "zone_prob_smoothing", "stationary_speed", "stationary_secs", "zone_lock_warmup_secs",
+  "zone_unlock_margin", "zone_unlock_secs", "far_move_margin", "far_move_secs", "zone_anchor_inset_m", "habit_margin_gain"];
 const TUNING_LABELS = {
   position_estimator: ["Position estimator", "geometric = trilateration alone; fingerprint = proxy references alone; fused = a blend of both"],
   fingerprint_weight: ["Fingerprint share of the fix", "0 is the trilateration alone, 1 the fingerprint alone"],
@@ -151,6 +154,10 @@ class SextantHealth extends LitElement {
     _kpi: { state: true },
     _accuracy: { state: true },
     _kpiHours: { state: true },
+    _replay: { state: true },
+    _replayKey: { state: true },
+    _replayValue: { state: true },
+    _replayHours: { state: true },
     _baselines: { state: true },
     _baseline: { state: true },
     _baselineName: { state: true },
@@ -170,6 +177,10 @@ class SextantHealth extends LitElement {
     this._advice = recall("advice");
     this._kpi = null;
     this._kpiHours = 12;
+    this._replay = null;
+    this._replayKey = "zone_switch_secs";
+    this._replayValue = "";
+    this._replayHours = 6;
     this._baselines = [];
     this._baseline = "";
     this._baselineName = "";
@@ -290,6 +301,15 @@ class SextantHealth extends LitElement {
     if (r) this._kpi = r;
   }
 
+  async _runReplay() {
+    const value = Number(this._replayValue);
+    if (this._replayValue === "" || !Number.isFinite(value)) { toast(this, "Enter a value to try"); return; }
+    this._busy = "replay";
+    const r = await callWS(this, this.hass, { type: "sextant/replay", tuning: { [this._replayKey]: value }, hours: this._replayHours });
+    this._busy = null;
+    if (r) this._replay = { ...r, key: this._replayKey, value };
+  }
+
   async _loadBaselines() {
     const r = await this.hass.callWS({ type: "sextant/kpi/baselines" }).catch(() => null);
     if (r) {
@@ -346,7 +366,7 @@ class SextantHealth extends LitElement {
       case "calibration":
         return html`<div class="page"><div class="cols">${this._renderCalibration()}</div></div>`;
       case "tuning":
-        return html`<div class="page"><div class="cols">${this._renderKpi()}${this._renderAccuracy()}${this._renderTuning()}${this._renderHistory()}</div></div>`;
+        return html`<div class="page"><div class="cols">${this._renderKpi()}${this._renderAccuracy()}${this._renderReplay()}${this._renderTuning()}${this._renderHistory()}</div></div>`;
       case "advice":
         return html`<div class="page"><div class="cols">${this._renderAdvice()}</div></div>`;
       default:
@@ -779,6 +799,31 @@ class SextantHealth extends LitElement {
       <div class="row"><input class="tfilter" type="search" placeholder="Filter by key, label or help" aria-label="Filter tuning keys" .value=${this._tfilter} @input=${(e) => { this._tfilter = e.target.value; }}></div>
       ${groups.map(([name, keys]) => shown(keys).length ? html`<h4>${name}</h4><div class="row">${keys.map(field)}</div>` : nothing)}
       <div class="row">${uiButton({ label: "Apply", kind: "primary", onClick: () => this._saveTuning() })}${uiButton({ label: "Restore defaults", kind: "text", onClick: () => this._resetTuning() })}</div>
+    </section>`;
+  }
+
+  /** Try one room setting against the election log before applying it. */
+  _renderReplay() {
+    const spec = this.data?.tuning_spec || {};
+    const keys = REPLAY_KEYS.filter((k) => spec[k]);
+    const r = this._replay;
+    const now = this.data?.layout?.tuning?.[this._replayKey] ?? spec[this._replayKey]?.default;
+    const delta = (a, b) => html`<span class=${a < b ? "good" : a > b ? "bad" : ""}>${a} (${a > b ? "+" : ""}${a - b})</span>`;
+    return html`<section class="card wide">
+      <h3>Try a room setting <span class="muted small">replays the election log, changes nothing</span></h3>
+      <div class="row">
+        ${uiSelect({ label: "Setting", value: this._replayKey, options: keys.map((k) => ({ value: k, label: (TUNING_LABELS[k] || [k])[0] })), onChange: (v) => { this._replayKey = v; this._replay = null; }, style: "min-width: 240px" })}
+        ${uiField({ label: `Value to try (now ${now ?? "default"})`, value: this._replayValue, onChange: (v) => { this._replayValue = v; }, style: "width: 180px" })}
+        ${uiSelect({ label: "Window", value: this._replayHours, options: [1, 3, 6, 12, 24].map((h) => ({ value: h, label: `${h} h` })), onChange: (v) => { this._replayHours = Number(v); }, style: "min-width: 110px" })}
+        ${uiButton({ label: this._busy === "replay" ? "Replaying…" : "Replay", kind: "primary", disabled: !!this._busy, onClick: () => this._runReplay() })}
+      </div>
+      ${r ? html`<div class="wrap"><table>
+        <tr><th></th><th class="num">Room switches</th><th class="num">Bounces</th></tr>
+        <tr><td>As it is now</td><td class="num">${r.base.switches}</td><td class="num">${r.base.bounces}</td></tr>
+        <tr><td><code>${r.key}</code> = ${r.value}</td><td class="num">${delta(r.trial.switches, r.base.switches)}</td><td class="num">${delta(r.trial.bounces, r.base.bounces)}</td></tr>
+        ${Object.entries(r.things_changed || {}).map(([e, v]) => html`<tr><td style="padding-left: 22px" class="muted">${thingName(this.data, e)}</td><td class="num">${delta(v.trial.switches, v.base.switches)}</td><td class="num">${delta(v.trial.bounces, v.base.bounces)}</td></tr>`)}
+      </table></div>
+      <p class="small muted">${r.things} things over ${r.hours} h. A bounce is a switch undone within two minutes. The replay at today's settings matches ${fmtNum((r.base.agree ?? 0) * 100, 0)}% of what was published (${r.logged.switches} switches, ${r.logged.bounces} bounces): it is an estimate, so trust the difference more than the totals${(r.base.agree ?? 0) < 0.85 ? html`, <span class="bad">and not much at this match</span>` : nothing}.</p>` : html`<p class="small muted">Needs the election log: set <code>election_log_hours</code> above 0 under History and display and let it record first.</p>`}
     </section>`;
   }
 

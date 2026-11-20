@@ -1274,6 +1274,34 @@ async def _compute_kpi(hass, hours):
 
 
 @websocket_api.websocket_command({
+    vol.Required("type"): "sextant/replay",
+    vol.Required("tuning"): dict,
+    vol.Optional("hours", default=6.0): vol.All(vol.Coerce(float), vol.Range(min=0.5, max=48)),
+})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_replay(hass, connection, msg):
+    """What other room tuning would have done over the election log (replay.compare)."""
+    from . import election_log, replay  # noqa: PLC0415
+
+    core = _core()
+    layout = get_layout(hass)
+    if not isinstance(layout, dict) or not layout.get("floor"):
+        return _error(connection, msg, "No floor plan yet")
+    unknown = sorted(k for k in msg["tuning"] if k not in replay.ROOM_KEYS)
+    if unknown:
+        return _error(connection, msg, f"Only the room election can be replayed, not {', '.join(unknown)}")
+
+    def work():
+        return replay.compare(core, layout, replay.load_rows(election_log.get(hass).dirpath, msg["hours"]), msg["tuning"])
+
+    out = await hass.async_add_executor_job(work)
+    if not out.get("rows"):
+        return _error(connection, msg, "The election log has nothing for that window: set election_log_hours above 0 and let it record")
+    connection.send_result(msg["id"], out)
+
+
+@websocket_api.websocket_command({
     vol.Required("type"): "sextant/kpi",
     vol.Optional("hours", default=12.0): vol.Coerce(float),
     vol.Optional("baseline"): str,
@@ -2153,7 +2181,7 @@ COMMANDS = (
     ws_radar_devices, ws_radar_targets,
     ws_layout_get, ws_layout_save, ws_tuning_set, ws_thing_tune,
     ws_history_index, ws_history_get, ws_history_timeline, ws_history_clear, ws_thing_readings, ws_floor_bias_map,
-    ws_calibration_status, ws_calibration_action, ws_selftest, ws_scanner_linking, ws_receivers, ws_beacon_links,
+    ws_calibration_status, ws_calibration_action, ws_selftest, ws_replay, ws_scanner_linking, ws_receivers, ws_beacon_links,
     ws_proxy_info,
     ws_adjust_zones, ws_registration, ws_scanner_ignore, ws_kpi, ws_kpi_baselines, ws_kpi_baseline_save, ws_kpi_baseline_delete,
     ws_truth_mark, ws_truth_list, ws_truth_delete, ws_truth_evaluate, ws_truth_apply,
