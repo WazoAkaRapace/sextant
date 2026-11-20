@@ -1274,8 +1274,8 @@ async def _compute_kpi(hass, hours):
     }
 
 
-# An hour of log is some 10,000 rows held in memory, so the window is capped and one replay runs at a time.
-REPLAY_MAX_HOURS = 12
+# An hour of log is some 10,000 rows held in memory, so one replay runs at a time.
+REPLAY_MAX_HOURS = 48
 _replay_running = False
 
 
@@ -1307,13 +1307,14 @@ async def ws_replay(hass, connection, msg):
     habits = copy.deepcopy(core._habits)   # here on the loop, where they are learned
 
     def work():
-        return replay.compare(core, layout, replay.load_rows(election_log.get(hass).dirpath, msg["hours"]), msg["tuning"], habits)
+        global _replay_running
+        try:
+            return replay.compare(core, layout, replay.load_rows(election_log.get(hass).dirpath, msg["hours"]), msg["tuning"], habits)
+        finally:
+            _replay_running = False   # here, not after the await: a closed page cancels that, not the thread
 
     _replay_running = True
-    try:
-        out = await hass.async_add_executor_job(work)
-    finally:
-        _replay_running = False
+    out = await hass.async_add_executor_job(work)
     if not out.get("rows"):
         return _error(connection, msg, "The election log has nothing for that window: set election_log_hours above 0 and let it record")
     connection.send_result(msg["id"], out)

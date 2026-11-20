@@ -820,7 +820,7 @@ class SextantHealth extends LitElement {
       <div class="row">
         ${uiSelect({ label: "Setting", value: this._replayKey, options: keys.map((k) => ({ value: k, label: (TUNING_LABELS[k] || [k])[0] })), onChange: (v) => { this._replayKey = v; this._replay = null; }, style: "min-width: 240px" })}
         ${uiField({ label: `Value to try (now ${now ?? "default"})`, value: this._replayValue, onChange: (v) => { this._replayValue = v; }, style: "width: 180px" })}
-        ${uiSelect({ label: "Window", value: this._replayHours, options: [1, 3, 6, 12].map((h) => ({ value: h, label: `${h} h` })), onChange: (v) => { this._replayHours = Number(v); }, style: "min-width: 110px" })}
+        ${uiSelect({ label: "Window", value: this._replayHours, options: [1, 3, 6, 12, 24, 48].map((h) => ({ value: h, label: `${h} h` })), onChange: (v) => { this._replayHours = Number(v); }, style: "min-width: 110px" })}
         ${uiButton({ label: this._busy === "replay" ? "Replaying…" : "Replay", kind: "primary", disabled: !!this._busy, onClick: () => this._runReplay() })}
       </div>
       ${r ? html`<div class="wrap"><table>
