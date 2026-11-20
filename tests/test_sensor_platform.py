@@ -264,3 +264,10 @@ def test_only_an_empty_device_may_be_deleted_from_the_ui(tmp_path):
     er.async_get(hass).add("sensor.cat_sextant_room", device_id=used.id)
     assert run(sextant.async_remove_config_entry_device(hass, None, empty)) is True
     assert run(sextant.async_remove_config_entry_device(hass, None, used)) is False
+
+
+def test_a_person_device_is_named_for_them_alone_a_thing_keeps_sextant():
+    """HA shows device name + the entity name with that prefix cut: "Meg Room", not "Meg (Sextant) Meg Sextant Room"."""
+    person = sn.CustomDistanceSensor("Meg Room", "sextant_person_room_meg", "sensor.meg_sextant_pet_room", "person_meg", device_name="Meg")
+    thing = sn.CustomDistanceSensor("meg Sextant Room", "sextant_room_meg", "sensor.meg_sextant_room", "meg")
+    assert person._attr_device_info["name"] == "Meg" and thing._attr_device_info["name"] == "meg (Sextant)"
