@@ -1070,6 +1070,63 @@ async def ws_beacon_links(hass, connection, msg):
     connection.send_result(msg["id"], {"beacons": _safe(lambda: core._beacon_links(hass), [])})
 
 
+def _firmware_by_address(hass):
+    """Each Bluetooth address's node firmware, as Home Assistant records it:
+    "<project version> (ESPHome <version>)". The address's own device hangs off
+    the node (via_device), which carries the version.
+    """
+    from homeassistant.helpers import device_registry as dr  # noqa: PLC0415
+
+    devices = dr.async_get(hass)
+    out = {}
+    for d in _core()._iter_registry_devices(devices):
+        node = devices.async_get(d.via_device_id) if getattr(d, "via_device_id", None) else d
+        fw = getattr(node, "sw_version", None)
+        for kind, value in getattr(d, "connections", ()) or ():
+            if kind == "bluetooth" and fw:
+                out.setdefault(str(value).lower(), fw)
+    return out
+
+
+_FIRMWARE_PARTS = (("ESPHome", re.compile(r"\(ESPHome (\d[\d.]*\d)")), ("ble-proxy", re.compile(r"\+ble(\d[\d.]*\d)")))
+
+
+def firmware_behind(rows):
+    """Mark each row whose ESPHome or ble-proxy version is older than the one
+    most of the placed proxies run: an update that failed, or one that never
+    reached it. Sets row["firmware_behind"] to a short reason, or None.
+    Only builds of the ble-proxy package ("+ble" in the version) are compared:
+    wall tablets and vendor firmware keep their own ESPHome on purpose.
+    """
+    def ver(s):
+        return tuple(int(x) for x in s.split("."))
+
+    found = {name: {} for name, _ in _FIRMWARE_PARTS}
+    for i, r in enumerate(rows):
+        fw = r.get("firmware") or ""
+        if "+ble" not in fw:
+            continue
+        for name, pattern in _FIRMWARE_PARTS:
+            m = pattern.search(fw)
+            if m:
+                found[name][i] = m.group(1)
+    reasons = {}
+    for name, versions in found.items():
+        counts = {}
+        for v in versions.values():
+            counts[v] = counts.get(v, 0) + 1
+        if len(counts) < 2:
+            continue
+        # The most common version; a tie goes to the newer one.
+        usual = max(counts, key=lambda v: (counts[v], ver(v)))
+        for i, v in versions.items():
+            if ver(v) < ver(usual):
+                reasons.setdefault(i, []).append(f"{name} {v}, most run {usual}")
+    for i, r in enumerate(rows):
+        r["firmware_behind"] = "; ".join(reasons[i]) if i in reasons else None
+    return rows
+
+
 @websocket_api.websocket_command({vol.Required("type"): "sextant/receivers"})
 @websocket_api.require_admin
 @websocket_api.async_response
@@ -1083,6 +1140,7 @@ async def ws_receivers(hass, connection, msg):
     directory = bermuda_source.async_get_scanner_directory(hass) or {}
     by_slug = {info.get("slug"): (addr, info) for addr, info in directory.items() if info.get("slug")}
     layout = get_layout(hass) or {}
+    firmware = _firmware_by_address(hass)
     placed = []
     placed_addresses = set()
     for floor in layout.get("floor", []) if isinstance(layout, dict) else []:
@@ -1108,7 +1166,9 @@ async def ws_receivers(hass, connection, msg):
                 "area": info.get("area_name") if info else None,
                 "last_seen_age": info.get("last_seen_age") if info else None,
                 "matched": info is not None,
+                "firmware": firmware.get(address) if address else None,
             })
+    firmware_behind(placed)
     ignored = ignored_scanners(layout)
     unplaced = [
         {"address": addr, "slug": info.get("slug"), "name": info.get("name"), "area": info.get("area_name"),

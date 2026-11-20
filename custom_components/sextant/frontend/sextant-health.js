@@ -338,12 +338,13 @@ class SextantHealth extends LitElement {
 
   // --- Proxies -------------------------------------------------------------------
 
-  /** A proxy's status: "offline", "unmatched", "quiet" or "ok". */
+  /** A proxy's status: "offline", "unmatched", "quiet", "behind" or "ok". */
   _status(r) {
     if (!r.matched) return "unmatched";
     if (!r.online) return "offline";
     const age = r.last_seen_age ?? r.age;
     if (age != null && age > QUIET_SECS) return "quiet";
+    if (r.firmware_behind) return "behind";
     return "ok";
   }
 
@@ -363,7 +364,7 @@ class SextantHealth extends LitElement {
   }
 
   _counts(rows) {
-    const c = { ok: 0, quiet: 0, offline: 0, unmatched: 0 };
+    const c = { ok: 0, quiet: 0, offline: 0, unmatched: 0, behind: 0 };
     for (const r of rows) c[this._status(r)]++;
     return c;
   }
@@ -374,6 +375,7 @@ class SextantHealth extends LitElement {
       ${c.quiet ? html`<span class="pill quiet" title="online but nothing heard for ${QUIET_SECS} s">${c.quiet}</span>` : nothing}
       ${c.offline ? html`<span class="pill bad" title="offline">${c.offline}</span>` : nothing}
       ${c.unmatched ? html`<span class="pill warn" title="placed but Bermuda has no scanner by that name">${c.unmatched}</span>` : nothing}
+      ${c.behind ? html`<span class="pill warn" title="older firmware than most proxies: an update failed or never ran">${c.behind} behind</span>` : nothing}
     </span>`;
   }
 
@@ -390,13 +392,13 @@ class SextantHealth extends LitElement {
       <h3>Proxies <span class="muted">${placed.length} placed</span></h3>
       <div class="row">
         ${this._countPills(total)}
-        <span class="muted small">green online · yellow quiet (${fmtAge(QUIET_SECS)} without a reading) · red offline · orange unmatched</span>
+        <span class="muted small">green online · yellow quiet (${fmtAge(QUIET_SECS)} without a reading) · red offline · orange unmatched, or behind (older firmware than most proxies: an update failed or never ran)</span>
         <span class="pill">${(rx?.unplaced || []).length} heard but unplaced</span>
         <span class="grow"></span>
         ${uiButton({ label: "Refresh", kind: "text", icon: "mdi:refresh", onClick: () => this._refresh() })}
       </div>
       ${attention.length ? html`<div class="attention">
-        <b>Needs a look:</b> ${attention.map((r) => html`<span class="pill ${this._status(r) === "offline" ? "bad" : this._status(r) === "quiet" ? "quiet" : "warn"}" title=${this._status(r)}>${proxyName(this.data, r.address || r.slug)} · ${r.floor || "?"}</span>`)}
+        <b>Needs a look:</b> ${attention.map((r) => html`<span class="pill ${this._status(r) === "offline" ? "bad" : this._status(r) === "quiet" ? "quiet" : "warn"}" title=${r.firmware_behind && this._status(r) === "behind" ? `firmware behind: ${r.firmware_behind}` : this._status(r)}>${proxyName(this.data, r.address || r.slug)} · ${r.floor || "?"}${this._status(r) === "behind" ? " · firmware behind" : ""}</span>`)}
       </div>` : html`<div class="muted small">Every placed proxy is online and reporting.</div>`}
       ${floors.map((floor) => {
         const rows = placed.filter((r) => r.floor === floor);
@@ -424,8 +426,8 @@ class SextantHealth extends LitElement {
                 ${rr.slice().sort((a, b) => (this._status(a) === "ok") - (this._status(b) === "ok") || a.slug.localeCompare(b.slug)).map((r) => {
                   const st = this._status(r);
                   return html`<tr>
-                    <td><b>${proxyName(this.data, r.address || r.slug)}</b><br><span class="muted small">${r.slug}${r.address ? ` · ${r.address}` : ""}</span></td>
-                    <td><span class="pill ${st === "ok" ? "ok" : st === "quiet" ? "quiet" : st === "offline" ? "bad" : "warn"}">${st}</span></td>
+                    <td><b>${proxyName(this.data, r.address || r.slug)}</b><br><span class="muted small">${r.slug}${r.address ? ` · ${r.address}` : ""}${r.firmware ? html`<br>${r.firmware}` : nothing}</span></td>
+                    <td><span class="pill ${st === "ok" ? "ok" : st === "quiet" ? "quiet" : st === "offline" ? "bad" : "warn"}" title=${r.firmware_behind || st}>${st}</span></td>
                     <td class="num">${r.last_seen_age != null ? fmtAge(r.last_seen_age) : r.age != null ? fmtAge(r.age) : "—"}</td>
                     ${showCorr ? html`<td class="num">${r.correction != null ? fmtNum(r.correction, 3) : "—"}</td>` : nothing}
                     <td class="num">${r.height != null ? fmtLen(r.height, this.hass) : "—"}</td>
