@@ -29,7 +29,7 @@ class SextantForceOccupied(SwitchEntity, RestoreEntity):
         self._attr_is_on = False
         self._attr_device_info = DeviceInfo(
             identifiers={("sextant", f"room_{room_ids['unique_id'][len(UNIQUE_PREFIX):]}")},
-            name=f"{key[1]} (Sextant)", manufacturer="Sextant", model="Room")
+            name=key[1], manufacturer="Sextant", model="Room")
 
     async def async_added_to_hass(self):
         await super().async_added_to_hass()
