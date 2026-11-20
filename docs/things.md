@@ -69,15 +69,19 @@ rises to the top. Set Find near back to Off when you're done.
 
 Give things an owner - **Belongs to**, a Home Assistant person - and two
 things follow. On Live, each owner gets a heading of their own (their
-picture, and where they are), which folds their things away with a click. And each owner gets three sensors of their own:
+picture, and where they are), which folds their things away with a click. And each owner gets four sensors of their own:
 `sensor.<person>_sextant_person_location` (the spot, or the room),
-`_sextant_person_room` and `_sextant_person_floor` (and a
+`_sextant_person_room`, `_sextant_person_floor` and `_sextant_person_sleep` (and a
 `device_tracker.<person>_sextant`), with `via` naming the
 thing they came from and `via_class` its class (`phone`, `watch`, `cat`...). Automations can then ask where Alex is rather than
 where his phone is.
 A pet's are named `sensor.<pet>_sextant_pet_location`, `_sextant_pet_room` and
 `_sextant_pet_floor` instead (a pet is one whose things are all cat, dog or
 paw tags); an existing pet's sensors are renamed on the next start.
+`_sextant_person_sleep` ("Slept In") is the room they spent most of the night in,
+22:00 to 06:00 by default (`sleep_start_hour`, `sleep_end_hour`); `minutes` has the
+time in each room, `night` the date the night began, and `tonight` is true while it is
+still counting. It keeps last night's answer through the day and starts again at 22:00.
 
 Which thing speaks for a person: only things that **give their owner's
 location** count - by default a watch, a phone, or a person's or pet's own

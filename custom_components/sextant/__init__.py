@@ -842,6 +842,9 @@ TUNING_SPEC = {
     # what Wi-Fi said) in config/sextant_person_log for this many hours, to
     # find out why a location or an arrival was wrong. 0 = off. See person_log.py.
     "person_log_hours": (48.0, float, 0.0, 720.0),
+    # The night the "slept in" sensor counts: local hours, from start to end (may wrap midnight).
+    "sleep_start_hour": (22.0, float, 0.0, 24.0),
+    "sleep_end_hour": (6.0, float, 0.0, 24.0),
     # A room's occupancy stays on this long after its last reading says
     # occupied (0 = follow the readings), and its state attribute reads
     # "extended" once it has been occupied for room_extended_secs.
@@ -4301,6 +4304,8 @@ _person_log_key = {}
 _event_visits = None
 # person -> (room, floor) while in a real room, now and as the events last saw it.
 _person_places = {}
+# person -> the night's time in each room (persons.sleep_tally), kept over a restart.
+_person_sleep = {}
 _event_places = {}
 _place_pending = {}
 _events_from = 0.0
@@ -4550,6 +4555,7 @@ async def _restore_runtime(hass):
         _subzone_state[entity] = {**_new_subzone_state(state.get("floor"), state.get("zone"), now), **state}
     _arrivals.update(back["arrivals"])
     _person_visits.update(back.get("visits") or {})
+    _person_sleep.update(back.get("sleep") or {})
     _gps_asked.update(back.get("asked") or {})
     if back.get("wifi"):
         _wifi_store.update(back["wifi"])
@@ -4686,7 +4692,7 @@ async def _save_runtime(hass, final=False):
         # a dying tag, was gone entirely after the 15:34 restart.
         rows = _rows_with_last_seen(rows, _last_seen)
         data = runtime_mod.snapshot(time.time(), kf=_kf_position_state, zones=_zone_state,
-                                    spots=_subzone_state, arrivals=_arrivals, rows=rows, visits=_person_visits, asked=_gps_asked, wifi=_wifi_store,
+                                    spots=_subzone_state, arrivals=_arrivals, rows=rows, visits=_person_visits, sleep=_person_sleep, asked=_gps_asked, wifi=_wifi_store,
                                     floors=_floor_elections(), sensors={"bad": _sensor_bad_since, "on": {e: v[0] for e, v in _sensor_on_since.items()}})
         await save_runtime(hass, data)
     except Exception as e:  # noqa: BLE001
@@ -5354,6 +5360,10 @@ def _update_person_sensors(hass):
                 room_ok = attrs.get("room") not in (None, "unknown")
                 _person_places[person] = (attrs["room"], attrs.get("floor")) if room_ok else None
         _person_visits[person] = persons_mod.visit(_person_visits.get(person), persons_mod.home_via(presence, gps, wifi_home), last_heard, now)
+        _person_sleep[person] = persons_mod.sleep_tally(_person_sleep.get(person), _person_places.get(person), now, _local_tz,
+                                                        _tuning(layout, "sleep_start_hour"), _tuning(layout, "sleep_end_hour"))
+        update_sextant_sensor_state(hass, persons_mod.sensor_entity_id(slug, "sextant_person_sleep", person in pets),
+                                    *persons_mod.sleep_state(_person_sleep[person]))
         try:
             if _tuning(layout, "person_log_hours") > 0:
                 cand = {c["ent"]: c for c in candidates}

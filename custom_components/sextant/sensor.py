@@ -526,7 +526,7 @@ def ensure_person_sensors(hass, people, pets=()):
             sensors_cache[entity_id] = sensor
             new_sensors.append(sensor)
     if new_sensors:
-        _LOGGER.info("Creating Sextant location sensors for %d person(s)", len(new_sensors) // 3 or 1)
+        _LOGGER.info("Creating Sextant location sensors for %d person(s)", len(new_sensors) // len(PERSON_SENSOR_KINDS) or 1)
         add_entities(new_sensors, update_before_add=True)
         # An existing registry entry keeps its old id (sensor.fry_sextant_person_*): move a pet's.
         normalize_sextant_registry_entity_ids_from_cache(hass)
