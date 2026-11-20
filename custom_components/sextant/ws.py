@@ -1088,7 +1088,7 @@ def _firmware_by_address(hass):
     return out
 
 
-_FIRMWARE_PARTS = (("ESPHome", re.compile(r"\(ESPHome (\d[\d.]*\d)")), ("ble-proxy", re.compile(r"\+ble(\d[\d.]*\d)")))
+_FIRMWARE_PARTS = (("ESPHome", re.compile(r"\(ESPHome (\d+(?:\.\d+)*)(?![\d.])")), ("ble-proxy", re.compile(r"\+ble(\d+(?:\.\d+)*)(?![\d.])")))
 
 
 def firmware_behind(rows):

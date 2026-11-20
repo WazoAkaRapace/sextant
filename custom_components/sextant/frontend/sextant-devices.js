@@ -813,7 +813,8 @@ class SextantDevices extends LitElement {
     const lonely = new Set(placed.size ? recent.filter((c) => placedHearing(c) < 2) : []);
     const haystack = (c) => { const w = this._heardWhere(c, index); return `${c.name} ${c.address} ${c.manufacturer || ""} ${c.apple_summary || ""} ${c.area_name || ""} ${c.kind} ${w ? `${w.room || ""} ${w.floor || ""} ${w.proxy || ""}` : ""}`.toLowerCase(); };
     // heard_by holds the last minute's reading from each proxy that heard it.
-    const rssiAt = (c) => (Array.isArray(c.heard_by) ? c.heard_by : []).find((h) => String(h.address || "").toLowerCase() === this._findAt)?.rssi;
+    // A positive RSSI (Bermuda's +127) means no reading, not a loud one.
+    const rssiAt = (c) => { const r = (Array.isArray(c.heard_by) ? c.heard_by : []).find((h) => String(h.address || "").toLowerCase() === this._findAt)?.rssi; return r < 0 ? r : undefined; };
     const finding = !!this._findAt;
     const candidates = (finding ? all.filter((c) => rssiAt(c) != null) : this._showAll ? all : recent.filter((c) => !lonely.has(c)))
       .filter((c) => (this._kind === "all" || c.kind === this._kind) && (!filter || haystack(c).includes(filter)))

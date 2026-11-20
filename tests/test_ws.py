@@ -706,3 +706,17 @@ def test_a_proxy_left_on_older_firmware_is_flagged_behind():
     # A tie goes to the newer version; one version everywhere flags nothing.
     assert [r["firmware_behind"] for r in ws.firmware_behind([{"firmware": "1+ble1 (ESPHome 2026.10.2)"}, {"firmware": "1+ble1 (ESPHome 2026.11.0)"}])] == ["ESPHome 2026.10.2, most run 2026.11.0", None]
     assert ws.firmware_behind([{"firmware": "1+ble1 (ESPHome 2026.11.0)"}])[0]["firmware_behind"] is None
+
+
+def test_firmware_comes_from_the_node_the_scanner_hangs_off(tmp_path):
+    from homeassistant.helpers import device_registry as dr
+    hass = _hass_with_layout(tmp_path)
+    reg = dr.async_get(hass)
+    node = reg.add({("esphome", "n")}, device_id="node")
+    node.sw_version, node.connections, node.via_device_id = "1+ble2026.11.07.10 (ESPHome 2026.11.0)", {("mac", "x")}, None
+    scanner = reg.add({("bluetooth", "s")}, device_id="scan")
+    scanner.sw_version, scanner.connections, scanner.via_device_id = None, {("bluetooth", "AA:BB:CC:DD:EE:01")}, "node"
+    assert ws._firmware_by_address(hass) == {"aa:bb:cc:dd:ee:01": "1+ble2026.11.07.10 (ESPHome 2026.11.0)"}
+    # A malformed version is ignored rather than breaking the whole list.
+    rows = ws.firmware_behind([{"firmware": "1+ble2026..11 (ESPHome 2026.11.0)"}, {"firmware": "1+ble2026.11 (ESPHome 2026.11.0)"}])
+    assert [r["firmware_behind"] for r in rows] == [None, None]
