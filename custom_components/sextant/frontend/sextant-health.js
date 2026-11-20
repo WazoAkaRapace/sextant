@@ -38,6 +38,9 @@ function tuningHelpLine(key, help, def, imperial) {
 }
 
 /** Plain labels for the tuning keys, with a one-line meaning; the key itself is shown under the field. */
+// The settings the room election reads (replay.ROOM_KEYS): the ones a replay can try.
+const REPLAY_KEYS = ["zone_switch_secs", "zone_switch_margin", "zone_prob_smoothing", "stationary_speed", "stationary_secs", "zone_lock_warmup_secs",
+  "zone_unlock_margin", "zone_unlock_secs", "far_move_margin", "far_move_secs", "zone_anchor_inset_m", "habit_margin_gain"];
 const TUNING_LABELS = {
   position_estimator: ["Position estimator", "geometric = trilateration alone; fingerprint = proxy references alone; fused = a blend of both"],
   fingerprint_weight: ["Fingerprint share of the fix", "0 is the trilateration alone, 1 the fingerprint alone"],
@@ -151,6 +154,10 @@ class SextantHealth extends LitElement {
     _kpi: { state: true },
     _accuracy: { state: true },
     _kpiHours: { state: true },
+    _replay: { state: true },
+    _replayKey: { state: true },
+    _replayValue: { state: true },
+    _replayHours: { state: true },
     _baselines: { state: true },
     _baseline: { state: true },
     _baselineName: { state: true },
@@ -170,6 +177,10 @@ class SextantHealth extends LitElement {
     this._advice = recall("advice");
     this._kpi = null;
     this._kpiHours = 12;
+    this._replay = null;
+    this._replayKey = "zone_switch_secs";
+    this._replayValue = "";
+    this._replayHours = 6;
     this._baselines = [];
     this._baseline = "";
     this._baselineName = "";
@@ -263,6 +274,30 @@ class SextantHealth extends LitElement {
     if (r) { this._selftest = { ...r, at: Date.now() }; remember("selftest", r); }
   }
 
+  /** Move a proxy the self-test calls misplaced to where the others hear it.
+   * Reads the stored plan fresh, so nothing saved since this page loaded is
+   * undone; the server keeps the plan it replaces under Edit's History. */
+  async _moveProxy(v) {
+    const name = proxyName(this.data, v.entity);
+    if (!(await confirmAsync(`Move ${name} ${fmtLen(v.error_m, this.hass, 1)} on the plan, to where the other proxies hear it${v.est_room ? ` (${v.est_room})` : ""}?\n\nDo this only if it really is there: a proxy behind a thick wall or inside a metal box can read far away while drawn in the right place. The plan as it is now is kept under History on the Edit page.`, { ok: "Move it" }))) return;
+    this._busy = "selftest";
+    const d = await callWS(this, this.hass, { type: "sextant/layout/get" });
+    const rec = (d?.layout?.floor || []).find((f) => f.name === v.floor)?.receivers?.find((r) => String(r.entity_id) === v.entity);
+    // Moved since the test ran: its answer is about the old place.
+    const stale = rec && (Math.abs(rec.cords?.x - v.known[0]) > 0.06 || Math.abs(rec.cords?.y - v.known[1]) > 0.06);
+    const saved = rec && !stale && (rec.cords = { ...rec.cords, x: v.est[0], y: v.est[1] })
+      && await callWS(this, this.hass, { type: "sextant/layout/save", layout: d.layout });
+    this._busy = null;
+    if (!saved) {
+      if (d && !rec) toast(this, `${name} is no longer on ${v.floor}`);
+      else if (stale) { toast(this, `${name} was moved since this test; running it again`); this._runSelftest(); }
+      return;
+    }
+    toast(this, `${name} moved`);
+    this.dispatchEvent(new CustomEvent("layout-changed"));
+    this._runSelftest();
+  }
+
   async _runKpi() {
     this._busy = "kpi";
     const msg = { type: "sextant/kpi", hours: this._kpiHours };
@@ -270,6 +305,15 @@ class SextantHealth extends LitElement {
     const r = await callWS(this, this.hass, msg);
     this._busy = null;
     if (r) this._kpi = r;
+  }
+
+  async _runReplay() {
+    const value = Number(this._replayValue);
+    if (this._replayValue === "" || !Number.isFinite(value)) { toast(this, "Enter a value to try"); return; }
+    this._busy = "replay";
+    const r = await callWS(this, this.hass, { type: "sextant/replay", tuning: { [this._replayKey]: value }, hours: this._replayHours });
+    this._busy = null;
+    if (r) this._replay = { ...r, key: this._replayKey, value };
   }
 
   async _loadBaselines() {
@@ -328,7 +372,7 @@ class SextantHealth extends LitElement {
       case "calibration":
         return html`<div class="page"><div class="cols">${this._renderCalibration()}</div></div>`;
       case "tuning":
-        return html`<div class="page"><div class="cols">${this._renderKpi()}${this._renderAccuracy()}${this._renderTuning()}${this._renderHistory()}</div></div>`;
+        return html`<div class="page"><div class="cols">${this._renderKpi()}${this._renderAccuracy()}${this._renderReplay()}${this._renderTuning()}${this._renderHistory()}</div></div>`;
       case "advice":
         return html`<div class="page"><div class="cols">${this._renderAdvice()}</div></div>`;
       default:
@@ -576,6 +620,9 @@ class SextantHealth extends LitElement {
           <tr class="grouphead"><td><b>${f.floor}</b></td><td class="num">${count(f)}</td><td class="num">${cell(f.cep50_m)}</td><td class="num">${f.cep95_m != null ? this._accPill(f.cep95_m) : "—"}</td><td>${noSamples.has(f.floor) ? html`<span class="muted small">no calibration samples for this floor yet</span>` : f.worst ? proxyName(this.data, f.worst) : ""}</td></tr>
           ${bd.rooms.filter((r) => r.floor === f.floor).map((r) => html`<tr><td style="padding-left: 22px">${r.room ?? html`<span class="muted">outside any room</span>`}</td><td class="num">${count(r)}</td><td class="num">${cell(r.cep50_m)}</td><td class="num">${r.cep95_m != null ? this._accPill(r.cep95_m) : "—"}</td><td>${r.worst ? proxyName(this.data, r.worst) : ""}</td></tr>`)}`)}
       </table></div>
+      ${solved.filter((v) => v.misplaced).map((v) => html`<div class="row"><span class="pill warn">placement?</span>
+        <span><b>${proxyName(this.data, v.entity)}</b> is drawn in ${v.room ?? v.floor}, but ${v.heard_by} proxies agree it is ${fmtLen(v.error_m, this.hass, 1)} away${v.est_room && v.est_room !== v.room ? html`, in ${v.est_room}` : nothing}. <span class="muted small">Their ranges miss that spot by ${fmtLen(v.fit_m, this.hass, 1)} and the drawn one by ${fmtLen(v.placed_fit_m, this.hass, 1)}.</span></span>
+        ${uiButton({ label: "Move it there", kind: "outline", disabled: !!this._busy, onClick: () => this._moveProxy(v) })}</div>`)}
       <details><summary>Every proxy (${solved.length} solved${unsolved.length ? `, ${unsolved.length} unsolved` : ""})</summary>
         <div class="wrap"><table><tr><th>Proxy</th><th>Room</th><th class="num">Error</th><th class="num">Heard by</th></tr>
           ${[...solved].sort((a, b) => (b.error_m ?? -1) - (a.error_m ?? -1)).map((v) => html`<tr><td>${proxyName(this.data, v.entity)}</td><td class="muted">${v.floor}${v.room ? ` · ${v.room}` : ""}</td><td class="num">${fmtLen(v.error_m, this.hass, 2)}</td><td class="num">${v.heard_by}</td></tr>`)}
@@ -758,6 +805,31 @@ class SextantHealth extends LitElement {
       <div class="row"><input class="tfilter" type="search" placeholder="Filter by key, label or help" aria-label="Filter tuning keys" .value=${this._tfilter} @input=${(e) => { this._tfilter = e.target.value; }}></div>
       ${groups.map(([name, keys]) => shown(keys).length ? html`<h4>${name}</h4><div class="row">${keys.map(field)}</div>` : nothing)}
       <div class="row">${uiButton({ label: "Apply", kind: "primary", onClick: () => this._saveTuning() })}${uiButton({ label: "Restore defaults", kind: "text", onClick: () => this._resetTuning() })}</div>
+    </section>`;
+  }
+
+  /** Try one room setting against the election log before applying it. */
+  _renderReplay() {
+    const spec = this.data?.tuning_spec || {};
+    const keys = REPLAY_KEYS.filter((k) => spec[k]);
+    const r = this._replay;
+    const now = this.data?.layout?.tuning?.[this._replayKey] ?? spec[this._replayKey]?.default;
+    const delta = (a, b) => html`<span class=${a < b ? "good" : a > b ? "bad" : ""}>${a} (${a > b ? "+" : ""}${a - b})</span>`;
+    return html`<section class="card wide">
+      <h3>Try a room setting <span class="muted small">replays the election log, changes nothing</span></h3>
+      <div class="row">
+        ${uiSelect({ label: "Setting", value: this._replayKey, options: keys.map((k) => ({ value: k, label: (TUNING_LABELS[k] || [k])[0] })), onChange: (v) => { this._replayKey = v; this._replay = null; }, style: "min-width: 240px" })}
+        ${uiField({ label: `Value to try (now ${now ?? "default"})`, value: this._replayValue, onChange: (v) => { this._replayValue = v; }, style: "width: 180px" })}
+        ${uiSelect({ label: "Window", value: this._replayHours, options: [1, 3, 6, 12].map((h) => ({ value: h, label: `${h} h` })), onChange: (v) => { this._replayHours = Number(v); }, style: "min-width: 110px" })}
+        ${uiButton({ label: this._busy === "replay" ? "Replaying…" : "Replay", kind: "primary", disabled: !!this._busy, onClick: () => this._runReplay() })}
+      </div>
+      ${r ? html`<div class="wrap"><table>
+        <tr><th></th><th class="num">Room switches</th><th class="num">Bounces</th></tr>
+        <tr><td>As it is now</td><td class="num">${r.base.switches}</td><td class="num">${r.base.bounces}</td></tr>
+        <tr><td><code>${r.key}</code> = ${r.value}</td><td class="num">${delta(r.trial.switches, r.base.switches)}</td><td class="num">${delta(r.trial.bounces, r.base.bounces)}</td></tr>
+        ${Object.entries(r.things_changed || {}).map(([e, v]) => html`<tr><td style="padding-left: 22px" class="muted">${thingName(this.data, e)}</td><td class="num">${delta(v.trial.switches, v.base.switches)}</td><td class="num">${delta(v.trial.bounces, v.base.bounces)}</td></tr>`)}
+      </table></div>
+      <p class="small muted">${r.things} things over ${r.hours} h. A bounce is a switch undone within two minutes. The replay at today's settings matches ${fmtNum((r.base.agree ?? 0) * 100, 0)}% of what was published (${r.logged.switches} switches, ${r.logged.bounces} bounces): it is an estimate, so trust the difference more than the totals${(r.base.agree ?? 0) < 0.85 ? html`, <span class="bad">and not much at this match</span>` : nothing}.</p>` : html`<p class="small muted">Needs the election log: set <code>election_log_hours</code> above 0 under History and display and let it record first.</p>`}
     </section>`;
   }
 

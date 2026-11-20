@@ -26,6 +26,9 @@ from datetime import datetime, timezone
 # update, a reboot. Past it the elections are stale and only the last sighting
 # is kept.
 DEFAULT_MAX_AGE_SECS = 300.0
+# Room sensor clocks (rooms.sensor_problems) carry over a restart this long at most: past it
+# a sensor may have recovered and failed again unseen, and the old clock would raise a false repair.
+SENSOR_CLOCK_MAX_GAP_S = 3600.0
 
 
 # "There is no value here", as distinct from a value of None. A state dict is
@@ -90,7 +93,7 @@ def _vector(value, size):
     return out if len(out) == size else None
 
 
-def snapshot(now, kf=None, zones=None, spots=None, arrivals=None, rows=None, floors=None, visits=None, wifi=None, asked=None):
+def snapshot(now, kf=None, zones=None, spots=None, arrivals=None, rows=None, floors=None, visits=None, wifi=None, asked=None, sensors=None):
     """The state worth keeping, as JSON.
 
     ``rows`` are the published positions (ent, zone, sub_zone, floor, updated,
@@ -143,6 +146,11 @@ def snapshot(now, kf=None, zones=None, spots=None, arrivals=None, rows=None, flo
     # is worth more than a fresh start.
     if isinstance(wifi, dict) and (wifi.get("aps") or wifi.get("matches") or wifi.get("clients")):
         out["wifi"] = _json(wifi)
+    # Since when each room sensor has been missing or unavailable ("bad") or reading on ("on").
+    clocks = {k: {str(e): t for e, t in (sensors.get(k) or {}).items() if _epoch(t) is not None}
+              for k in ("bad", "on")} if isinstance(sensors, dict) else {}
+    if any(clocks.values()):
+        out["sensors"] = clocks
     return out
 
 
@@ -213,7 +221,7 @@ def restore(data, now, max_age=DEFAULT_MAX_AGE_SECS):
     so the Live page can still say where a thing was and when. A snapshot
     from the future (the clock moved) is treated as a long gap.
     """
-    out = {"kf": {}, "zone": {}, "spot": {}, "arrivals": {}, "floors": {}, "last": {}, "visits": {}, "asked": {}, "wifi": None, "age": None}
+    out = {"kf": {}, "zone": {}, "spot": {}, "arrivals": {}, "floors": {}, "last": {}, "visits": {}, "asked": {}, "wifi": None, "sensors": {"bad": {}, "on": {}}, "age": None}
     if not isinstance(data, dict):
         return out
     asked = data.get("asked")
@@ -240,6 +248,11 @@ def restore(data, now, max_age=DEFAULT_MAX_AGE_SECS):
         return out
     age = float(now) - float(saved_at)
     out["age"] = age
+    sensors = data.get("sensors")
+    if isinstance(sensors, dict) and 0 <= age <= SENSOR_CLOCK_MAX_GAP_S:
+        for k in ("bad", "on"):
+            if isinstance(sensors.get(k), dict):
+                out["sensors"][k] = {e: float(t) for e, t in sensors[k].items() if _epoch(t) is not None and t <= now}
     fresh = 0 <= age <= max(0.0, float(max_age))
     for entity, state in things.items():
         if not isinstance(state, dict):

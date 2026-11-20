@@ -282,6 +282,21 @@ def test_selftest_recovers_with_mount_heights():
     assert all(r["error_m"] < 0.5 for r in res["receivers"])
 
 
+def test_selftest_names_the_proxy_drawn_in_the_wrong_place():
+    # Seven proxies really here; the plan has r7 drawn 6 m from where it is.
+    real = [("r1", 0, 0), ("r2", 10 * SCALE, 0), ("r3", 0, 10 * SCALE), ("r4", 10 * SCALE, 10 * SCALE),
+            ("r5", 5 * SCALE, 0), ("r6", 0, 5 * SCALE), ("r7", 5 * SCALE, 5 * SCALE)]
+    drawn = real[:6] + [("r7", 5 * SCALE, 11 * SCALE)]
+    res = sextant.run_selftest(_hass_with(drawn, _exact_samples(real)))
+    flagged = [r for r in res["receivers"] if r.get("misplaced")]
+    assert [r["entity"] for r in flagged] == ["r7"]
+    r7 = flagged[0]
+    assert math.hypot(r7["est"][0] - 5 * SCALE, r7["est"][1] - 5 * SCALE) / SCALE < 1.0
+    assert r7["fit_m"] < r7["placed_fit_m"]
+    # Placed right, nothing is flagged.
+    assert not any(r.get("misplaced") for r in sextant.run_selftest(_hass_with(real, _exact_samples(real)))["receivers"])
+
+
 def test_selftest_unsolved_when_too_few_neighbors():
     recs = SQUARE + [("r5", 200, 200)]           # r5 has no samples at all
     res = sextant.run_selftest(_hass_with(recs, _exact_samples(SQUARE)))

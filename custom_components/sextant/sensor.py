@@ -8,7 +8,7 @@ import logging
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.restore_state import RestoreEntity
 
-from .const import ACCURACY_ENTITY_ID, FIT_ATTRIBUTES, GLOBAL_ENTITY_IDS, PEOPLE_HOME_ENTITY_ID, UNTRACKED_ENTITY_ID  # single source of truth (shared with __init__)
+from .const import ACCURACY_ENTITY_ID, FIT_ATTRIBUTES, GLOBAL_ENTITY_IDS, HOUSEHOLD_FLOOR_ENTITY_ID, PEOPLE_HOME_ENTITY_ID, UNTRACKED_ENTITY_ID  # single source of truth (shared with __init__)
 from . import bermuda_source
 
 _LOGGER = logging.getLogger(__name__)
@@ -70,9 +70,10 @@ def migrate_renamed_sensor_kinds(hass):
 
 
 def find_bermuda_via_device(hass, entity):
-    """Identifier of the Bermuda device that owns this thing's distance_to
-    sensors, so the Sextant device can nest under it (via_device). None when it
-    can't be resolved (e.g. Bermuda not loaded yet) — the Sextant device then just
+    """Registry id of the Bermuda device that owns this thing's distance_to
+    sensors, so the Sextant device can nest under it (via_device_id; the
+    via_device identifier tuple goes in HA 2027.8). None when it can't be
+    resolved (e.g. Bermuda not loaded yet) — the Sextant device then just
     stands on its own.
     """
     ent_reg = er.async_get(hass)
@@ -81,11 +82,8 @@ def find_bermuda_via_device(hass, entity):
     for e in ent_reg.entities.values():
         if e.platform == "bermuda" and e.device_id and e.entity_id.startswith(prefix):
             dev = dev_reg.async_get(e.device_id)
-            if dev and dev.identifiers:
-                # Prefer a bermuda identifier so the link points at the thing
-                # device even if it carries identifiers from several integrations.
-                berm = [i for i in dev.identifiers if i[0] == "bermuda"]
-                return berm[0] if berm else next(iter(dev.identifiers))
+            if dev:
+                return dev.id
     return None
 
 
@@ -317,7 +315,7 @@ class CustomDistanceSensor(SensorEntity, RestoreEntity):
                 model=model or "Tracked thing",
             )
             if via_device:
-                info["via_device"] = via_device
+                info["via_device_id"] = via_device
             self._attr_device_info = info
 
     async def async_added_to_hass(self):
@@ -413,6 +411,21 @@ class SextantPeopleHomeSensor(SensorEntity):
     @property
     def extra_state_attributes(self):
         return self._attrs
+
+
+class SextantHouseholdFloorSensor(SextantPeopleHomeSensor):
+    """The one floor everyone at home is on, else ``mixed``, ``unknown`` or
+    ``away`` (rooms.household_floor): "everyone has gone upstairs"."""
+
+    _attr_state_class = None
+    _attr_icon = "mdi:home-floor-a"
+
+    def __init__(self):
+        super().__init__()
+        self._attr_name = "Household Floor"
+        self._attr_unique_id = "sextant_household_floor"
+        self.entity_id = HOUSEHOLD_FLOOR_ENTITY_ID
+        self._attrs = {"floors": {}, "unplaced": []}
 
 
 class SextantAccuracySensor(SensorEntity):
@@ -677,6 +690,10 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         people_home = SextantPeopleHomeSensor()
         hass.data["sextant_sensors"][PEOPLE_HOME_ENTITY_ID] = people_home
         new_sensors.append(people_home)
+    if HOUSEHOLD_FLOOR_ENTITY_ID not in hass.data["sextant_sensors"]:
+        household = SextantHouseholdFloorSensor()
+        hass.data["sextant_sensors"][HOUSEHOLD_FLOOR_ENTITY_ID] = household
+        new_sensors.append(household)
     for entity in entities:
         ensure_sensors_for_entity(hass, entity, hass.data["sextant_sensors"], new_sensors)
 

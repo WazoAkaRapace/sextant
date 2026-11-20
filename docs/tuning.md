@@ -31,6 +31,17 @@ the value itself is always metres. Apply stores only the values that
 differ from their defaults. Position history retention (off, one hour to seven
 days) and **Clear history** live here too.
 
+**Try a room setting** answers "what would this have done" before you apply
+it. Pick one of the room election's settings, a value and a window, and
+Sextant replays the election log twice, once with the settings as they are
+and once with yours, and shows the room switches and bounces (a switch
+undone within two minutes) for each, with the things that change most. It
+changes nothing. It needs `election_log_hours` above 0 and some hours
+recorded. The replay is an estimate (the log does not hold the filter's
+uncertainty or a floor challenge in progress), so the card says how much of
+what was actually published the replay reproduces at today's settings;
+trust the difference between the two rows more than the totals.
+
 ## Tuning reference
 
 Set from the Tuning page or `sextant.set_tuning`. Stored with the layout;

@@ -78,7 +78,7 @@ from .storage import (
     migrate_legacy,
     save_layout,
 )
-from .const import ACCURACY_ENTITY_ID, PEOPLE_HOME_ENTITY_ID, UNTRACKED_ENTITY_ID
+from .const import ACCURACY_ENTITY_ID, HOUSEHOLD_FLOOR_ENTITY_ID, PEOPLE_HOME_ENTITY_ID, UNTRACKED_ENTITY_ID
 from . import history as history_mod
 from . import habits as habits_mod
 from . import bermuda_source
@@ -4475,6 +4475,7 @@ def _update_dead_issues(hass, layout):
 
 SENSOR_ISSUE_PREFIX = "room_sensor_"
 _sensor_bad_since: dict = {}   # entity id -> when it was first seen missing or unavailable
+_sensor_on_since: dict = {}    # binary sensor -> when it turned on; both are kept over a restart
 _SENSOR_TEXT = {"missing": "does not exist in Home Assistant", "gone": "has been unavailable for {age}",
                 "stuck": "has read on for {age}, which keeps the room occupied"}
 
@@ -4482,7 +4483,7 @@ _SENSOR_TEXT = {"missing": "does not exist in Home Assistant", "gone": "has been
 def _update_sensor_issues(hass, layout):
     """One repair per broken room sensor, under a stable id; gone as soon as it reads normally or leaves the room."""
     found = rooms_mod.sensor_problems(hass.data.get("sextant_room_keys") or [], hass.states.get, time.time(),
-                                      _tuning(layout, "sensor_stuck_secs"), _tuning(layout, "sensor_gone_secs"), _sensor_bad_since)
+                                      _tuning(layout, "sensor_stuck_secs"), _tuning(layout, "sensor_gone_secs"), _sensor_bad_since, _sensor_on_since)
     for ent, p in found.items():
         ir.async_create_issue(
             hass, DOMAIN, SENSOR_ISSUE_PREFIX + ent.replace(".", "__"), is_fixable=False, severity=ir.IssueSeverity.WARNING,
@@ -4515,6 +4516,8 @@ async def _restore_runtime(hass):
         return
     back = runtime_mod.restore(data, time.time(), _tuning(layout, "restore_state_secs"))
     _last_seen.update(back["last"])
+    _sensor_bad_since.update(back["sensors"]["bad"])
+    _sensor_on_since.update({e: [t, None] for e, t in back["sensors"]["on"].items()})
     global _restored_at
     _restored_at = time.time() if back["last"] else 0.0
     _seed_last_seen_from_history(hass)
@@ -4684,7 +4687,7 @@ async def _save_runtime(hass, final=False):
         rows = _rows_with_last_seen(rows, _last_seen)
         data = runtime_mod.snapshot(time.time(), kf=_kf_position_state, zones=_zone_state,
                                     spots=_subzone_state, arrivals=_arrivals, rows=rows, visits=_person_visits, asked=_gps_asked, wifi=_wifi_store,
-                                    floors=_floor_elections())
+                                    floors=_floor_elections(), sensors={"bad": _sensor_bad_since, "on": {e: v[0] for e, v in _sensor_on_since.items()}})
         await save_runtime(hass, data)
     except Exception as e:  # noqa: BLE001
         _LOGGER.warning("Could not save the runtime state: %s", e)
@@ -5440,6 +5443,7 @@ def _update_room_sensors(hass):
     classes = layout.get("thing_classes") or {}
     owners = layout.get("thing_owners") or {}
     person_rooms, presences, pet_persons, speaking = {}, {}, set(), set()
+    person_floors = {}
     for person, things in persons_mod.owners(layout).items():
         slug = person.split(".", 1)[1]
         st = hass.states.get(f"sensor.{slug}_sextant_person_location") or hass.states.get(f"sensor.{slug}_sextant_pet_location")
@@ -5457,8 +5461,10 @@ def _update_room_sensors(hass):
             continue
         room, floor = st.attributes.get("room"), st.attributes.get("floor")
         # Outside keeps the floor but is no room, even one that happens to be called "Outside".
-        if presences[name] in rooms_mod.COUNTED and room and room != "unknown" and floor and floor != "unknown" and st.attributes.get("kind") != "outside":
-            person_rooms[name] = (floor, room)
+        if presences[name] in rooms_mod.COUNTED and floor and floor != "unknown" and st.attributes.get("kind") != "outside":
+            person_floors[name] = floor   # a floor alone is enough here: Wi-Fi gives one with no room
+            if room and room != "unknown":
+                person_rooms[name] = (floor, room)
     names = _thing_names(hass, {r.get("ent") for r in rows if r.get("ent")}, layout)
     counts = rooms_mod.stands_for_someone(owners, speaking, lambda ent: persons_mod.locates_owner(layout, ent, classes.get(ent)))
     hass.data["sextant_room_answers"] = rooms_mod.occupancy(keys, rows, presence_of, classes, names, person_rooms, stands_for_someone=counts)
@@ -5466,6 +5472,8 @@ def _update_room_sensors(hass):
     # Nobody owning anything publishes 0 and empty lists, not the last count.
     count, attrs = rooms_mod.people_home(presences, pet_persons)
     update_sextant_sensor_state(hass, PEOPLE_HOME_ENTITY_ID, count, attrs)
+    update_sextant_sensor_state(hass, HOUSEHOLD_FLOOR_ENTITY_ID, *rooms_mod.household_floor(
+        attrs["home"], person_floors))
 
 
 def _restoring(sensor, sensed, now):
@@ -7547,6 +7555,12 @@ async def async_setup(hass, config):
 
     return True
 
+async def async_remove_config_entry_device(hass: HomeAssistant, entry, device_entry):
+    """Let an empty Sextant device be deleted from the UI; one that still has
+    entities belongs to something tracked and is refused."""
+    return not any(e.device_id == device_entry.id for e in er.async_get(hass).entities.values())
+
+
 async def async_unload_entry(hass: HomeAssistant, entry):
     """Remove a configuration entry"""
     _LOGGER.info("Attempting to offload platforms for entry: %s", entry.entry_id)
@@ -7576,6 +7590,7 @@ async def async_unload_entry(hass: HomeAssistant, entry):
         if domain == DOMAIN and issue_id.startswith(SENSOR_ISSUE_PREFIX):
             ir.async_delete_issue(hass, DOMAIN, issue_id)
     _sensor_bad_since.clear()
+    _sensor_on_since.clear()
 
     # Get whatever the tracking loop buffered since the last 60 s flush onto
     # disk before the task goes away. The in-memory ring survives an unload
@@ -8236,6 +8251,21 @@ def _room_at(rooms, x, y):
     return None
 
 
+# A proxy the self-test calls misplaced: located at least this far from its
+# placement, by at least this many proxies, whose ranges miss the located spot
+# by no more than MISPLACED_MAX_FIT_M (median) and by under MISPLACED_FIT_RATIO
+# of what they miss the placement by.
+MISPLACED_MIN_ERROR_M = 3.0
+MISPLACED_MIN_HEARERS = 5
+MISPLACED_MAX_FIT_M = 2.0
+MISPLACED_FIT_RATIO = 0.5
+
+
+def _range_misfit_m(pts, x, y, scale):
+    """Median of how far each proxy's projected range misses the point (m)."""
+    return float(np.median([abs(math.hypot(px - x, py - y) - pr) for px, py, pr, _slant in pts])) / scale
+
+
 def run_selftest(hass, samples=None, corrections=None, floors=None):
     """Leave-one-out receiver self-localization accuracy against known positions.
 
@@ -8309,13 +8339,24 @@ def run_selftest(hass, samples=None, corrections=None, floors=None):
             unsolved.append({"entity": slug, "floor": tgt["floor"], "room": room, "heard_by": len(pts), "reason": "no convergence"})
             continue
         err_px = math.hypot(fix[0] - tgt["x"], fix[1] - tgt["y"])
-        solved.append({
+        error_m = err_px / tgt["scale"]
+        fit_m, placed_fit_m = (_range_misfit_m(pts, x, y, tgt["scale"]) for x, y in ((fix[0], fix[1]), (tgt["x"], tgt["y"])))
+        row = {
             "entity": slug, "floor": tgt["floor"], "room": room,
             "known": [round(tgt["x"], 1), round(tgt["y"], 1)],
             "est": [round(float(fix[0]), 1), round(float(fix[1]), 1)],
-            "error_m": round(err_px / tgt["scale"], 3),
+            "error_m": round(error_m, 3),
             "heard_by": len(pts),
-        })
+            "fit_m": round(fit_m, 2), "placed_fit_m": round(placed_fit_m, 2),
+        }
+        # Probably drawn in the wrong place, not just ranged badly: enough
+        # proxies hear it, they agree with each other on a spot well away from
+        # the placement, and their ranges fit that spot far better.
+        if (error_m >= MISPLACED_MIN_ERROR_M and len(pts) >= MISPLACED_MIN_HEARERS
+                and fit_m <= MISPLACED_MAX_FIT_M and fit_m <= MISPLACED_FIT_RATIO * placed_fit_m):
+            row["misplaced"] = True
+            row["est_room"] = _room_at(rooms.get(tgt["floor"]), float(fix[0]), float(fix[1]))
+        solved.append(row)
     return {
         "receivers": solved,
         "unsolved": unsolved,

@@ -14,6 +14,7 @@ message is meant to be shown to the user as is.
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import math
@@ -1273,6 +1274,51 @@ async def _compute_kpi(hass, hours):
     }
 
 
+# An hour of log is some 10,000 rows held in memory, so the window is capped and one replay runs at a time.
+REPLAY_MAX_HOURS = 12
+_replay_running = False
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "sextant/replay",
+    vol.Required("tuning"): dict,
+    vol.Optional("hours", default=6.0): vol.All(vol.Coerce(float), vol.Range(min=0.5, max=REPLAY_MAX_HOURS)),
+})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_replay(hass, connection, msg):
+    """What other room tuning would have done over the election log (replay.compare)."""
+    from . import election_log, replay  # noqa: PLC0415
+
+    core = _core()
+    layout = get_layout(hass)
+    if not isinstance(layout, dict) or not layout.get("floor"):
+        return _error(connection, msg, "No floor plan yet")
+    unknown = sorted(k for k in msg["tuning"] if k not in replay.ROOM_KEYS)
+    if unknown:
+        return _error(connection, msg, f"Only the room election can be replayed, not {', '.join(unknown)}")
+    # An out-of-range value would be replayed as the default while the page showed the value asked for.
+    bad = sorted(k for k, v in msg["tuning"].items() if core._coerce_tuning(k, v) is None)
+    if bad:
+        return _error(connection, msg, "Out of range: " + ", ".join(f"{k} takes {core.TUNING_SPEC[k][2]:g} to {core.TUNING_SPEC[k][3]:g}" for k in bad))
+    global _replay_running
+    if _replay_running:
+        return _error(connection, msg, "A replay is already running")
+    habits = copy.deepcopy(core._habits)   # here on the loop, where they are learned
+
+    def work():
+        return replay.compare(core, layout, replay.load_rows(election_log.get(hass).dirpath, msg["hours"]), msg["tuning"], habits)
+
+    _replay_running = True
+    try:
+        out = await hass.async_add_executor_job(work)
+    finally:
+        _replay_running = False
+    if not out.get("rows"):
+        return _error(connection, msg, "The election log has nothing for that window: set election_log_hours above 0 and let it record")
+    connection.send_result(msg["id"], out)
+
+
 @websocket_api.websocket_command({
     vol.Required("type"): "sextant/kpi",
     vol.Optional("hours", default=12.0): vol.Coerce(float),
@@ -2153,7 +2199,7 @@ COMMANDS = (
     ws_radar_devices, ws_radar_targets,
     ws_layout_get, ws_layout_save, ws_tuning_set, ws_thing_tune,
     ws_history_index, ws_history_get, ws_history_timeline, ws_history_clear, ws_thing_readings, ws_floor_bias_map,
-    ws_calibration_status, ws_calibration_action, ws_selftest, ws_scanner_linking, ws_receivers, ws_beacon_links,
+    ws_calibration_status, ws_calibration_action, ws_selftest, ws_replay, ws_scanner_linking, ws_receivers, ws_beacon_links,
     ws_proxy_info,
     ws_adjust_zones, ws_registration, ws_scanner_ignore, ws_kpi, ws_kpi_baselines, ws_kpi_baseline_save, ws_kpi_baseline_delete,
     ws_truth_mark, ws_truth_list, ws_truth_delete, ws_truth_evaluate, ws_truth_apply,
