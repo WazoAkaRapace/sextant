@@ -103,7 +103,11 @@ field, so a stroke can be graded against what really happened before it
 ships.
 `election_log_hours` on the Tuning page keeps those cycles on disk, and
 `tools/replay_floors.py` replays the whole election - margin, dwell,
-proximity weight - over them (see [Tuning](tuning.md)).
+proximity weight - over them (see [Tuning](tuning.md)). While it records,
+each floor's entry also carries `cross`: the fix that floor would have
+had with the other floors' proxies helping (their plan positions carried
+through the pins, the slant shortened by the storey between them, half
+weight, 6 m at most). It is logged only; nothing is placed by it yet.
 
 **Rooms.** Membership, not a point test: samples on the filter's error
 ellipse are attributed to rooms and the shares smoothed. The current room

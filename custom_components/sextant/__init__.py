@@ -461,6 +461,11 @@ MIN_WEIGHT_RADIUS_M = 0.5
 # smoothed per-floor probability, and the elected floor only changes when a
 # challenger clearly and persistently outscores the incumbent.
 FLOOR_CANDIDATES = 3         # solve at most this many floors per cycle
+# Cross-floor shadow fix (logged only, see _cross_floor_points): a slant longer
+# than this through a slab says little, and a borrowed reading counts for half
+# because the slab's own loss is not corrected yet.
+CROSS_FLOOR_MAX_M = 6.0
+CROSS_FLOOR_WEIGHT = 0.5
 # A floor with fewer than three receivers is placed by its fingerprint alone
 # only when the nearest reads within this (m). The same 3 m as
 # outside_faint_m: inside, a thing's nearest proxy read 0.25-1.5 m.
@@ -2886,6 +2891,13 @@ async def update_trilateration_and_zone(hass, new_global_data, entity):
         results = await hass.async_add_executor_job(_solve_floor_jobs, jobs)
     else:
         results = []
+    # Shadow only, and only while the election log records: what each floor's
+    # fix would be with the other floors' proxies helping. Nothing reads it.
+    shadows = {}
+    if results and _tuning(layout, "election_log_hours") > 0:
+        borrowed = _cross_floor_points(layout, _floor_frames(hass, layout), to_solve, _thing_height(layout, entity))
+        if borrowed:
+            shadows = await hass.async_add_executor_job(_solve_cross_floor, jobs, results, borrowed)
     for job, outcome in zip(jobs, results, strict=False):
         if outcome is None:
             continue  # this floor's readings don't converge; not a contender
@@ -2990,6 +3002,8 @@ async def update_trilateration_and_zone(hass, new_global_data, entity):
             # catwalk went from eight receivers to three and the floor below
             # won on what was left, and no telemetry said so.
             "heard": [[name, metres] for name, metres in (solved[f].get("heard") or [])],
+            # The shadow fix with the other floors' proxies borrowed (logged only).
+            **({"cross": shadows[f]} if f in shadows else {}),
         }
         for f in scores
     }
@@ -5693,6 +5707,68 @@ def extract_candidate_floors(new_global_data, tmpentity):
                 })
     candidates.sort(key=lambda c: c["nearest_m"])  # stable: file order breaks ties
     return candidates
+
+
+def _cross_floor_points(layout, frames, candidates, thing_h):
+    """Each candidate floor's neighbours' readings, as solver points on its own plan.
+
+    A ceiling light in the basement is nearer a cat on the ground floor than
+    most of the ground floor's own proxies. Its plan position goes through
+    the house frame (registration.py) onto the other floor's plan, and the
+    slant loses its vertical leg: the two floors' elevations plus the mount
+    height against the thing's. Returns ``{floor: (points, heard)}`` for the
+    registered floors that have anything to borrow.
+    """
+    floors = {f.get("name"): f for f in (layout or {}).get("floor", []) if isinstance(f, dict)}
+    out = {}
+    for cand in candidates:
+        home = frames.get(cand["name"])
+        if not home or not home.get("ok"):
+            continue
+        points, heard = [], []
+        for other in candidates:
+            frame = frames.get(other["name"])
+            if other is cand or not frame or not frame.get("ok"):
+                continue
+            placed = {r.get("entity_id"): r for r in floors.get(other["name"], {}).get("receivers", []) if _placed(r)}
+            for slug, metres in other.get("heard") or ():
+                rx = placed.get(slug)
+                if rx is None or not 0 < metres <= CROSS_FLOOR_MAX_M:
+                    continue
+                x, y = registration.from_house(home, *registration.to_house(frame, rx["cords"]["x"], rx["cords"]["y"]))
+                height = rx.get("height")
+                if not isinstance(height, (int, float)) or isinstance(height, bool) or not 0 <= height <= 10:
+                    height = thing_h  # no mount height: only the storeys separate them
+                dz = frame["elevation"] + height - home["elevation"] - thing_h
+                horizontal = math.sqrt(max(metres * metres - dz * dz, MIN_WEIGHT_RADIUS_M ** 2))
+                points.append((x, y, horizontal * home["scale"], CROSS_FLOOR_WEIGHT, metres * home["scale"]))
+                heard.append([slug, round(horizontal, 2)])
+        if points:
+            out[cand["name"]] = (points, heard)
+    return out
+
+
+def _solve_cross_floor(jobs, results, borrowed):
+    """The shadow fix per solved floor: its own points plus the borrowed ones.
+
+    Pure CPU, executor-safe. ``{floor: {"fix", "rms_m", "heard"}}``, the
+    rms over every point so it reads against the floor's own ``rms_m``.
+    """
+    out = {}
+    for job, outcome in zip(jobs, results, strict=False):
+        points, heard = borrowed.get(job["floor"]) or ((), ())
+        if outcome is None or not points or len(job["weighted"]) < 3:
+            continue
+        every = list(job["weighted"]) + list(points)
+        fix = trilaterate(every, bounds=job["bounds"], min_weight_radius=job["min_wr"], stable_hint=job["stable_hint"])
+        if fix is None:
+            continue
+        out[job["floor"]] = {
+            "fix": [round(float(fix[0]), 1), round(float(fix[1]), 1)],
+            "rms_m": round(_score_floor_fit(fix, every, job["scale"])[1], 3),
+            "heard": heard,
+        }
+    return out
 
 
 def _score_floor_fit(fix, weighted, scale):
