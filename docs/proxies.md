@@ -6,8 +6,11 @@
 
 Every placed proxy grouped by floor and room, with a count per group of
 online, quiet (no reading for two minutes), offline and unmatched (placed
-but no scanner by that name or address). Each row shows the last time it
-heard anything, its calibration correction and its height. A second card
+but no scanner by that name or address). A proxy is **behind** when its
+ESPHome or ble-proxy version is older than the one most proxies run: an
+update that failed or never reached it. Only ble-proxy builds are compared;
+wall tablets and vendor firmware keep their own versions. Each row shows its firmware, the
+last time it heard anything, its calibration correction and its height. A second card
 lists what each proxy hears right now, so a proxy that is up but not
 scanning stands out.
 
