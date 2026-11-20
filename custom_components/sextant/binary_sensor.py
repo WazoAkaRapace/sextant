@@ -2,7 +2,7 @@
 
 ``binary_sensor.<room>_sextant_occupancy`` is ``on`` while Sextant places any
 tracked thing in the room; its attributes name the people, pets and things.
-Each sensor sits on its own ``<Room> (Sextant)`` device, which is put in the
+Each sensor sits on its own ``<Room>`` device, which is put in the
 room's linked Home Assistant area when the device is first created (and
 left alone after that, so moving it in HA sticks).
 """
@@ -51,7 +51,7 @@ class SextantRoomOccupancy(BinarySensorEntity, RestoreEntity):
         self._attr_extra_state_attributes = {"room": key[1], "floor": key[0], "count": 0, "people": [], "pets": [], "things": []}
         self._attr_device_info = DeviceInfo(
             identifiers={("sextant", f"room_{ids['unique_id'][len(UNIQUE_PREFIX):]}")},
-            name=f"{key[1]} (Sextant)", manufacturer="Sextant", model="Room",
+            name=key[1], manufacturer="Sextant", model="Room",
         )
 
     async def async_added_to_hass(self):
@@ -120,10 +120,10 @@ def ensure_aggregate_sensors(hass, layout):
     add_entities = hass.data.get("sextant_room_add")
     if cache is None or add_entities is None:
         return
-    wanted = {("house", None): (HOUSE_ID, "Sextant House"), ("house_people", None): (people_aggregate_ids(HOUSE_ID), "Sextant House")}
+    wanted = {("house", None): (HOUSE_ID, "House"), ("house_people", None): (people_aggregate_ids(HOUSE_ID), "House")}
     for floor, ids in floor_ids(room_keys(layout)).items():
-        wanted[("floor", floor)] = (ids, f"{floor} (Sextant)")
-        wanted[("floor_people", floor)] = (people_aggregate_ids(ids), f"{floor} (Sextant)")
+        wanted[("floor", floor)] = (ids, floor)
+        wanted[("floor_people", floor)] = (people_aggregate_ids(ids), floor)
     new = []
     for key, (ids, device) in wanted.items():
         if key not in cache:

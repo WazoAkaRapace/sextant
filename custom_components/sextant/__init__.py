@@ -2324,6 +2324,8 @@ def _build_device_availability(hass):
     slug_to_device = {}
     ambiguous = set()
     for d in _iter_registry_devices(dev_reg):
+        if any(i[0] == DOMAIN for i in (getattr(d, "identifiers", None) or ())):
+            continue  # Sextant's own room/floor/thing devices share proxy-like names ("Kitchen") and are never a proxy
         name = d.name_by_user or d.name
         if not name:
             continue

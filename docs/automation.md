@@ -2,7 +2,7 @@
 
 # Sensors, card, services and API
 
-Each tracked device gets five sensors under its own `<device> (Sextant)`
+Each tracked device gets five sensors under its own `<device>`
 device, nested beneath its Bermuda device:
 
 | Sensor | State |
@@ -194,7 +194,7 @@ sensor:
 | `held` | `true` while the room is `on` only because its hold has not run out since the radar lost everyone |
 | `room`, `floor`, `area_id`, `floor_id` | the room, its floor, and the linked Home Assistant area and floor |
 
-The sensor sits on a `<Room> (Sextant)` device that is put in the room's
+The sensor sits on a `<Room>` device that is put in the room's
 linked area when it is first created, and left wherever you move it
 afterwards. Two floors with a room of the same name get the floor in the
 entity id (`binary_sensor.second_floor_office_sextant_occupancy`).

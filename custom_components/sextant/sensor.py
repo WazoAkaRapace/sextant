@@ -128,7 +128,7 @@ def thing_of_unique_id(unique_id):
 
 
 def _sextant_device(hass, dev_reg, thing):
-    """The ``<thing> (Sextant)`` device, looked up the way the running core wants.
+    """The ``<thing>`` device, looked up the way the running core wants.
 
     2026.9 deprecates async_get_device(identifiers=...) in favour of the
     per-config-entry lookup; older cores only have the former.
@@ -146,7 +146,7 @@ def _sextant_device(hass, dev_reg, thing):
 
 
 def _remove_sextant_device(hass, thing):
-    """Drop the ``<thing> (Sextant)`` device once none of its entities remain."""
+    """Drop the ``<thing>`` device once none of its entities remain."""
     dev_reg = dr.async_get(hass)
     device = _sextant_device(hass, dev_reg, thing)
     if device is None:
@@ -311,8 +311,7 @@ class CustomDistanceSensor(SensorEntity, RestoreEntity):
             info = DeviceInfo(
                 identifiers={("sextant", device_key)},
                 # A person is only Sextant's: just their name, so HA shows "David Coulson Room".
-                # A thing keeps "(Sextant)" to tell it from its Bermuda device.
-                name=device_name if device_key.startswith("person_") and device_name else f"{device_name or device_key} (Sextant)",
+                name=device_name or device_key,
                 manufacturer="Sextant",
                 model=model or "Tracked thing",
             )

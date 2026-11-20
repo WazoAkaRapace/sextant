@@ -138,7 +138,7 @@ def _thing_names(hass, entities, layout=None) -> dict:
         ent_reg, dev_reg = er.async_get(hass), dr.async_get(hass)
         for ent in entities:
             # Only a name the user typed counts here: the registry's own name
-            # is Sextant's "<slug> (Sextant)" device or Bermuda's, which the
+            # is Sextant's "<slug>" device or Bermuda's, which the
             # tracked list already gave us in a nicer form.
             for entity_id in (f"sensor.{ent}_sextant_room", f"sensor.{ent}_area", f"device_tracker.{ent}"):
                 entry = ent_reg.async_get(entity_id)
