@@ -65,6 +65,14 @@ grows with the incumbent's tenure. All the smoothing here (floors, rooms,
 spots) and the hold timers are per second of wall clock, tuned at the 15 s
 cycle, so a faster refresh gives more fixes rather than jumpier ones.
 
+A proxy mounted between storeys - a basement ceiling light a foot and a half
+under the floor above - hears the room overhead about as well as its own. Turn
+off *Use for floor choice* in its panel on the Edit page and it still helps
+place things on its own floor, but it no longer counts toward which floor wins:
+it is left out of the proximity term, of the nearest-proxy test that decides
+which floors are solved at all, and of the fit score's corroboration. A
+floor whose proxies are all position-only is scored on them anyway.
+
 **Bias fields.** A floor's `bias` is one prior for the whole plan, and a
 house is not uniform. Over a slab the floor below is attenuated and the
 election has an easy time. Beside a void — a catwalk over a foyer, a gallery

@@ -2565,3 +2565,24 @@ def test_an_anchor_moves_the_room_at_once_even_through_a_lock():
     assert elect(405, 62.5, anchored=True)[0] == "Kitchen"              # a proxy on the wall: no say
     assert elect(450, 63.0, anchored=True, filtered=50)[:2] == ("Office", False)  # the proxy's room, though the filter lags in the Kitchen
     assert elect(450, 64.0)[0] == "Office"                              # anchor gone: the shares carry it
+
+
+def test_a_position_only_proxy_does_not_vote_for_its_floor():
+    """floor_vote: false keeps the proxy in its floor's fix but out of proximity and fit score."""
+    floor = {"name": "Basement", "scale": SCALE, "receivers": []}
+    for i, d in enumerate([0.8, 3.0, 4.0, 5.0]):
+        floor["receivers"].append({"entity_id": f"r{i}", "cords": {"x": i * 100.0, "y": 0.0, "r": d * SCALE},
+                                   "distance": d, **({"floor_vote": False} if i == 0 else {})})
+    layout = {"floor": [floor], "tuning": {"floor_proximity_k": 1}}
+    (cand,) = sextant.extract_candidate_floors([{"entity": "e", "data": layout}], "e")
+    assert len(cand["cords"]) == 4                       # still in the x/y solve
+    assert cand["near_k_m"] == 3.0                       # proximity skips the 0.8 m ceiling light
+    assert cand["no_vote"] == {"r0"} and cand["nearest_m"] == 3.0
+    weighted = [(p[0], p[1], p[2], 1.0, p[3]) for p in cand["cords"]]
+    job = {"weighted": weighted, "bounds": None, "min_wr": 1e-3, "stable_hint": None, "scale": SCALE,
+           "zone_polys": [], "fingerprint": None, "no_vote": cand["no_vote"], "heard": cand["heard"]}
+    voted = sextant._solve_floor_jobs([job])[0]
+    everyone = sextant._solve_floor_jobs([{**job, "no_vote": set()}])[0]
+    assert voted[0] == everyone[0]                       # same fix
+    assert voted[1] < everyone[1]                        # less corroboration for the floor
+    assert voted[2] == everyone[2]                       # rms_m is still the whole solve's
