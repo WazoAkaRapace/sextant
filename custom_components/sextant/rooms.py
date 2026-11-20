@@ -120,7 +120,7 @@ def inputs_on(inputs, get_state) -> list[str]:
     return [e for e in inputs or [] if _input_on(e, get_state(spec_entity(e)))]
 
 
-def sensor_problems(keys, get, now, stuck_s, gone_s, bad_since=None) -> dict[str, dict]:
+def sensor_problems(keys, get, now, stuck_s, gone_s, bad_since=None, on_since=None) -> dict[str, dict]:
     """Room sensors (inputs and doors) that look broken, by entity id: ``{"kind", "age", "rooms"}``.
 
     ``missing``: no such entity for ``gone_s``. ``gone``: unavailable or unknown (either, in
@@ -128,10 +128,13 @@ def sensor_problems(keys, get, now, stuck_s, gone_s, bad_since=None) -> dict[str
     keeps its room occupied, so a motion sensor with a dead battery or a wedged mmWave shows here.
     Numbers (they change all the time), media players and trackers (a person can be home for
     days) are never called stuck. ``get(entity_id)`` gives a state object or None; ``bad_since``
-    (kept by the caller between calls) times how long each has been missing or unavailable.
-    shortcut: last_changed and ``bad_since`` restart with Home Assistant, so a restart resets the clocks; fine for hours-long limits.
+    (kept by the caller between calls) times how long each has been missing or unavailable, and
+    ``on_since`` when each binary sensor turned on: last_changed starts again with Home Assistant,
+    so the caller saves both over a restart and the earlier time wins.
     """
     bad_since = {} if bad_since is None else bad_since
+    on_since = {} if on_since is None else on_since
+    seen_on = set()
     out: dict[str, dict] = {}
     seen_bad = set()
     for key in keys:
@@ -144,12 +147,16 @@ def sensor_problems(keys, get, now, stuck_s, gone_s, bad_since=None) -> dict[str
                 continue   # a TV that is switched off reads unavailable: normal, not broken
             if st is None or str(st.state).lower() in ("unavailable", "unknown"):
                 seen_bad.add(ent)
+                seen_on.add(ent)   # its on clock waits: every sensor reads unavailable while Home Assistant starts
                 since = bad_since.setdefault(ent, now)
                 age = now - since if st is None else max(now - since, now - st.last_changed.timestamp())
                 if age >= gone_s:
                     found = {"kind": "missing" if st is None else "gone", "age": max(0.0, age)}
             elif ent.startswith("binary_sensor.") and spec == ent and ent != key.get("door") and str(st.state).lower() == "on":
-                age = max(0.0, now - st.last_changed.timestamp())
+                seen_on.add(ent)
+                changed = st.last_changed.timestamp()
+                on_since[ent] = min(changed, on_since.get(ent, changed))
+                age = max(0.0, now - on_since[ent])
                 if age >= stuck_s:
                     found = {"kind": "stuck", "age": age}
             if found:
@@ -158,6 +165,8 @@ def sensor_problems(keys, get, now, stuck_s, gone_s, bad_since=None) -> dict[str
                     rooms.append(room)
     for ent in set(bad_since) - seen_bad:
         del bad_since[ent]
+    for ent in set(on_since) - seen_on:
+        del on_since[ent]
     return out
 
 

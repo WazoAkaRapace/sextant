@@ -4475,6 +4475,7 @@ def _update_dead_issues(hass, layout):
 
 SENSOR_ISSUE_PREFIX = "room_sensor_"
 _sensor_bad_since: dict = {}   # entity id -> when it was first seen missing or unavailable
+_sensor_on_since: dict = {}    # binary sensor -> when it turned on; both are kept over a restart
 _SENSOR_TEXT = {"missing": "does not exist in Home Assistant", "gone": "has been unavailable for {age}",
                 "stuck": "has read on for {age}, which keeps the room occupied"}
 
@@ -4482,7 +4483,7 @@ _SENSOR_TEXT = {"missing": "does not exist in Home Assistant", "gone": "has been
 def _update_sensor_issues(hass, layout):
     """One repair per broken room sensor, under a stable id; gone as soon as it reads normally or leaves the room."""
     found = rooms_mod.sensor_problems(hass.data.get("sextant_room_keys") or [], hass.states.get, time.time(),
-                                      _tuning(layout, "sensor_stuck_secs"), _tuning(layout, "sensor_gone_secs"), _sensor_bad_since)
+                                      _tuning(layout, "sensor_stuck_secs"), _tuning(layout, "sensor_gone_secs"), _sensor_bad_since, _sensor_on_since)
     for ent, p in found.items():
         ir.async_create_issue(
             hass, DOMAIN, SENSOR_ISSUE_PREFIX + ent.replace(".", "__"), is_fixable=False, severity=ir.IssueSeverity.WARNING,
@@ -4515,6 +4516,8 @@ async def _restore_runtime(hass):
         return
     back = runtime_mod.restore(data, time.time(), _tuning(layout, "restore_state_secs"))
     _last_seen.update(back["last"])
+    _sensor_bad_since.update(back["sensors"]["bad"])
+    _sensor_on_since.update(back["sensors"]["on"])
     global _restored_at
     _restored_at = time.time() if back["last"] else 0.0
     _seed_last_seen_from_history(hass)
@@ -4684,7 +4687,7 @@ async def _save_runtime(hass, final=False):
         rows = _rows_with_last_seen(rows, _last_seen)
         data = runtime_mod.snapshot(time.time(), kf=_kf_position_state, zones=_zone_state,
                                     spots=_subzone_state, arrivals=_arrivals, rows=rows, visits=_person_visits, asked=_gps_asked, wifi=_wifi_store,
-                                    floors=_floor_elections())
+                                    floors=_floor_elections(), sensors={"bad": _sensor_bad_since, "on": _sensor_on_since})
         await save_runtime(hass, data)
     except Exception as e:  # noqa: BLE001
         _LOGGER.warning("Could not save the runtime state: %s", e)
@@ -7584,6 +7587,7 @@ async def async_unload_entry(hass: HomeAssistant, entry):
         if domain == DOMAIN and issue_id.startswith(SENSOR_ISSUE_PREFIX):
             ir.async_delete_issue(hass, DOMAIN, issue_id)
     _sensor_bad_since.clear()
+    _sensor_on_since.clear()
 
     # Get whatever the tracking loop buffered since the last 60 s flush onto
     # disk before the task goes away. The in-memory ring survives an unload

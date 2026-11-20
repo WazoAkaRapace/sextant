@@ -1,3 +1,4 @@
+import json
 """Per-room occupancy (rooms.py) and its binary_sensor platform."""
 
 
@@ -628,3 +629,24 @@ def test_household_floor_names_a_floor_only_when_everyone_home_is_on_it():
     # Someone placed but not home (a pet, a stale row) has no say.
     assert rooms.household_floor(["Alex"], {"Alex": "Up", "Meg": "Down"})[0] == "Up"
     assert rooms.household_floor([], {}) == ("away", {"floors": {}, "unplaced": []})
+
+
+def test_sensor_clocks_outlive_a_restart():
+    """last_changed starts again with Home Assistant; the saved clocks do not."""
+    from sextant import runtime
+    now = 1_000_000.0
+    keys = [{"floor": "G", "room": "R", "inputs": ["binary_sensor.mm", "binary_sensor.dead"], "door": None}]
+    bad, on = {}, {}
+    states = {"binary_sensor.mm": _st("on", 30), "binary_sensor.dead": _st("unavailable", 0)}
+    rooms.sensor_problems(keys, states.get, now - 7 * 3600, 24 * 3600, 6 * 3600, bad, on)
+    saved = json.loads(json.dumps(runtime.snapshot(now - 60, sensors={"bad": bad, "on": on})))
+    back = runtime.restore(saved, now)["sensors"]
+    assert back == {"bad": {"binary_sensor.dead": now - 7 * 3600}, "on": {"binary_sensor.mm": now - 30 * 3600}}
+    # Restarted a minute ago: unavailable while it starts, then on again with a new last_changed.
+    assert rooms.sensor_problems(keys, {"binary_sensor.dead": _st("unavailable", 0)}.get, now, 24 * 3600, 6 * 3600, back["bad"], back["on"]).keys() == {"binary_sensor.dead"}
+    found = rooms.sensor_problems(keys, {"binary_sensor.mm": _st("on", 0), "binary_sensor.dead": _st("unknown", 0)}.get, now, 24 * 3600, 6 * 3600, back["bad"], back["on"])
+    assert found["binary_sensor.mm"] == {"kind": "stuck", "age": 30 * 3600.0, "rooms": ["R (G)"]} and found["binary_sensor.dead"]["kind"] == "gone"
+    # Off ends the clock; so does a restart too long to vouch for the gap.
+    rooms.sensor_problems(keys, {"binary_sensor.mm": _st("off", 0)}.get, now, 24 * 3600, 6 * 3600, back["bad"], back["on"])
+    assert back["on"] == {}
+    assert runtime.restore(saved, now + 2 * 3600)["sensors"] == {"bad": {}, "on": {}}
