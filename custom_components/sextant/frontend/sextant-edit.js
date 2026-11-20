@@ -1063,7 +1063,7 @@ class SextantEdit extends LitElement {
     const item = list[sel.index];
     this._snapshot();
     if (sel.kind === "pin") this._refreshAlignment();
-    if (field === "calibrate" || field === "solve") { if (value === undefined) delete item[field]; else item[field] = value; }
+    if (field === "calibrate" || field === "solve" || field === "floor_vote") { if (value === undefined) delete item[field]; else item[field] = value; }
     else if (field === "height" || field === "correction" || field === "hold_s") item[field] = value === "" || value == null ? undefined : Number(value);
     else if (field === "no_go") item.no_go = !!value;
     else item[field] = value;
@@ -1418,6 +1418,9 @@ class SextantEdit extends LitElement {
         ${uiSwitch({ label: "Use in positioning", checked: item.solve !== false,
           onChange: (v) => this._edit("solve", v ? undefined : false) })}
         <div class="muted small">Off keeps this proxy out of the solve, the floor election, anchoring and spot evidence, while it stays placed, drawn, calibrated and self-tested. For a proxy that hears fine but reads wrong where it sits - metal under the counter, a range hood - and keeps dragging the fix its way.</div>
+        ${uiSwitch({ label: "Use for floor choice", checked: item.floor_vote !== false, disabled: item.solve === false,
+          onChange: (v) => this._edit("floor_vote", v ? undefined : false) })}
+        <div class="muted small">Off keeps this proxy helping with where on its floor a thing is, but its readings stop counting toward which floor wins. For a proxy between storeys - a basement ceiling light just under the floor above - that hears the room overhead almost as well as its own.</div>
         ${uiSwitch({ label: "Leave this proxy's correction alone", checked: item.calibrate === false,
           onChange: (v) => this._edit("calibrate", v ? false : undefined) })}
         <div class="muted small">Calibration skips it: it is left out of the fit and its correction is never overwritten. For a radio whose distances are the wrong shape rather than the wrong scale - a tablet or a phone, which read long up close and far too short across a room - where no single multiplier fits.</div>

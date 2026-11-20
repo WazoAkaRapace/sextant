@@ -1175,6 +1175,18 @@ def _solves(receiver):
     return receiver.get("solve") is not False
 
 
+def _votes_floor(receiver):
+    """Whether a placed proxy's readings count toward choosing the floor.
+
+    ``"floor_vote": false`` (the "Use for floor choice" switch on the Edit
+    page) is for a proxy mounted between storeys - a basement ceiling light
+    a foot and a half under the floor above - that hears the floor above as
+    well as its own. It still helps its own floor's x/y fix, but its short
+    through-ceiling readings no longer pull the election toward its floor.
+    """
+    return receiver.get("floor_vote") is not False
+
+
 def _close_fade_params(data):
     """(on, near_m, far_m) for _close_range_correction, read once per call site."""
     near = _tuning(data, "correction_fade_near_m")
@@ -2848,6 +2860,7 @@ async def update_trilateration_and_zone(hass, new_global_data, entity):
             "heard": cand.get("heard") or [],
             "min_wr": min_wr, "stable_hint": stable_hint, "scale": scale,
             "zone_polys": zone_polys,
+            "no_vote": cand.get("no_vote") or set(),
             "fingerprint": None if not thing_vec or floor_name not in refs_by_floor else {
                 "mode": estimator,
                 "thing": thing_vec,
@@ -3277,7 +3290,14 @@ def _solve_floor_jobs(jobs):
                 min_weight_radius=job["min_wr"], stable_hint=job["stable_hint"],
             )
         if fix is not None:
+            # Position-only proxies helped place the fix but don't vouch for the floor.
+            # job["heard"] is (entity_id, m) in the same order as weighted.
+            no_vote = job.get("no_vote") or ()
             conf, rms_m, _coverage = _score_floor_fit(fix, job["weighted"], job["scale"])
+            if no_vote:
+                voters = [p for p, h in zip(job["weighted"], job.get("heard") or ()) if h[0] not in no_vote]
+                if voters:
+                    conf = _score_floor_fit(fix, voters, job["scale"])[0]  # rms_m stays the whole solve's
             # A fit landing in this floor's no-go zone is physically impossible
             # here (issue #60): down-weight it so the competition prefers the
             # floor where that spot is a real room. Down-weight, not eliminate -
@@ -5637,6 +5657,7 @@ def extract_candidate_floors(new_global_data, tmpentity):
         prox_k = max(1, int(_tuning(layout, "floor_proximity_k")))
         for floor in layout["floor"]:
             entries = []
+            no_vote = set()
             for receiver in floor["receivers"]:
                 distance = receiver.get("distance")
                 if distance is None or "r" not in receiver.get("cords", {}):
@@ -5647,6 +5668,8 @@ def extract_candidate_floors(new_global_data, tmpentity):
                 if not isinstance(quality, (int, float)) or isinstance(quality, bool) \
                         or not 0 < quality <= 1:
                     quality = 1.0
+                if not _votes_floor(receiver) and receiver.get("entity_id"):
+                    no_vote.add(receiver["entity_id"])
                 entries.append((distance, (
                     receiver["cords"]["x"], receiver["cords"]["y"],
                     receiver["cords"]["r"], distance * floor["scale"], float(quality),
@@ -5654,8 +5677,9 @@ def extract_candidate_floors(new_global_data, tmpentity):
             # Nearest-K cap: with thirty receivers on a floor, the far ones
             # contribute mostly noise, and 1/r^2 does not zero them out.
             cords, heard = _select_receivers(entries, max_receivers, max_range, near_always)
-            nearest = min((e[0] for e in entries), default=float("inf"))
-            ranked = sorted(e[0] for e in entries)[:prox_k]
+            voting = [e[0] for e in entries if e[2] not in no_vote]
+            nearest = min(voting, default=float("inf"))  # admission and the fingerprint-only gate: voters only
+            ranked = sorted(voting)[:prox_k]
             if cords:
                 candidates.append({
                     "name": floor["name"],
@@ -5665,6 +5689,7 @@ def extract_candidate_floors(new_global_data, tmpentity):
                     # Mean of the floor_proximity_k nearest slants: what the
                     # proximity term compares across floors.
                     "near_k_m": sum(ranked) / len(ranked) if ranked else float("inf"),
+                    "no_vote": no_vote,  # entity_ids of this floor's position-only proxies
                 })
     candidates.sort(key=lambda c: c["nearest_m"])  # stable: file order breaks ties
     return candidates
