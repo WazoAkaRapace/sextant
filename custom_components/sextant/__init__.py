@@ -7547,6 +7547,12 @@ async def async_setup(hass, config):
 
     return True
 
+async def async_remove_config_entry_device(hass: HomeAssistant, entry, device_entry):
+    """Let an empty Sextant device be deleted from the UI; one that still has
+    entities belongs to something tracked and is refused."""
+    return not any(e.device_id == device_entry.id for e in er.async_get(hass).entities.values())
+
+
 async def async_unload_entry(hass: HomeAssistant, entry):
     """Remove a configuration entry"""
     _LOGGER.info("Attempting to offload platforms for entry: %s", entry.entry_id)

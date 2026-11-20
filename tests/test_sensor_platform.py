@@ -89,7 +89,7 @@ def test_setup_nests_under_the_bermuda_device_when_it_can_find_one(tmp_path, mon
     er.async_get(hass).add("sensor.cat_distance_to_kitchen", platform="bermuda", device_id=dev.id)
     added, add = _added()
     run(sn.async_setup_entry(hass, None, add))
-    assert hass.data["sextant_sensors"]["sensor.cat_sextant_floor"]._attr_device_info["via_device"] == ("bermuda", "aa:bb")
+    assert hass.data["sextant_sensors"]["sensor.cat_sextant_floor"]._attr_device_info["via_device_id"] == dev.id
     assert sn.find_bermuda_via_device(hass, "dog") is None
 
 
@@ -256,3 +256,11 @@ def test_location_sensor_restores_last_state_over_a_restart():
     stale._test_last_state = types.SimpleNamespace(state="unavailable", attributes={})
     asyncio.run(stale.async_added_to_hass())
     assert stale.state == "unknown"
+
+
+def test_only_an_empty_device_may_be_deleted_from_the_ui(tmp_path):
+    hass = _hass(tmp_path, tracked=set())
+    empty, used = dr.async_get(hass).add({("sextant", "gone")}), dr.async_get(hass).add({("sextant", "cat")})
+    er.async_get(hass).add("sensor.cat_sextant_room", device_id=used.id)
+    assert run(sextant.async_remove_config_entry_device(hass, None, empty)) is True
+    assert run(sextant.async_remove_config_entry_device(hass, None, used)) is False

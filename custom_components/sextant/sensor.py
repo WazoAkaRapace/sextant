@@ -70,9 +70,10 @@ def migrate_renamed_sensor_kinds(hass):
 
 
 def find_bermuda_via_device(hass, entity):
-    """Identifier of the Bermuda device that owns this thing's distance_to
-    sensors, so the Sextant device can nest under it (via_device). None when it
-    can't be resolved (e.g. Bermuda not loaded yet) — the Sextant device then just
+    """Registry id of the Bermuda device that owns this thing's distance_to
+    sensors, so the Sextant device can nest under it (via_device_id; the
+    via_device identifier tuple goes in HA 2027.8). None when it can't be
+    resolved (e.g. Bermuda not loaded yet) — the Sextant device then just
     stands on its own.
     """
     ent_reg = er.async_get(hass)
@@ -81,11 +82,8 @@ def find_bermuda_via_device(hass, entity):
     for e in ent_reg.entities.values():
         if e.platform == "bermuda" and e.device_id and e.entity_id.startswith(prefix):
             dev = dev_reg.async_get(e.device_id)
-            if dev and dev.identifiers:
-                # Prefer a bermuda identifier so the link points at the thing
-                # device even if it carries identifiers from several integrations.
-                berm = [i for i in dev.identifiers if i[0] == "bermuda"]
-                return berm[0] if berm else next(iter(dev.identifiers))
+            if dev:
+                return dev.id
     return None
 
 
@@ -317,7 +315,7 @@ class CustomDistanceSensor(SensorEntity, RestoreEntity):
                 model=model or "Tracked thing",
             )
             if via_device:
-                info["via_device"] = via_device
+                info["via_device_id"] = via_device
             self._attr_device_info = info
 
     async def async_added_to_hass(self):
