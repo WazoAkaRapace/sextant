@@ -2598,7 +2598,9 @@ def test_cross_floor_shadow_borrows_the_floor_below():
                                            {"entity_id": "far", "cords": {"x": 0.0, "y": 0.0}}]},
     ]}
     cands = [{"name": "Ground", "heard": [("g", 2.0)]}, {"name": "Basement", "heard": [("light", 2.0), ("far", 9.0)]}]
-    borrowed = sextant._cross_floor_points(layout, frames, cands, 0.4)
+    borrowed = sextant._cross_floor_points(layout, frames, cands[:1], cands, 0.4)
+    assert list(borrowed) == ["Ground"]                  # the basement donates without being solved
+    assert sextant._cross_floor_points(layout, frames, [{"name": "Ground", "heard": [("light", 1.0)]}], cands, 0.4) == {}  # placed on both: once
     points, heard = borrowed["Ground"]                   # "far" is past CROSS_FLOOR_MAX_M
     (x, y, r, w, slant), = points
     assert (round(x), round(y)) == (200 + SCALE, 0)      # 1 m east: the basement plan's offset
@@ -2608,5 +2610,5 @@ def test_cross_floor_shadow_borrows_the_floor_below():
            (300.0, 400.0, 4.0 * SCALE, 1.0, 4.0 * SCALE)]
     job = {"floor": "Ground", "weighted": own, "bounds": None, "min_wr": 1e-3, "stable_hint": None, "scale": SCALE}
     shadow = sextant._solve_cross_floor([job], [("fix", 1, 1, None)], borrowed)["Ground"]
-    assert shadow["heard"] == heard and len(shadow["fix"]) == 2 and shadow["rms_m"] >= 0
+    assert shadow["heard"] == heard and len(shadow["fix"]) == 2 and shadow["rms_m"] >= 0 and shadow["own_rms_m"] >= 0
     assert sextant._solve_cross_floor([job], [None], borrowed) == {}   # an unsolved floor gets no shadow
