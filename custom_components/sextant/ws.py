@@ -1274,8 +1274,8 @@ async def _compute_kpi(hass, hours):
     }
 
 
-# An hour of log is some 10,000 rows held in memory, so the window is capped and one replay runs at a time.
-REPLAY_MAX_HOURS = 12
+# An hour of log is some 10,000 rows held in memory, so one replay runs at a time.
+REPLAY_MAX_HOURS = 48
 _replay_running = False
 
 
