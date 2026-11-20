@@ -108,6 +108,9 @@ each floor's entry also carries `cross`: the fix that floor would have
 had with the other floors' proxies helping (their plan positions carried
 through the pins, the slant shortened by the storey between them, half
 weight, 6 m at most). It is logged only; nothing is placed by it yet.
+`tools/replay_cross_floor.py` reads the log and says which fix was
+steadier, more often in the published room, and closer to the proxy a
+thing was sitting on.
 
 **Rooms.** Membership, not a point test: samples on the filter's error
 ellipse are attributed to rooms and the shares smoothed. The current room
