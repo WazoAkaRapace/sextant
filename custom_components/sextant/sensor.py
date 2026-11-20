@@ -8,7 +8,7 @@ import logging
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.restore_state import RestoreEntity
 
-from .const import ACCURACY_ENTITY_ID, FIT_ATTRIBUTES, GLOBAL_ENTITY_IDS, PEOPLE_HOME_ENTITY_ID, UNTRACKED_ENTITY_ID  # single source of truth (shared with __init__)
+from .const import ACCURACY_ENTITY_ID, FIT_ATTRIBUTES, GLOBAL_ENTITY_IDS, HOUSEHOLD_FLOOR_ENTITY_ID, PEOPLE_HOME_ENTITY_ID, UNTRACKED_ENTITY_ID  # single source of truth (shared with __init__)
 from . import bermuda_source
 
 _LOGGER = logging.getLogger(__name__)
@@ -413,6 +413,21 @@ class SextantPeopleHomeSensor(SensorEntity):
         return self._attrs
 
 
+class SextantHouseholdFloorSensor(SextantPeopleHomeSensor):
+    """The one floor everyone at home is on, else ``mixed``, ``unknown`` or
+    ``away`` (rooms.household_floor): "everyone has gone upstairs"."""
+
+    _attr_state_class = None
+    _attr_icon = "mdi:home-floor-a"
+
+    def __init__(self):
+        super().__init__()
+        self._attr_name = "Household Floor"
+        self._attr_unique_id = "sextant_household_floor"
+        self.entity_id = HOUSEHOLD_FLOOR_ENTITY_ID
+        self._attrs = {"floors": {}, "unplaced": []}
+
+
 class SextantAccuracySensor(SensorEntity):
     # Pushed by the positioning cycle; there is nothing for Home Assistant to poll.
     _attr_should_poll = False
@@ -675,6 +690,10 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         people_home = SextantPeopleHomeSensor()
         hass.data["sextant_sensors"][PEOPLE_HOME_ENTITY_ID] = people_home
         new_sensors.append(people_home)
+    if HOUSEHOLD_FLOOR_ENTITY_ID not in hass.data["sextant_sensors"]:
+        household = SextantHouseholdFloorSensor()
+        hass.data["sextant_sensors"][HOUSEHOLD_FLOOR_ENTITY_ID] = household
+        new_sensors.append(household)
     for entity in entities:
         ensure_sensors_for_entity(hass, entity, hass.data["sextant_sensors"], new_sensors)
 

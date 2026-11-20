@@ -118,6 +118,13 @@ a departure, so the recorder gets one row per event: trigger on the
 attribute leaving `None` and the time is in the event
 ([recipe](recipes.md#when-someone-left)).
 
+`sensor.sextant_household_floor` is the one floor everyone at home is on:
+the floor's name, `mixed` when people are on more than one, `unknown` while
+anyone at home is on no floor (lost, outside, or held home by Wi-Fi alone)
+and `away` with nobody home. `floors` lists who is on each and `unplaced`
+who is on none. Pets do not count. "Everyone has been upstairs for 20
+minutes" is a state trigger on it, `to: Second Floor`, `for: "00:20:00"`.
+
 ### Events
 
 The same arrivals and departures are on the event bus, for a trigger that

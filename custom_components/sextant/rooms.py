@@ -298,6 +298,23 @@ def people_home(presences: dict[str, str], pets=()) -> tuple[int, dict]:
     return len(home), {"home": home, "away": away, "pets_home": pets_home}
 
 
+def household_floor(home, floors: dict[str, str]) -> tuple[str, dict]:
+    """The one floor everyone at home is on, from people_home's ``home`` list
+    and {person name: floor} for those Sextant places on a floor.
+
+    ``away`` with nobody home, ``mixed`` across floors, and ``unknown`` while
+    anyone at home is on no floor (lost, outside, or held by Wi-Fi alone): the
+    floor's name must mean nobody is anywhere else.
+    """
+    by_floor: dict[str, list] = {}
+    for name in home:
+        if name in floors:
+            by_floor.setdefault(floors[name], []).append(name)
+    unplaced = [n for n in home if n not in floors]
+    state = "away" if not home else "unknown" if unplaced else next(iter(by_floor)) if len(by_floor) == 1 else "mixed"
+    return state, {"floors": by_floor, "unplaced": unplaced}
+
+
 def people_ids(ids) -> dict:
     """The people-only sensor of a room (on for a person, never for a pet's tag alone), from its ``ids_for`` entry."""
     return {

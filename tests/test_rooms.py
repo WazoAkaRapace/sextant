@@ -618,3 +618,13 @@ def test_review_two_fixes_in_rooms():
 def test_room_inputs_drop_suffixed_sextant_occupancy_entities():
     zone = {"inputs": ["binary_sensor.den_sextant_people_occupancy_2", "binary_sensor.motion"]}
     assert rooms.room_options(zone)["inputs"] == ["binary_sensor.motion"]
+
+
+def test_household_floor_names_a_floor_only_when_everyone_home_is_on_it():
+    assert rooms.household_floor(["Alex", "Robin"], {"Alex": "Up", "Robin": "Up"}) == ("Up", {"floors": {"Up": ["Alex", "Robin"]}, "unplaced": []})
+    assert rooms.household_floor(["Alex", "Robin"], {"Alex": "Up", "Robin": "Down"})[0] == "mixed"
+    # Robin is home but on no floor (lost, outside, Wi-Fi only): not "everyone is Up".
+    assert rooms.household_floor(["Alex", "Robin"], {"Alex": "Up"}) == ("unknown", {"floors": {"Up": ["Alex"]}, "unplaced": ["Robin"]})
+    # Someone placed but not home (a pet, a stale row) has no say.
+    assert rooms.household_floor(["Alex"], {"Alex": "Up", "Meg": "Down"})[0] == "Up"
+    assert rooms.household_floor([], {}) == ("away", {"floors": {}, "unplaced": []})

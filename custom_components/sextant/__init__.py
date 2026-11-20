@@ -78,7 +78,7 @@ from .storage import (
     migrate_legacy,
     save_layout,
 )
-from .const import ACCURACY_ENTITY_ID, PEOPLE_HOME_ENTITY_ID, UNTRACKED_ENTITY_ID
+from .const import ACCURACY_ENTITY_ID, HOUSEHOLD_FLOOR_ENTITY_ID, PEOPLE_HOME_ENTITY_ID, UNTRACKED_ENTITY_ID
 from . import history as history_mod
 from . import habits as habits_mod
 from . import bermuda_source
@@ -5466,6 +5466,8 @@ def _update_room_sensors(hass):
     # Nobody owning anything publishes 0 and empty lists, not the last count.
     count, attrs = rooms_mod.people_home(presences, pet_persons)
     update_sextant_sensor_state(hass, PEOPLE_HOME_ENTITY_ID, count, attrs)
+    update_sextant_sensor_state(hass, HOUSEHOLD_FLOOR_ENTITY_ID, *rooms_mod.household_floor(
+        attrs["home"], {name: floor for name, (floor, _room) in person_rooms.items()}))
 
 
 def _restoring(sensor, sensed, now):
