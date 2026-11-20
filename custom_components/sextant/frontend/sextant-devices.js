@@ -45,6 +45,7 @@ class SextantDevices extends LitElement {
     _filter: { state: true },
     _kind: { state: true },
     _showAll: { state: true },
+    _findAt: { state: true },
     _busy: { state: true },
     _wizard: { state: true },
     _findmyWizard: { state: true },
@@ -71,6 +72,7 @@ class SextantDevices extends LitElement {
     this._filter = "";
     this._kind = "all";
     this._showAll = false;
+    this._findAt = "";        // find mode: the placed proxy's address the list is sorted by
     this._busy = false;
     this._wizard = null;        // thing dialog state
     this._findmyWizard = null;  // FindMy add-accessory dialog state
@@ -84,7 +86,18 @@ class SextantDevices extends LitElement {
     this._timer = setInterval(() => this._refreshLight(), 15000);
   }
 
-  disconnectedCallback() { super.disconnectedCallback(); clearInterval(this._timer); }
+  disconnectedCallback() { super.disconnectedCallback(); clearInterval(this._timer); this._setFindAt(""); }
+
+  /** Find mode: sort what is heard by its signal at one proxy, refreshed every
+   * 3 s, so a device held against that proxy rises to the top. */
+  _setFindAt(address) {
+    this._findAt = address;
+    clearInterval(this._findTimer);
+    this._findTimer = null;
+    if (!address) return;
+    this._refreshLight();
+    this._findTimer = setInterval(() => this._refreshLight(), 3000);
+  }
 
   /** Dialog keyboard handling: focus moves in when one opens and goes back to
    * the control that opened it when it closes. Escape closes (see _dialogKey). */
@@ -799,9 +812,13 @@ class SextantDevices extends LitElement {
     // noise here: a neighbour's gadget at the edge of range, a proxy's own radar module. "Show all" lifts this.
     const lonely = new Set(placed.size ? recent.filter((c) => placedHearing(c) < 2) : []);
     const haystack = (c) => { const w = this._heardWhere(c, index); return `${c.name} ${c.address} ${c.manufacturer || ""} ${c.apple_summary || ""} ${c.area_name || ""} ${c.kind} ${w ? `${w.room || ""} ${w.floor || ""} ${w.proxy || ""}` : ""}`.toLowerCase(); };
-    const candidates = (this._showAll ? all : recent.filter((c) => !lonely.has(c)))
+    // heard_by holds the last minute's reading from each proxy that heard it.
+    const rssiAt = (c) => (Array.isArray(c.heard_by) ? c.heard_by : []).find((h) => String(h.address || "").toLowerCase() === this._findAt)?.rssi;
+    const finding = !!this._findAt;
+    const candidates = (finding ? all.filter((c) => rssiAt(c) != null) : this._showAll ? all : recent.filter((c) => !lonely.has(c)))
       .filter((c) => (this._kind === "all" || c.kind === this._kind) && (!filter || haystack(c).includes(filter)))
-      .sort((a, b) => (a.last_seen_age ?? 1e9) - (b.last_seen_age ?? 1e9));
+      .sort(finding ? (a, b) => rssiAt(b) - rssiAt(a) : (a, b) => (a.last_seen_age ?? 1e9) - (b.last_seen_age ?? 1e9));
+    const findName = finding ? index.get(this._findAt)?.name || this._findAt : null;
     return html`
       <section class="card">
         <h3>Tracked <span class="muted">${tracked.length}</span>
@@ -836,17 +853,21 @@ class SextantDevices extends LitElement {
       </section>
 
       <section class="card">
-        <h3>Heard, not tracked <span class="muted">${candidates.length}${this._showAll ? "" : ` in the last ${RECENT_SECS} s`}</span>${!this._showAll && lonely.size ? html` <span class="muted small" title="One proxy cannot position a device; switch on Show all to see them">· ${lonely.size} heard by a single proxy, hidden</span>` : nothing}</h3>
+        <h3>Heard, not tracked <span class="muted">${candidates.length}${finding ? ` heard by ${findName}` : this._showAll ? "" : ` in the last ${RECENT_SECS} s`}</span>${!finding && !this._showAll && lonely.size ? html` <span class="muted small" title="One proxy cannot position a device; switch on Show all to see them">· ${lonely.size} heard by a single proxy, hidden</span>` : nothing}</h3>
         <div class="row">
           <input class="grow" type="search" placeholder="Filter by name, address, maker, room, floor, proxy or kind" .value=${this._filter} @input=${(e) => { this._filter = e.target.value; }}>
           ${uiSelect({ label: "Kind", value: this._kind, options: KIND_FILTERS.map(([v, l]) => ({ value: v, label: l })), onChange: (v) => { this._kind = v; }, style: "min-width: 150px" })}
-          <span class="chips">${uiSwitch({ label: `Show all (${all.length})`, checked: this._showAll, onChange: (v) => { this._showAll = v; } })}</span>
+          ${uiSelect({ label: "Find near", value: this._findAt, style: "min-width: 200px",
+            options: [{ value: "", label: "Off" }, ...[...index].map(([a, p]) => ({ value: a, label: `${p.name}${p.room ? ` · ${p.room}` : ""}` })).sort((a, b) => a.label.localeCompare(b.label))],
+            onChange: (v) => this._setFindAt(v) })}
+          ${finding ? nothing : html`<span class="chips">${uiSwitch({ label: `Show all (${all.length})`, checked: this._showAll, onChange: (v) => { this._showAll = v; } })}</span>`}
           ${uiButton({ label: "Refresh", kind: "text", icon: "mdi:refresh", onClick: () => this._refreshLight() })}
         </div>
+        ${finding ? html`<p class="small">Hold the device against <b>${findName}</b>: the loudest there comes first. The list refreshes every 3 s; set Find near back to Off when done.</p>` : nothing}
         <div class="wrap"><table class="compact">
           <tr><th>Device</th><th>Maker</th><th>Where</th><th class="num">Proxies</th><th class="num">Signal</th><th>Seen</th><th></th></tr>
-          ${candidates.slice(0, 200).map((c) => { const w = this._heardWhere(c, index); return html`<tr>
-            <td><b>${c.name}</b> ${c.kind === "tile" ? html`<span class="pill">Tile</span>` : c.kind === "ibeacon" ? html`<span class="pill">iBeacon</span>` : nothing}<br><span class="muted small">${c.address}</span></td>
+          ${candidates.slice(0, 200).map((c, i) => { const w = this._heardWhere(c, index); return html`<tr>
+            <td><b>${c.name}</b> ${finding && i === 0 ? html`<span class="pill ok">loudest</span>` : nothing} ${c.kind === "tile" ? html`<span class="pill">Tile</span>` : c.kind === "ibeacon" ? html`<span class="pill">iBeacon</span>` : nothing}<br><span class="muted small">${c.address}</span></td>
             <td>${c.family || c.manufacturer || html`<span class="muted">unknown</span>`}
               ${c.family && c.manufacturer && c.manufacturer !== c.family ? html`<br><span class="small muted">${c.manufacturer}</span>` : nothing}
               ${c.apple_summary ? html`<br><span class="small muted">${c.apple_summary}</span>`
@@ -854,7 +875,7 @@ class SextantDevices extends LitElement {
                 : c.address_type === "bd_addr_random_resolvable" ? html`<br><span class="small muted">rotating address (IRK)</span>` : nothing}</td>
             <td>${w ? html`${w.room || w.floor}${w.room ? html`<br><span class="muted small">${w.floor}</span>` : nothing}<br><span class="muted small">${w.proxy}</span>` : c.area_name ? html`${c.area_name}` : html`<span class="muted">—</span>`}</td>
             <td class="num" title="placed proxies hearing it">${placed.size ? placedHearing(c) : c.scanners}</td>
-            <td class="num" title="strongest reading (RSSI)">${w ? w.rssi : c.best_rssi ?? "—"} dBm</td>
+            <td class="num" title=${finding ? `reading at ${findName} (RSSI)` : "strongest reading (RSSI)"}>${finding ? rssiAt(c) : w ? w.rssi : c.best_rssi ?? "—"} dBm</td>
             <td class="small">${fmtAge(c.last_seen_age)} ago<br><span class="muted">first ${fmtAge(c.first_seen_age)}</span></td>
             <td>${uiButton({ label: "Track…", kind: "primary", disabled: this._busy, onClick: () => this._startTrack(c), title: "Choose its name, class and height first; Bermuda tracks it when you confirm" })}</td>
           </tr>`; })}

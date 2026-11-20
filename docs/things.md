@@ -60,6 +60,11 @@ proxies' own probe beacons are hidden. **Track…** opens the same dialog
 first, so you choose the name, class and height before Bermuda is told and
 reloads.
 
+To find which entry is the device in your hand, pick a proxy in **Find
+near** and hold the device against it. The list then shows only what that
+proxy hears, loudest first, and refreshes every 3 seconds, so the device
+rises to the top. Set Find near back to Off when you're done.
+
 ## People
 
 Give things an owner - **Belongs to**, a Home Assistant person - and two
