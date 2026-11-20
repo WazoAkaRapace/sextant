@@ -8242,6 +8242,21 @@ def _room_at(rooms, x, y):
     return None
 
 
+# A proxy the self-test calls misplaced: located at least this far from its
+# placement, by at least this many proxies, whose ranges miss the located spot
+# by no more than MISPLACED_MAX_FIT_M (median) and by under MISPLACED_FIT_RATIO
+# of what they miss the placement by.
+MISPLACED_MIN_ERROR_M = 3.0
+MISPLACED_MIN_HEARERS = 5
+MISPLACED_MAX_FIT_M = 2.0
+MISPLACED_FIT_RATIO = 0.5
+
+
+def _range_misfit_m(pts, x, y, scale):
+    """Median of how far each proxy's projected range misses the point (m)."""
+    return float(np.median([abs(math.hypot(px - x, py - y) - pr) for px, py, pr, _slant in pts])) / scale
+
+
 def run_selftest(hass, samples=None, corrections=None, floors=None):
     """Leave-one-out receiver self-localization accuracy against known positions.
 
@@ -8315,13 +8330,24 @@ def run_selftest(hass, samples=None, corrections=None, floors=None):
             unsolved.append({"entity": slug, "floor": tgt["floor"], "room": room, "heard_by": len(pts), "reason": "no convergence"})
             continue
         err_px = math.hypot(fix[0] - tgt["x"], fix[1] - tgt["y"])
-        solved.append({
+        error_m = err_px / tgt["scale"]
+        fit_m, placed_fit_m = (_range_misfit_m(pts, x, y, tgt["scale"]) for x, y in ((fix[0], fix[1]), (tgt["x"], tgt["y"])))
+        row = {
             "entity": slug, "floor": tgt["floor"], "room": room,
             "known": [round(tgt["x"], 1), round(tgt["y"], 1)],
             "est": [round(float(fix[0]), 1), round(float(fix[1]), 1)],
-            "error_m": round(err_px / tgt["scale"], 3),
+            "error_m": round(error_m, 3),
             "heard_by": len(pts),
-        })
+            "fit_m": round(fit_m, 2), "placed_fit_m": round(placed_fit_m, 2),
+        }
+        # Probably drawn in the wrong place, not just ranged badly: enough
+        # proxies hear it, they agree with each other on a spot well away from
+        # the placement, and their ranges fit that spot far better.
+        if (error_m >= MISPLACED_MIN_ERROR_M and len(pts) >= MISPLACED_MIN_HEARERS
+                and fit_m <= MISPLACED_MAX_FIT_M and fit_m <= MISPLACED_FIT_RATIO * placed_fit_m):
+            row["misplaced"] = True
+            row["est_room"] = _room_at(rooms.get(tgt["floor"]), float(fix[0]), float(fix[1]))
+        solved.append(row)
     return {
         "receivers": solved,
         "unsolved": unsolved,

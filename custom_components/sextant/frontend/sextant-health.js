@@ -263,6 +263,24 @@ class SextantHealth extends LitElement {
     if (r) { this._selftest = { ...r, at: Date.now() }; remember("selftest", r); }
   }
 
+  /** Move a proxy the self-test calls misplaced to where the others hear it.
+   * Reads the stored plan fresh, so nothing saved since this page loaded is
+   * undone; the server keeps the plan it replaces under Edit's History. */
+  async _moveProxy(v) {
+    const name = proxyName(this.data, v.entity);
+    if (!(await confirmAsync(`Move ${name} ${fmtLen(v.error_m, this.hass, 1)} on the plan, to where the other proxies hear it${v.est_room ? ` (${v.est_room})` : ""}?\n\nDo this only if it really is there: a proxy behind a thick wall or inside a metal box can read far away while drawn in the right place. The plan as it is now is kept under History on the Edit page.`, { ok: "Move it" }))) return;
+    this._busy = "selftest";
+    const d = await callWS(this, this.hass, { type: "sextant/layout/get" });
+    const rec = (d?.layout?.floor || []).find((f) => f.name === v.floor)?.receivers?.find((r) => String(r.entity_id) === v.entity);
+    const saved = rec && (rec.cords = { ...rec.cords, x: v.est[0], y: v.est[1] })
+      && await callWS(this, this.hass, { type: "sextant/layout/save", layout: d.layout });
+    this._busy = null;
+    if (!saved) { if (d && !rec) toast(this, `${name} is no longer on ${v.floor}`); return; }
+    toast(this, `${name} moved`);
+    this.dispatchEvent(new CustomEvent("layout-changed"));
+    this._runSelftest();
+  }
+
   async _runKpi() {
     this._busy = "kpi";
     const msg = { type: "sextant/kpi", hours: this._kpiHours };
@@ -576,6 +594,9 @@ class SextantHealth extends LitElement {
           <tr class="grouphead"><td><b>${f.floor}</b></td><td class="num">${count(f)}</td><td class="num">${cell(f.cep50_m)}</td><td class="num">${f.cep95_m != null ? this._accPill(f.cep95_m) : "—"}</td><td>${noSamples.has(f.floor) ? html`<span class="muted small">no calibration samples for this floor yet</span>` : f.worst ? proxyName(this.data, f.worst) : ""}</td></tr>
           ${bd.rooms.filter((r) => r.floor === f.floor).map((r) => html`<tr><td style="padding-left: 22px">${r.room ?? html`<span class="muted">outside any room</span>`}</td><td class="num">${count(r)}</td><td class="num">${cell(r.cep50_m)}</td><td class="num">${r.cep95_m != null ? this._accPill(r.cep95_m) : "—"}</td><td>${r.worst ? proxyName(this.data, r.worst) : ""}</td></tr>`)}`)}
       </table></div>
+      ${solved.filter((v) => v.misplaced).map((v) => html`<div class="row"><span class="pill warn">placement?</span>
+        <span><b>${proxyName(this.data, v.entity)}</b> is drawn in ${v.room ?? v.floor}, but ${v.heard_by} proxies agree it is ${fmtLen(v.error_m, this.hass, 1)} away${v.est_room && v.est_room !== v.room ? html`, in ${v.est_room}` : nothing}. <span class="muted small">Their ranges miss that spot by ${fmtLen(v.fit_m, this.hass, 1)} and the drawn one by ${fmtLen(v.placed_fit_m, this.hass, 1)}.</span></span>
+        ${uiButton({ label: "Move it there", kind: "outline", disabled: !!this._busy, onClick: () => this._moveProxy(v) })}</div>`)}
       <details><summary>Every proxy (${solved.length} solved${unsolved.length ? `, ${unsolved.length} unsolved` : ""})</summary>
         <div class="wrap"><table><tr><th>Proxy</th><th>Room</th><th class="num">Error</th><th class="num">Heard by</th></tr>
           ${[...solved].sort((a, b) => (b.error_m ?? -1) - (a.error_m ?? -1)).map((v) => html`<tr><td>${proxyName(this.data, v.entity)}</td><td class="muted">${v.floor}${v.room ? ` · ${v.room}` : ""}</td><td class="num">${fmtLen(v.error_m, this.hass, 2)}</td><td class="num">${v.heard_by}</td></tr>`)}
