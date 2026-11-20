@@ -93,7 +93,7 @@ def _vector(value, size):
     return out if len(out) == size else None
 
 
-def snapshot(now, kf=None, zones=None, spots=None, arrivals=None, rows=None, floors=None, visits=None, wifi=None, asked=None, sensors=None):
+def snapshot(now, kf=None, zones=None, spots=None, arrivals=None, rows=None, floors=None, visits=None, wifi=None, asked=None, sensors=None, sleep=None):
     """The state worth keeping, as JSON.
 
     ``rows`` are the published positions (ent, zone, sub_zone, floor, updated,
@@ -146,6 +146,10 @@ def snapshot(now, kf=None, zones=None, spots=None, arrivals=None, rows=None, flo
     # is worth more than a fresh start.
     if isinstance(wifi, dict) and (wifi.get("aps") or wifi.get("matches") or wifi.get("clients")):
         out["wifi"] = _json(wifi)
+    # Each person's night so far (persons.sleep_tally): a restart at 3 am keeps the night's count.
+    nights = {str(p): _json(v) for p, v in (sleep or {}).items() if isinstance(v, dict)}
+    if nights:
+        out["sleep"] = nights
     # Since when each room sensor has been missing or unavailable ("bad") or reading on ("on").
     clocks = {k: {str(e): t for e, t in (sensors.get(k) or {}).items() if _epoch(t) is not None}
               for k in ("bad", "on")} if isinstance(sensors, dict) else {}
@@ -221,7 +225,7 @@ def restore(data, now, max_age=DEFAULT_MAX_AGE_SECS):
     so the Live page can still say where a thing was and when. A snapshot
     from the future (the clock moved) is treated as a long gap.
     """
-    out = {"kf": {}, "zone": {}, "spot": {}, "arrivals": {}, "floors": {}, "last": {}, "visits": {}, "asked": {}, "wifi": None, "sensors": {"bad": {}, "on": {}}, "age": None}
+    out = {"kf": {}, "zone": {}, "spot": {}, "arrivals": {}, "floors": {}, "last": {}, "visits": {}, "asked": {}, "wifi": None, "sensors": {"bad": {}, "on": {}}, "sleep": {}, "age": None}
     if not isinstance(data, dict):
         return out
     asked = data.get("asked")
@@ -230,6 +234,15 @@ def restore(data, now, max_age=DEFAULT_MAX_AGE_SECS):
     wifi = data.get("wifi")
     if isinstance(wifi, dict) and isinstance(wifi.get("aps"), dict) and isinstance(wifi.get("matches"), dict):
         out["wifi"] = _wifi_clean(wifi)
+    for person, v in (data.get("sleep") or {}).items() if isinstance(data.get("sleep"), dict) else ():
+        try:
+            rooms = {str(k): float(t) for k, t in v["rooms"].items() if 0 <= float(t) <= 86400}
+            places = {str(k): [str(p[0]), str(p[1])] for k, p in v["places"].items() if k in rooms}
+            place = [str(v["place"][0]), str(v["place"][1])] if v.get("place") else None
+            if isinstance(v["night"], str) and set(rooms) <= set(places):
+                out["sleep"][person] = {"night": v["night"], "rooms": rooms, "places": places, "place": place, "at": _epoch(v.get("at"))}
+        except (AttributeError, KeyError, TypeError, ValueError, IndexError, OverflowError):
+            continue   # one person's damaged night, not the restore
     people = data.get("people")
     if isinstance(people, dict):
         for person, v in people.items():
