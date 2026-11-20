@@ -5774,8 +5774,7 @@ def _solve_cross_floor(jobs, results, borrowed):
             continue
         # The like-for-like partner: the floor's published fix may be fused with
         # the fingerprint, which the shadow is not.
-        own = outcome[0] if not job.get("fingerprint") else trilaterate(
-            job["weighted"], bounds=job["bounds"], min_weight_radius=job["min_wr"], stable_hint=job["stable_hint"])
+        own = outcome[3]["geo"] if outcome[3] else outcome[0]  # no match: the fix is the geometric one
         rms_m = _score_floor_fit(fix, every, job["scale"])[1]
         own_rms_m = _score_floor_fit(fix, job["weighted"], job["scale"])[1]
         if own is None or not all(math.isfinite(v) for v in (fix[0], fix[1], own[0], own[1], rms_m, own_rms_m)):
