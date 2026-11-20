@@ -2609,6 +2609,9 @@ def test_cross_floor_shadow_borrows_the_floor_below():
     own = [(0.0, 0.0, 3.0 * SCALE, 1.0, 3.0 * SCALE), (600.0, 0.0, 3.0 * SCALE, 1.0, 3.0 * SCALE),
            (300.0, 400.0, 4.0 * SCALE, 1.0, 4.0 * SCALE)]
     job = {"floor": "Ground", "weighted": own, "bounds": None, "min_wr": 1e-3, "stable_hint": None, "scale": SCALE}
-    shadow = sextant._solve_cross_floor([job], [("fix", 1, 1, None)], borrowed)["Ground"]
+    shadow = sextant._solve_cross_floor([job], [((1.0, 2.0), 1, 1, None)], borrowed)["Ground"]
+    assert shadow["own"] == [1.0, 2.0]                   # no fingerprint: the floor's own fix is the partner
+    refit = sextant._solve_cross_floor([{**job, "fingerprint": {"mode": "fused"}}], [((1.0, 2.0), 1, 1, None)], borrowed)["Ground"]
+    assert refit["own"] != [1.0, 2.0]                    # fused floor: the geometric fix is solved again
     assert shadow["heard"] == heard and len(shadow["fix"]) == 2 and shadow["rms_m"] >= 0 and shadow["own_rms_m"] >= 0
     assert sextant._solve_cross_floor([job], [None], borrowed) == {}   # an unsolved floor gets no shadow

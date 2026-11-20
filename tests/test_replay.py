@@ -45,3 +45,25 @@ def test_load_rows_keeps_the_window_and_skips_what_cannot_be_replayed(tmp_path):
     rows = replay.load_rows(str(tmp_path), 6, now=now)
     assert [r["t"] for r in rows] == [now - 600] and "radii_n" not in rows[0]
     assert replay.load_rows(str(tmp_path / "missing"), 6, now=now) == []
+
+
+def test_cross_floor_replay_measures_both_fixes():
+    """tools/replay_cross_floor.py: the three measures, own beside cross."""
+    import importlib.util
+    import pathlib
+    spec = importlib.util.spec_from_file_location("rcf", pathlib.Path(__file__).parent.parent / "tools" / "replay_cross_floor.py")
+    rcf = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(rcf)
+    layout = {"floor": [{"name": "G", "scale": 100.0,
+                         "zones": [{"entity_id": "Den", "cords": [{"x": 0, "y": 0}, {"x": 200, "y": 0}, {"x": 200, "y": 200}, {"x": 0, "y": 200}]}],
+                         "receivers": [{"entity_id": "rx", "cords": {"x": 100, "y": 100}}]}]}
+
+    def row(t, own, cross):
+        return {"t": t, "ent": "cat", "floor": "G", "speed": 0.0, "zone": "Den", "anchor": "rx",
+                "floor_cands": {"G": {"fix": [0, 0], "cross": {"fix": cross, "own": own}}}}
+    rows = [row(0, [300, 100], [100, 100]), row(10, [100, 100], [100, 100]), {"t": 20, "ent": "cat", "floor": "G", "floor_cands": {"G": {"fix": [1, 1]}}}]
+    s = rcf.measure(rcf.pairs(rows, rcf.floors_of(layout))["cat"])
+    assert s["n"] == 2 and s["like"] == 2                # the row without a cross fix is left out
+    assert s["still"] == (2.0, 0.0, 1)                   # own jumped 2 m between still cycles, cross none
+    assert s["room"] == (0.5, 1.0, 2)                    # own was outside the Den once
+    assert s["anchor"] == (1.0, 0.0, 2)                  # median distance to the proxy it sat on

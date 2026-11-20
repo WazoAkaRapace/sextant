@@ -5758,7 +5758,8 @@ def _cross_floor_points(layout, frames, targets, donors, thing_h):
 def _solve_cross_floor(jobs, results, borrowed):
     """The shadow fix per solved floor: its own points plus the borrowed ones.
 
-    Pure CPU, executor-safe. ``{floor: {"fix", "rms_m", "own_rms_m", "heard"}}``:
+    Pure CPU, executor-safe. ``{floor: {"fix", "own", "rms_m", "own_rms_m", "heard"}}``
+    (``own`` is the same solve without the borrowed points):
     rms over every point, and over the floor's own points alone so it pairs
     with the floor's own ``rms_m``.
     """
@@ -5771,12 +5772,17 @@ def _solve_cross_floor(jobs, results, borrowed):
         fix = trilaterate(every, bounds=job["bounds"], min_weight_radius=job["min_wr"], stable_hint=job["stable_hint"])
         if fix is None:
             continue
+        # The like-for-like partner: the floor's published fix may be fused with
+        # the fingerprint, which the shadow is not.
+        own = outcome[0] if not job.get("fingerprint") else trilaterate(
+            job["weighted"], bounds=job["bounds"], min_weight_radius=job["min_wr"], stable_hint=job["stable_hint"])
         rms_m = _score_floor_fit(fix, every, job["scale"])[1]
         own_rms_m = _score_floor_fit(fix, job["weighted"], job["scale"])[1]
-        if not all(math.isfinite(v) for v in (fix[0], fix[1], rms_m, own_rms_m)):
+        if own is None or not all(math.isfinite(v) for v in (fix[0], fix[1], own[0], own[1], rms_m, own_rms_m)):
             continue  # this goes out as JSON
         out[job["floor"]] = {
             "fix": [round(float(fix[0]), 1), round(float(fix[1]), 1)],
+            "own": [round(float(own[0]), 1), round(float(own[1]), 1)],
             "rms_m": round(rms_m, 3),
             "own_rms_m": round(own_rms_m, 3),
             "heard": heard,
