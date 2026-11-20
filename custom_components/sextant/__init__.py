@@ -4517,7 +4517,7 @@ async def _restore_runtime(hass):
     back = runtime_mod.restore(data, time.time(), _tuning(layout, "restore_state_secs"))
     _last_seen.update(back["last"])
     _sensor_bad_since.update(back["sensors"]["bad"])
-    _sensor_on_since.update(back["sensors"]["on"])
+    _sensor_on_since.update({e: [t, None] for e, t in back["sensors"]["on"].items()})
     global _restored_at
     _restored_at = time.time() if back["last"] else 0.0
     _seed_last_seen_from_history(hass)
@@ -4687,7 +4687,7 @@ async def _save_runtime(hass, final=False):
         rows = _rows_with_last_seen(rows, _last_seen)
         data = runtime_mod.snapshot(time.time(), kf=_kf_position_state, zones=_zone_state,
                                     spots=_subzone_state, arrivals=_arrivals, rows=rows, visits=_person_visits, asked=_gps_asked, wifi=_wifi_store,
-                                    floors=_floor_elections(), sensors={"bad": _sensor_bad_since, "on": _sensor_on_since})
+                                    floors=_floor_elections(), sensors={"bad": _sensor_bad_since, "on": {e: v[0] for e, v in _sensor_on_since.items()}})
         await save_runtime(hass, data)
     except Exception as e:  # noqa: BLE001
         _LOGGER.warning("Could not save the runtime state: %s", e)
@@ -5443,6 +5443,7 @@ def _update_room_sensors(hass):
     classes = layout.get("thing_classes") or {}
     owners = layout.get("thing_owners") or {}
     person_rooms, presences, pet_persons, speaking = {}, {}, set(), set()
+    person_floors = {}
     for person, things in persons_mod.owners(layout).items():
         slug = person.split(".", 1)[1]
         st = hass.states.get(f"sensor.{slug}_sextant_person_location") or hass.states.get(f"sensor.{slug}_sextant_pet_location")
@@ -5460,8 +5461,10 @@ def _update_room_sensors(hass):
             continue
         room, floor = st.attributes.get("room"), st.attributes.get("floor")
         # Outside keeps the floor but is no room, even one that happens to be called "Outside".
-        if presences[name] in rooms_mod.COUNTED and room and room != "unknown" and floor and floor != "unknown" and st.attributes.get("kind") != "outside":
-            person_rooms[name] = (floor, room)
+        if presences[name] in rooms_mod.COUNTED and floor and floor != "unknown" and st.attributes.get("kind") != "outside":
+            person_floors[name] = floor   # a floor alone is enough here: Wi-Fi gives one with no room
+            if room and room != "unknown":
+                person_rooms[name] = (floor, room)
     names = _thing_names(hass, {r.get("ent") for r in rows if r.get("ent")}, layout)
     counts = rooms_mod.stands_for_someone(owners, speaking, lambda ent: persons_mod.locates_owner(layout, ent, classes.get(ent)))
     hass.data["sextant_room_answers"] = rooms_mod.occupancy(keys, rows, presence_of, classes, names, person_rooms, stands_for_someone=counts)
@@ -5470,7 +5473,7 @@ def _update_room_sensors(hass):
     count, attrs = rooms_mod.people_home(presences, pet_persons)
     update_sextant_sensor_state(hass, PEOPLE_HOME_ENTITY_ID, count, attrs)
     update_sextant_sensor_state(hass, HOUSEHOLD_FLOOR_ENTITY_ID, *rooms_mod.household_floor(
-        attrs["home"], {name: floor for name, (floor, _room) in person_rooms.items()}))
+        attrs["home"], person_floors))
 
 
 def _restoring(sensor, sensed, now):

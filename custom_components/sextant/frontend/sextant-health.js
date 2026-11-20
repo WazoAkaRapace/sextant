@@ -283,10 +283,16 @@ class SextantHealth extends LitElement {
     this._busy = "selftest";
     const d = await callWS(this, this.hass, { type: "sextant/layout/get" });
     const rec = (d?.layout?.floor || []).find((f) => f.name === v.floor)?.receivers?.find((r) => String(r.entity_id) === v.entity);
-    const saved = rec && (rec.cords = { ...rec.cords, x: v.est[0], y: v.est[1] })
+    // Moved since the test ran: its answer is about the old place.
+    const stale = rec && (Math.abs(rec.cords?.x - v.known[0]) > 0.06 || Math.abs(rec.cords?.y - v.known[1]) > 0.06);
+    const saved = rec && !stale && (rec.cords = { ...rec.cords, x: v.est[0], y: v.est[1] })
       && await callWS(this, this.hass, { type: "sextant/layout/save", layout: d.layout });
     this._busy = null;
-    if (!saved) { if (d && !rec) toast(this, `${name} is no longer on ${v.floor}`); return; }
+    if (!saved) {
+      if (d && !rec) toast(this, `${name} is no longer on ${v.floor}`);
+      else if (stale) { toast(this, `${name} was moved since this test; running it again`); this._runSelftest(); }
+      return;
+    }
     toast(this, `${name} moved`);
     this.dispatchEvent(new CustomEvent("layout-changed"));
     this._runSelftest();
@@ -814,7 +820,7 @@ class SextantHealth extends LitElement {
       <div class="row">
         ${uiSelect({ label: "Setting", value: this._replayKey, options: keys.map((k) => ({ value: k, label: (TUNING_LABELS[k] || [k])[0] })), onChange: (v) => { this._replayKey = v; this._replay = null; }, style: "min-width: 240px" })}
         ${uiField({ label: `Value to try (now ${now ?? "default"})`, value: this._replayValue, onChange: (v) => { this._replayValue = v; }, style: "width: 180px" })}
-        ${uiSelect({ label: "Window", value: this._replayHours, options: [1, 3, 6, 12, 24].map((h) => ({ value: h, label: `${h} h` })), onChange: (v) => { this._replayHours = Number(v); }, style: "min-width: 110px" })}
+        ${uiSelect({ label: "Window", value: this._replayHours, options: [1, 3, 6, 12].map((h) => ({ value: h, label: `${h} h` })), onChange: (v) => { this._replayHours = Number(v); }, style: "min-width: 110px" })}
         ${uiButton({ label: this._busy === "replay" ? "Replaying…" : "Replay", kind: "primary", disabled: !!this._busy, onClick: () => this._runReplay() })}
       </div>
       ${r ? html`<div class="wrap"><table>

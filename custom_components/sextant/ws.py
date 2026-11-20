@@ -14,6 +14,7 @@ message is meant to be shown to the user as is.
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import math
@@ -1273,10 +1274,15 @@ async def _compute_kpi(hass, hours):
     }
 
 
+# An hour of log is some 10,000 rows held in memory, so the window is capped and one replay runs at a time.
+REPLAY_MAX_HOURS = 12
+_replay_running = False
+
+
 @websocket_api.websocket_command({
     vol.Required("type"): "sextant/replay",
     vol.Required("tuning"): dict,
-    vol.Optional("hours", default=6.0): vol.All(vol.Coerce(float), vol.Range(min=0.5, max=48)),
+    vol.Optional("hours", default=6.0): vol.All(vol.Coerce(float), vol.Range(min=0.5, max=REPLAY_MAX_HOURS)),
 })
 @websocket_api.require_admin
 @websocket_api.async_response
@@ -1291,11 +1297,23 @@ async def ws_replay(hass, connection, msg):
     unknown = sorted(k for k in msg["tuning"] if k not in replay.ROOM_KEYS)
     if unknown:
         return _error(connection, msg, f"Only the room election can be replayed, not {', '.join(unknown)}")
+    # An out-of-range value would be replayed as the default while the page showed the value asked for.
+    bad = sorted(k for k, v in msg["tuning"].items() if core._coerce_tuning(k, v) is None)
+    if bad:
+        return _error(connection, msg, "Out of range: " + ", ".join(f"{k} takes {core.TUNING_SPEC[k][2]:g} to {core.TUNING_SPEC[k][3]:g}" for k in bad))
+    global _replay_running
+    if _replay_running:
+        return _error(connection, msg, "A replay is already running")
+    habits = copy.deepcopy(core._habits)   # here on the loop, where they are learned
 
     def work():
-        return replay.compare(core, layout, replay.load_rows(election_log.get(hass).dirpath, msg["hours"]), msg["tuning"])
+        return replay.compare(core, layout, replay.load_rows(election_log.get(hass).dirpath, msg["hours"]), msg["tuning"], habits)
 
-    out = await hass.async_add_executor_job(work)
+    _replay_running = True
+    try:
+        out = await hass.async_add_executor_job(work)
+    finally:
+        _replay_running = False
     if not out.get("rows"):
         return _error(connection, msg, "The election log has nothing for that window: set election_log_hours above 0 and let it record")
     connection.send_result(msg["id"], out)

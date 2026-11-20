@@ -80,19 +80,19 @@ def _floors(core, layout):
     return floors, proxies
 
 
-def _elector(core):
-    """``_elect_zone`` on its own state: fresh zone state, the habits as they are, nothing learned."""
+def _elector(core, habits_now):
+    """``_elect_zone`` on its own state: fresh zone state, the habits as given, nothing learned."""
     habits = types.SimpleNamespace(**{k: getattr(core.habits_mod, k) for k in dir(core.habits_mod) if not k.startswith("__")})
     habits.learn = lambda *a, **k: None
-    scope = {**vars(core), "_zone_state": {}, "_habits": copy.deepcopy(core._habits), "_habits_last": {}, "habits_mod": habits}
+    scope = {**vars(core), "_zone_state": {}, "_habits": copy.deepcopy(habits_now), "_habits_last": {}, "habits_mod": habits}
     return types.FunctionType(core._elect_zone.__code__, scope, "_elect_zone", core._elect_zone.__defaults__)
 
 
-def run(core, layout, rows, tuning=None) -> dict:
+def run(core, layout, rows, tuning=None, habits=None) -> dict:
     """{thing: [(t, floor, room)]}: the rooms the election would publish with ``tuning`` laid over the layout's."""
     lay = {**layout, "tuning": {**(layout.get("tuning") or {}), **(tuning or {})}}
     floors, proxies = _floors(core, lay)
-    elect = _elector(core)
+    elect = _elector(core, core._habits if habits is None else habits)
     out = {}
     for r in rows:
         if r["floor"] not in floors:
@@ -148,11 +148,16 @@ def _stats(series) -> dict:
     return {"switches": len(sw), "bounces": bounces(sw)}
 
 
-def compare(core, layout, rows, tuning) -> dict:
-    """The replay with the tuning as it is and with ``tuning`` laid over it, side by side."""
+def compare(core, layout, rows, tuning, habits=None) -> dict:
+    """The replay with the tuning as it is and with ``tuning`` laid over it, side by side.
+
+    ``habits`` is a copy of the learned habits taken on the event loop: the live dict changes there."""
+    # Only rows run() will replay, so the three series line up row for row.
+    ok = {f.get("name") for f in layout.get("floor") or [] if isinstance(f.get("scale"), (int, float)) and f["scale"] > 0}
+    rows = [r for r in rows if r["floor"] in ok]
     if not rows:
         return {"rows": 0}
-    base, trial, pub = run(core, layout, rows), run(core, layout, rows, tuning), logged(rows)
+    base, trial, pub = run(core, layout, rows, habits=habits), run(core, layout, rows, tuning, habits), logged(rows)
     per = {}
     for e in base:
         b, t = _stats({e: base[e]}), _stats({e: trial.get(e, [])})

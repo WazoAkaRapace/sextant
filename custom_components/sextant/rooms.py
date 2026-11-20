@@ -129,8 +129,9 @@ def sensor_problems(keys, get, now, stuck_s, gone_s, bad_since=None, on_since=No
     Numbers (they change all the time), media players and trackers (a person can be home for
     days) are never called stuck. ``get(entity_id)`` gives a state object or None; ``bad_since``
     (kept by the caller between calls) times how long each has been missing or unavailable, and
-    ``on_since`` when each binary sensor turned on: last_changed starts again with Home Assistant,
-    so the caller saves both over a restart and the earlier time wins.
+    ``on_since`` each binary sensor's ``[on since, last_changed seen]``: last_changed starts again
+    with Home Assistant, so the caller saves both over a restart and hands the saved time back as
+    ``[since, None]``, which wins over the first last_changed seen after it.
     """
     bad_since = {} if bad_since is None else bad_since
     on_since = {} if on_since is None else on_since
@@ -155,8 +156,11 @@ def sensor_problems(keys, get, now, stuck_s, gone_s, bad_since=None, on_since=No
             elif ent.startswith("binary_sensor.") and spec == ent and ent != key.get("door") and str(st.state).lower() == "on":
                 seen_on.add(ent)
                 changed = st.last_changed.timestamp()
-                on_since[ent] = min(changed, on_since.get(ent, changed))
-                age = max(0.0, now - on_since[ent])
+                since, seen = on_since.get(ent) or (changed, None)
+                # A last_changed that moves after it was seen is a new on spell (off and on between
+                # two calls); one not seen yet is the restart, and the saved time stands.
+                on_since[ent] = [changed if seen not in (None, changed) else min(since, changed), changed]
+                age = max(0.0, now - on_since[ent][0])
                 if age >= stuck_s:
                     found = {"kind": "stuck", "age": age}
             if found:
