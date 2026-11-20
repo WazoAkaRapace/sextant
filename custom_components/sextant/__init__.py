@@ -842,7 +842,7 @@ TUNING_SPEC = {
     # what Wi-Fi said) in config/sextant_person_log for this many hours, to
     # find out why a location or an arrival was wrong. 0 = off. See person_log.py.
     "person_log_hours": (48.0, float, 0.0, 720.0),
-    # The night the "slept in" sensor counts: local hours, from start to end (may wrap midnight).
+    # The night the "slept in" sensor counts: local hours, from start to end (may wrap midnight; equal = off).
     "sleep_start_hour": (22.0, float, 0.0, 24.0),
     "sleep_end_hour": (6.0, float, 0.0, 24.0),
     # A room's occupancy stays on this long after its last reading says
@@ -5186,6 +5186,8 @@ def _update_person_sensors(hass):
         del _arrivals[ent]
     for person in [p for p in _person_visits if p not in by_person]:
         del _person_visits[person]
+    for person in [p for p in _person_sleep if p not in by_person]:
+        del _person_sleep[person]
     for person in [p for p in _person_log_key if p not in by_person]:
         _person_log_key.pop(person, None)
         _wifi_since.pop(person, None)

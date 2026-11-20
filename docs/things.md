@@ -80,8 +80,8 @@ A pet's are named `sensor.<pet>_sextant_pet_location`, `_sextant_pet_room` and
 paw tags); an existing pet's sensors are renamed on the next start.
 `_sextant_person_sleep` ("Slept In") is the room they spent most of the night in,
 22:00 to 06:00 by default (`sleep_start_hour`, `sleep_end_hour`); `minutes` has the
-time in each room, `night` the date the night began, and `tonight` is true while it is
-still counting. It keeps last night's answer through the day and starts again at 22:00.
+time in each room ("Bedroom (Second Floor)"), `floor` the winner's floor, `night` the date the night began, and `tonight` is true while it is
+still counting (equal hours switch it off). It keeps last night's answer through the day and starts again at 22:00.
 
 Which thing speaks for a person: only things that **give their owner's
 location** count - by default a watch, a phone, or a person's or pet's own

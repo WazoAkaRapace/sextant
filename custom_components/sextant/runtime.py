@@ -235,10 +235,14 @@ def restore(data, now, max_age=DEFAULT_MAX_AGE_SECS):
     if isinstance(wifi, dict) and isinstance(wifi.get("aps"), dict) and isinstance(wifi.get("matches"), dict):
         out["wifi"] = _wifi_clean(wifi)
     for person, v in (data.get("sleep") or {}).items() if isinstance(data.get("sleep"), dict) else ():
-        rooms = v.get("rooms") if isinstance(v, dict) else None
-        if isinstance(v.get("night") if isinstance(v, dict) else None, str) and isinstance(rooms, dict) and isinstance(v.get("floors"), dict):
-            out["sleep"][person] = {"night": v["night"], "floors": v["floors"], "at": _epoch(v.get("at")),
-                                    "rooms": {r: float(t) for r, t in rooms.items() if isinstance(t, (int, float)) and not isinstance(t, bool) and t >= 0}}
+        try:
+            rooms = {str(k): float(t) for k, t in v["rooms"].items() if 0 <= float(t) <= 86400}
+            places = {str(k): [str(p[0]), str(p[1])] for k, p in v["places"].items() if k in rooms}
+            place = [str(v["place"][0]), str(v["place"][1])] if v.get("place") else None
+            if isinstance(v["night"], str) and set(rooms) <= set(places):
+                out["sleep"][person] = {"night": v["night"], "rooms": rooms, "places": places, "place": place, "at": _epoch(v.get("at"))}
+        except (AttributeError, KeyError, TypeError, ValueError, IndexError, OverflowError):
+            continue   # one person's damaged night, not the restore
     people = data.get("people")
     if isinstance(people, dict):
         for person, v in people.items():

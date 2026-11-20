@@ -290,8 +290,17 @@ def test_slept_in_is_the_room_with_most_of_the_night_and_survives_a_restart():
         t = persons.sleep_tally(t, bed, at(2 + m // 60, m % 60, 21), tz, 22, 6)
     state, attrs = persons.sleep_state(t)
     assert state == "Bedroom" and attrs["night"] == "2026-11-20" and attrs["floor"] == "Second Floor" and attrs["tonight"]
-    assert attrs["minutes"] == {"Bedroom": 245, "Great Room": 55}
+    assert attrs["minutes"] == {"Bedroom (Second Floor)": 240, "Great Room (Ground Floor)": 60}
     t = persons.sleep_tally(t, sofa, at(9, 0, 21), tz, 22, 6)         # morning: last night stands
     assert persons.sleep_state(t)[0] == "Bedroom" and not persons.sleep_state(t)[1]["tonight"]
     t = persons.sleep_tally(t, sofa, at(22, 0, 21), tz, 22, 6)        # the next night starts afresh
-    assert persons.sleep_state(t) == ("unknown", {"night": "2026-11-21", "minutes": {}})
+    assert persons.sleep_state(t) == ("unknown", {"night": "2026-11-21", "floor": None, "tonight": True, "minutes": {}})
+    # Same name on two floors: two rooms. Equal hours: off.
+    t = persons.sleep_tally(None, bed, at(23, 0), tz, 22, 6)
+    t = persons.sleep_tally(t, ("Bedroom", "Ground Floor"), at(23, 5), tz, 22, 6)
+    t = persons.sleep_tally(t, None, at(23, 6), tz, 22, 6)
+    assert persons.sleep_state(t)[1]["minutes"] == {"Bedroom (Second Floor)": 5, "Bedroom (Ground Floor)": 1}
+    assert persons.sleep_tally(None, bed, at(23, 0), tz, 22, 22) is None
+    # A damaged save drops that person, not the restore.
+    bad = {"saved_at": at(23, 0), "things": {}, "sleep": {"a": {"night": "x", "rooms": {"R (F)": 10 ** 400}, "places": {}}, "b": "junk"}}
+    assert runtime.restore(bad, at(23, 1))["sleep"] == {}

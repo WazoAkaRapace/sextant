@@ -71,36 +71,42 @@ SLEEP_MAX_STEP_S = 300.0   # a longer gap between cycles (a restart) counts no m
 def sleep_tally(tally, place, now, tz, start_h, end_h):
     """The night's time in each room, for the "slept in" sensor.
 
-    ``tally`` is ``{"night", "rooms": {room: secs}, "floors": {room: floor}, "at"}`` or None;
-    ``place`` is (room, floor) or None (out, outside, no room). The night is the local
-    ``start_h`` to ``end_h`` window, named for the date it starts on. Outside the window the
-    last night's tally stands; the first cycle of a new night starts a fresh one.
+    ``tally`` is ``{"night", "rooms": {"Room (Floor)": secs}, "places": {key: [room, floor]}, "place", "at"}``
+    or None; ``place`` is (room, floor) or None (out, no room). Each interval counts for the place
+    seen at its start. The night is the local ``start_h`` to ``end_h`` window (equal hours: off),
+    named for the date it starts on. Outside the window the last night's tally stands; the first
+    cycle of a new night starts a fresh one.
     """
     from datetime import datetime, timedelta  # noqa: PLC0415
     lt = datetime.fromtimestamp(now, tz)
     h = lt.hour + lt.minute / 60.0
-    inside = (start_h <= h < end_h) if start_h < end_h else (h >= start_h or h < end_h)
-    if not inside:
-        return {**tally, "at": None} if tally else tally
+    inside = (start_h <= h < end_h) if start_h < end_h else (h >= start_h or h < end_h) if start_h > end_h else False
     night = ((lt - timedelta(days=1)) if start_h > end_h and h < end_h else lt).date().isoformat()
-    if not tally or tally.get("night") != night:
-        tally = {"night": night, "rooms": {}, "floors": {}, "at": None}
-    step = min(max(0.0, now - tally["at"]), SLEEP_MAX_STEP_S) if tally.get("at") else 0.0
-    rooms, floors = dict(tally["rooms"]), dict(tally["floors"])
-    if place and step:
-        rooms[place[0]] = rooms.get(place[0], 0.0) + step
-        floors[place[0]] = place[1]
-    return {"night": night, "rooms": rooms, "floors": floors, "at": now}
+    if inside and (not tally or tally.get("night") != night):
+        tally = {"night": night, "rooms": {}, "places": {}, "place": None, "at": None}
+    if not tally:
+        return tally
+    rooms, places = dict(tally["rooms"]), dict(tally["places"])
+    prev = tally.get("place")
+    if prev and tally.get("at"):
+        key = f"{prev[0]} ({prev[1]})"
+        rooms[key] = rooms.get(key, 0.0) + min(max(0.0, now - tally["at"]), SLEEP_MAX_STEP_S)
+        places[key] = list(prev)
+    if not inside:
+        return {**tally, "rooms": rooms, "places": places, "place": None, "at": None}
+    return {"night": night, "rooms": rooms, "places": places, "place": list(place) if place else None, "at": now}
 
 
 def sleep_state(tally):
     """(state, attributes) for the "slept in" sensor: the room with the most of the night."""
-    rooms = (tally or {}).get("rooms") or {}
+    tally = tally or {}
+    rooms, tonight = tally.get("rooms") or {}, tally.get("at") is not None
     if not rooms:
-        return "unknown", {"night": (tally or {}).get("night"), "minutes": {}}
-    room = max(rooms, key=rooms.get)
-    return room, {"night": tally["night"], "floor": tally["floors"].get(room), "tonight": tally.get("at") is not None,
-                  "minutes": {r: round(v / 60.0) for r, v in sorted(rooms.items(), key=lambda kv: -kv[1])}}
+        return "unknown", {"night": tally.get("night"), "floor": None, "tonight": tonight, "minutes": {}}
+    key = max(rooms, key=rooms.get)
+    room, floor = tally["places"][key]
+    return room, {"night": tally["night"], "floor": floor, "tonight": tonight,
+                  "minutes": {k: round(v / 60.0) for k, v in sorted(rooms.items(), key=lambda kv: -kv[1])}}
 
 
 def owners(layout) -> dict[str, list[str]]:
