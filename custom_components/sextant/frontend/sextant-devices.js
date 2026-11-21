@@ -826,7 +826,7 @@ class SextantDevices extends LitElement {
           <span class="grow"></span>
           ${uiButton({ label: "Add a thing…", kind: "primary", icon: "mdi:plus", onClick: () => { this._addWizard = { kind: null, irk: "", error: null }; } })}
         </h3>
-        <div class="wrap"><table class="compact tracked">
+        <div class="wrap"><table class="compact tracked stack act">
           <tr><th>Thing</th><th>Where</th><th class="num">Height</th><th class="num">Ref trim</th><th></th></tr>
           ${tracked.map(([address, d]) => {
             const slug = d.slug, p = live.get(slug), name = thingName(this.data, slug), mdi = classIcon(classes[slug]);
@@ -865,7 +865,7 @@ class SextantDevices extends LitElement {
           ${uiButton({ label: "Refresh", kind: "text", icon: "mdi:refresh", onClick: () => this._refreshLight() })}
         </div>
         ${finding ? html`<p class="small">Hold the device against <b>${findName}</b>: the loudest there comes first. The list refreshes every 3 s; set Find near back to Off when done.</p>` : nothing}
-        <div class="wrap"><table class="compact p-2 p-4 p-5">
+        <div class="wrap"><table class="compact p-2 p-4 p-5 stack act">
           <tr><th>Device</th><th>Maker</th><th>Where</th><th class="num">Proxies</th><th class="num">Signal</th><th>Seen</th><th></th></tr>
           ${candidates.slice(0, 200).map((c, i) => { const w = this._heardWhere(c, index); return html`<tr>
             <td><b>${c.name}</b> ${finding && i === 0 ? html`<span class="pill ok">loudest</span>` : nothing} ${c.kind === "tile" ? html`<span class="pill">Tile</span>` : c.kind === "ibeacon" ? html`<span class="pill">iBeacon</span>` : nothing}<br><span class="muted small">${c.address}</span></td>
@@ -1077,7 +1077,7 @@ class SextantDevices extends LitElement {
       .sort((a, b) => a.where.localeCompare(b.where));
     return html`
       <p class="small muted">Click a Tile's name to call it "Kitchen keys"; the map and the Things page use that name. Bermuda follows each Tile across its address rotations by RSSI pattern and remembers where it last was, so it finds it again after a restart; that works while the Tile is not sitting among other Tiles. A Tile marked <span class="pill warn">not heard</span> has rotated away unseen: pick the live address that is where the Tile is and Adopt. On Private ID Tiles the ID readable over Bluetooth rotates too, so it cannot name a tag; probing stays off unless "Tile identity probes" is on above.</p>
-      <div class="wrap"><table class="compact p-4">
+      <div class="wrap"><table class="compact p-4 stack">
         <tr><th>Tile</th><th>Bound address</th><th>This Tile is…</th><th>History</th></tr>
         ${bindings.map(([id, sources]) => { const lost = t.bound_age?.[id] == null || t.bound_age[id] > 300; return html`<tr>
           <td><a href="#" class="name" title="Name this Tile (and set its class, height and icon)" @click=${(e) => { e.preventDefault(); this._openWizard(id, sources[0]); }}>${thingName(this.data, id)}</a>${this.data?.layout?.thing_names?.[id] ? nothing : html`<br><span class="muted small">click to name it</span>`}${t.uids?.[id] ? html`<br><code class="small">${t.uids[id]}</code>` : nothing}</td>
@@ -1121,7 +1121,7 @@ class SextantDevices extends LitElement {
       return { room: p.room ? `${p.room} · ${p.floor}` : p.floor, proxy: `${p.name} (${hit.rssi} dBm)`, unplaced: heard.length - heard.filter((h) => placed.has(String(h.address || "").toLowerCase())).length };
     };
     return html`<h4>Tile IDs heard <span class="muted small">read from the tags; pick which configured Tile each one is. To tell two apart, ring one from the Tile app, carry it to another room for two minutes and watch which ID moves.</span></h4>
-      <div class="wrap"><table class="compact p-4 p-6">
+      <div class="wrap"><table class="compact p-4 p-6 stack">
         <tr><th>Tile ID</th><th>Last heard</th><th>Where</th><th>Loudest placed proxy</th><th>Is</th><th></th></tr>
         ${ids.map((row) => { const w = where(row); return html`<tr>
           <td><code>${row.uid}</code></td>
@@ -1163,6 +1163,15 @@ class SextantDevices extends LitElement {
     .ponly { display: none; }
     /* p-N: column N is left out on a phone (it is in the dialog, or only detail). */
     @media (max-width: 720px) { .p-2 tr > :nth-child(2):not([colspan]), .p-4 tr > :nth-child(4), .p-5 tr > :nth-child(5), .p-6 tr > :nth-child(6) { display: none; } .dialog h3 { overflow-wrap: anywhere; flex-wrap: wrap; } .dialog h3 span { flex-basis: 100%; } .ponly { display: inline; } }
+    /* stack: on a phone each row is a block, its cells one under another; act puts the last cell (the action) at the right. */
+    @media (max-width: 720px) {
+      .stack, .stack tbody { display: block; } .stack th { display: none; }
+      .stack tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; border-top: 1px solid var(--divider-color); padding: 6px 0; }
+      .stack td { display: block; grid-column: 1; border: 0; padding: 2px 8px; }
+      .wrap .stack td:first-child { min-width: 0; max-width: none; position: static; background: none; box-shadow: none; border-right: 0; }
+      .stack td.who { display: flex; }
+      .stack.act td:last-child:not(:first-child) { grid-column: 2; grid-row: 1 / span 3; align-self: center; }
+    }
     @media (pointer: coarse) { a.name { display: inline-block; padding: 6px 0; } }
     td.actions { white-space: nowrap; }
     button.iconbtn.danger { color: var(--error-color, #b00020); border-color: transparent; }
