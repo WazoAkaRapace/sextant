@@ -655,7 +655,7 @@ class SextantHealth extends LitElement {
     const len = (m) => `${m > 0 ? "+" : ""}${fmtLen(m, this.hass, 1)}`;
     return html`<section class="card">
       <h3>Receivers against real fixes</h3>
-      <p class="small muted">Each receiver's ranges set against the fixes they went into, from the election log: a receiver that reads far short or long of where things were placed is misplaced or needs calibrating. Unlike the self-test this uses the things you track, not the proxies hearing each other. It needs the election log (Tuning, Election log hours) and reads only fixes solved from ranges.</p>
+      <p class="small muted">Each receiver's ranges set against the fixes they went into, from the election log: a receiver that reads far short or long of where things were placed is misplaced or needs calibrating. Unlike the self-test this uses the things you track, not the proxies hearing each other. It needs the election log (Tuning, Election log hours). A fix that came mostly from fingerprints can make a healthy receiver look off, so trust a receiver that is off across many readings.</p>
       <div class="row">${uiButton({ label: this._busy === "report" ? "Reading…" : r ? "Refresh" : "Read the last 6 hours", kind: r ? "outline" : "primary", disabled: !!this._busy, onClick: () => this._runReport() })}</div>
       ${r && !rows.length ? html`<p class="small muted">Nothing to read: the election log holds no range fixes for the last ${r.hours} hours.</p>` : nothing}
       ${rows.length ? html`<div class="wrap"><table>

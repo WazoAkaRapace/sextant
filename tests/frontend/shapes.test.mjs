@@ -52,5 +52,10 @@ test("planKey ignores what the server writes and sees what the editor would over
   assert.equal(planKey(a), planKey(b));
   b.floor[0].receivers[0].cords.x = 5;   // a proxy moved from the Health page
   assert.notEqual(planKey(a), planKey(b));
+  // A proxy held out of calibration: its correction is the editor's to overwrite.
+  const c = JSON.parse(JSON.stringify(a)), e = JSON.parse(JSON.stringify(a));
+  Object.assign(c.floor[0].receivers[0], { calibrate: false, correction: 0.8 });
+  Object.assign(e.floor[0].receivers[0], { calibrate: false, correction: 1.2 });
+  assert.notEqual(planKey(c), planKey(e));
   assert.equal(planKey(undefined), "[]");
 });

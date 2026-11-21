@@ -46,7 +46,11 @@ export function planKey(layout) {
   const floors = JSON.parse(JSON.stringify(layout?.floor || []));
   for (const f of floors) {
     delete f.calibration; delete f.bias_field;
-    for (const r of f.receivers || []) { delete r.correction; delete r.unmatched; delete r.label; }
+    for (const r of f.receivers || []) {
+      // A proxy held out of calibration keeps the editor's correction through a save.
+      if (r.calibrate !== false) delete r.correction;
+      delete r.unmatched; delete r.label;
+    }
     for (const q of f.pins || []) { delete q.linked; delete q.miss; delete q.missLabel; }
   }
   return JSON.stringify(floors);

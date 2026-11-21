@@ -50,6 +50,8 @@ const SNAP_MODES = [
 // Auto-save waits this long after the last change before it writes the plan.
 const AUTOSAVE_DELAY_MS = 2500;
 
+const CHANGED_ELSEWHERE = "The floor plan was changed somewhere else since this page loaded it: another tab or person, or a proxy moved from the Health page.\n\nSaving writes your copy of every floor over that change. The plan as it is now is kept under History.\n\nSave anyway?";
+
 function uid(prefix) { return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`; }
 
 /** A layout as a string to compare, without the display-only fields the
@@ -304,11 +306,7 @@ class SextantEdit extends LitElement {
 
   updated(changed) {
     if (!this._map) return;
-    if (changed.has("data")) {
-      // The reload after our own save: the store now holds this draft.
-      if (this._rebase) { this._rebase = false; this._base = planKey(this.data?.layout); }
-      this._syncDraft(!this._dirty);
-    }
+    if (changed.has("data")) this._syncDraft(!this._dirty);
     if (changed.has("floor")) { this._pushFloor(); this._proposal = null; }
     if (changed.has("hass")) this._map.setAreas(this.hass?.areas);
     if (changed.has("data")) this._map.setAccessPoints(Array.isArray(this.data?.access_points) ? this.data.access_points : null);
@@ -1087,6 +1085,8 @@ class SextantEdit extends LitElement {
 
   async _addFloor(name, file) {
     if (!name || !file) return toast(this, "A floor needs a name and a map image");
+    // Adding a floor sends every floor too (see _save).
+    if ((await this._changedElsewhere()) && !(await confirmAsync(CHANGED_ELSEWHERE))) return;
     const draft = this._cleanDraft();
     const ext = file.name.includes(".") ? file.name.slice(file.name.lastIndexOf(".")) : ".png";
     const filename = `${name}${ext}`;
@@ -1124,6 +1124,13 @@ class SextantEdit extends LitElement {
     this.dispatchEvent(new CustomEvent("floor-changed", { detail: this._draft.floor[0]?.name || null }));
   }
 
+  /** True when the stored plan is no longer the one this draft was taken from. */
+  async _changedElsewhere() {
+    if (this._base == null) return false;
+    const fresh = await this.hass.callWS({ type: "sextant/layout/get" }).catch(() => null);
+    return !!fresh && planKey(fresh.layout) !== this._base;
+  }
+
   async _save(removeMap = null, auto = false) {
     const draft = this._cleanDraft();
     // Asked before anything is sent. The server keeps a copy of the plan it
@@ -1139,22 +1146,24 @@ class SextantEdit extends LitElement {
     // another person or the Health page's "Move it there" wrote since this
     // draft was taken. Look first: auto-save holds off, Save asks.
     // shortcut: read then write, so a change in the moment between is missed; a version check in sextant/layout/save would close it.
-    const fresh = this._base == null ? null : await this.hass.callWS({ type: "sextant/layout/get" }).catch(() => null);
-    if (fresh && planKey(fresh.layout) !== this._base) {
+    if (await this._changedElsewhere()) {
       if (auto) {
         this._busy = false;
         this._autosaveHeld = sent;
         toast(this, "Not saved automatically: the floor plan was changed somewhere else since this page loaded it. Save to write your copy over it, or Discard to load the other one.", 9000);
         return null;
       }
-      if (!(await confirmAsync("The floor plan was changed somewhere else since this page loaded it: another tab or person, or a proxy moved from the Health page.\n\nSaving writes your copy of every floor over that change. The plan as it is now is kept under History.\n\nSave anyway?"))) { this._busy = false; return null; }
+      if (!(await confirmAsync(CHANGED_ELSEWHERE))) { this._busy = false; return null; }
     }
     const r = await callWS(this, this.hass, { type: "sextant/layout/save", layout: draft, ...(removeMap ? { remove_map: removeMap } : {}) });
     this._busy = false;
     if (r) {
-      // Unknown until the reload this save asks for comes back (updated()).
+      // The store as this save left it (spots may have been fitted to rooms),
+      // read at once: the panel's own reload comes later, and by then
+      // someone else's change could pass for ours.
       this._base = null;
-      this._rebase = true;
+      const now = await this.hass.callWS({ type: "sextant/layout/get" }).catch(() => null);
+      if (now) this._base = planKey(now.layout);
       const n = r.confined?.length || 0;
       toast(this, n ? `Floor plan saved; ${n === 1 ? `${r.confined[0]} was` : `${n} spots were`} fitted inside ${n === 1 ? "its room" : "their rooms"}` : auto ? "Saved" : "Floor plan saved", auto && !n ? 1200 : undefined);
       // The server's own check, in case a shape went wrong on the way in.

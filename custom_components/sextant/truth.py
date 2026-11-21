@@ -211,15 +211,22 @@ def evaluate(samples, floor, mark, scale, zone_of, solve, refs_for_gain, k=3, mi
             if row:
                 rows.append({"weight": w, "gain": round(g, 2), "estimator": estimator_for(w), **row})
     if cross:
-        jobs = [{
-            "floor": floor, "weighted": [tuple(pt) for pt in fj["weighted"]] + [tuple(pt) for pt in fj["cross"]],
-            "bounds": None if fj.get("bounds") is None else tuple(fj["bounds"]),
-            "min_wr": fj["min_wr"], "stable_hint": None, "scale": fj["scale"] or scale,
-            "zone_polys": [], "fingerprint": None,
-        } for fj in (s["floors"][floor] for s in usable) if fj.get("cross")]
-        row = _score(solve(jobs), mark, scale, zone_of, mark_zone) if jobs else None
+        # Only the cycles some other floor heard, solved with and without the
+        # borrowed points: the same cycles, or the comparison measures which
+        # cycles were easy rather than what borrowing did.
+        heard = [fj for fj in (s["floors"][floor] for s in usable) if fj.get("cross")]
+
+        def _fit(borrow):
+            return _score(solve([{
+                "floor": floor, "weighted": [tuple(pt) for pt in fj["weighted"]] + ([tuple(pt) for pt in fj["cross"]] if borrow else []),
+                "bounds": None if fj.get("bounds") is None else tuple(fj["bounds"]),
+                "min_wr": fj["min_wr"], "stable_hint": None, "scale": fj["scale"] or scale,
+                "zone_polys": [], "fingerprint": None,
+            } for fj in heard]), mark, scale, zone_of, mark_zone) if heard else None
+        row, alone = _fit(True), _fit(False)
         if row:
-            rows.append({"weight": 0.0, "gain": 1.0, "estimator": "cross-floor", "cross": True, **row})
+            rows.append({"weight": 0.0, "gain": 1.0, "estimator": "cross-floor", "cross": True, **row,
+                         "alone_m": alone and alone["mean_m"], "alone_room_ok": alone and alone["room_ok"]})
     rows.sort(key=lambda r: (r["mean_m"], -r["room_ok"]))
     return rows
 

@@ -194,4 +194,5 @@ def test_a_mark_scores_the_fit_with_the_other_floors_proxies_beside_it():
     shadow = next(r for r in rows if r.get("cross"))
     plain = next(r for r in rows if not r.get("cross"))
     assert shadow["estimator"] == "cross-floor" and shadow["samples"] == 3 and plain["samples"] == 4
+    assert shadow["alone_m"] is not None and 0 <= shadow["alone_room_ok"] <= 1   # same three cycles, no borrowing
     assert shadow["mean_m"] <= plain["mean_m"]

@@ -1608,7 +1608,7 @@ class SextantLive extends LitElement {
 
   render() {
     const rows = this._allRows();
-    const find = (this._find || "").trim().toLowerCase();
+    const find = rows.length > 8 ? (this._find || "").trim().toLowerCase() : "";   // no box, no filter
     const shown = find ? rows.filter((p) => `${this._label(p.ent)} ${p.ent} ${p.zone || ""}`.toLowerCase().includes(find)) : rows;
     const sel = rows.find((p) => p.ent === this._selected);
     const h = this._history;
@@ -1914,7 +1914,6 @@ class SextantLive extends LitElement {
     const rows = (t?.rows || []).filter((r) => !r.cross).slice(0, 6);
     // The cross-floor fit is a comparison only: nothing places a thing that way.
     const cross = (t?.rows || []).find((r) => r.cross);
-    const alone = (t?.rows || []).find((r) => !r.cross && r.weight === 0 && r.gain === 1);
     return html`<div class="truth">
       ${this._marking ? nothing
         : html`<div class="row">
@@ -1925,7 +1924,7 @@ class SextantLive extends LitElement {
           ${rows.map((r) => html`<tr><td>${r.estimator}${r.estimator === "fused" ? ` ${Math.round(r.weight * 100)}%` : ""}</td><td class="num">×${fmtNum(r.gain, 1)}</td><td class="num">${fmtLen(r.mean_m, this.hass)}</td><td class="num">${Math.round(r.room_ok * 100)}%</td>
             <td>${uiButton({ label: "Apply", kind: "text", onClick: () => this._applyRow(ent, r) })}</td></tr>`)}
         </table>
-        ${cross ? html`<p class="small">With the other floors' proxies helping: ${fmtLen(cross.mean_m, this.hass)} from the pin, right room ${Math.round(cross.room_ok * 100)}% (${cross.samples} cycles)${alone ? html`; this floor's proxies alone: ${fmtLen(alone.mean_m, this.hass)}, ${Math.round(alone.room_ok * 100)}%` : nothing}. <span class="muted">A comparison only, nothing to apply.</span></p>` : nothing}
+        ${cross ? html`<p class="small">With the other floors' proxies helping: ${fmtLen(cross.mean_m, this.hass)} from the pin, right room ${Math.round(cross.room_ok * 100)}% (${cross.samples} cycles)${cross.alone_m != null ? html`; this floor's proxies alone over the same cycles: ${fmtLen(cross.alone_m, this.hass)}, ${Math.round(cross.alone_room_ok * 100)}%` : nothing}. <span class="muted">A comparison only, nothing to apply.</span></p>` : nothing}
         <p class="muted small">Error is the mean distance from the pin; Room is how often the fix landed in the pin's room. One pin can overfit: pin ${this._pn(ent).obj} in another room too.</p>` : html`<p class="muted small">Nothing could be re-solved for this mark.</p>`}
         <div class="row">${uiButton({ label: "Close", kind: "text", onClick: () => { this._truth = null; } })}${uiButton({ label: "Forget pin", kind: "text", onClick: () => this._deleteMark(t.mark.id) })}</div>
       </div>` : nothing}
