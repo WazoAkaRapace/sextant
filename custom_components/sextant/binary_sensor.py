@@ -70,7 +70,8 @@ class SextantRoomOccupancy(BinarySensorEntity, RestoreEntity):
                 pass
         if last is not None and last.state == "on" and time.time() < until:
             self._attr_is_on = True
-            self._attr_extra_state_attributes = {**self._attr_extra_state_attributes, "sources": ["restored"]}
+            self._attr_extra_state_attributes = {**self._attr_extra_state_attributes, "sources": ["restored"],
+                                                 **{k: last.attributes[k] for k in ("since", "state") if k in last.attributes}}
             self.restore_until = until
             self.restored_door_hold = bool(last.attributes.get("door_hold"))   # a sleeper's door hold outlives the restart
             at, who = last.attributes.get("door_at"), last.attributes.get("door_people")
