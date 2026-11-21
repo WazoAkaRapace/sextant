@@ -5330,9 +5330,10 @@ def _update_person_sensors(hass):
                 if _last_charging.get(ent) is None:
                     _ask_last_charge(hass, ent, chargers[ent], now)
                 changed = getattr(cst, "last_changed", None)
+                reading = getattr(cst, "state", None)
                 charging, _last_charging[ent] = persons_mod.still_on_charger(
-                    persons_mod.on_charger(getattr(cst, "state", None)), arrived, _last_charging.get(ent),
-                    changed.timestamp() if changed else now)
+                    persons_mod.charging_now(reading), arrived, _last_charging.get(ent),
+                    changed.timestamp() if changed else now, full=persons_mod.on_charger(reading))
             else:
                 _last_charging.pop(ent, None)   # no sensor named any more: nothing holds it
             candidates.append({

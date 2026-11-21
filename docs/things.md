@@ -96,11 +96,13 @@ watch on its charger since last night.
 
 A thing can also name an **On-charger sensor** - its battery state from
 iCloud3, the companion app, or any `binary_sensor` that is on while it
-charges. While that reads Charging, Charged or Full, the thing does not
+charges. While that reads Charging, the thing does not
 speak for its owner at all: a watch on its charger is on nobody's wrist.
 Once seen charging, a thing counts as on its charger until it moves away:
 a watch held at its charge limit reads "not charging" while it still sits
-on the puck.
+on the puck. Charged and Full work the same way: they hold the thing only
+until it moves, because a sensor that refreshes rarely goes on saying
+Charged for hours after the watch is back on your wrist.
 Unavailable or unknown counts as not charging, so a sensor that has nothing
 to say never takes a thing out of the running. The location sensor's
 `considered` list marks a thing left out this way with `on_charger`.
