@@ -2,6 +2,9 @@
 
 # Occupancy and voice
 
+For how a room turns on and off, with worked examples, see
+[How occupancy works](occupancy.md).
+
 ## What Sextant publishes
 
 | Entity | Meaning |
