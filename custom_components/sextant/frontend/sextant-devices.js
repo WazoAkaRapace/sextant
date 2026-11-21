@@ -877,7 +877,7 @@ class SextantDevices extends LitElement {
             <td>${w ? html`${w.room || w.floor}${w.room ? html`<br><span class="muted small">${w.floor}</span>` : nothing}<br><span class="muted small">${w.proxy}</span>` : c.area_name ? html`${c.area_name}` : html`<span class="muted">—</span>`}</td>
             <td class="num" title="placed proxies hearing it">${placed.size ? placedHearing(c) : c.scanners}</td>
             <td class="num" title=${finding ? `reading at ${findName} (RSSI)` : "strongest reading (RSSI)"}>${finding ? rssiAt(c) : w ? w.rssi : c.best_rssi ?? "—"} dBm</td>
-            <td class="small">${fmtAge(c.last_seen_age)} ago<br><span class="muted">first ${fmtAge(c.first_seen_age)}</span></td>
+            <td class="small">${fmtAge(c.last_seen_age)} ago<br><span class="muted">first ${fmtAge(c.first_seen_age)}</span><span class="ponly"><br>${finding ? rssiAt(c) : w ? w.rssi : c.best_rssi ?? "—"} dBm</span></td>
             <td>${uiButton({ label: "Track…", kind: "primary", disabled: this._busy, onClick: () => this._startTrack(c), title: "Choose its name, class and height first; Bermuda tracks it when you confirm" })}</td>
           </tr>`; })}
           ${candidates.length ? nothing : html`<tr><td colspan="7" class="muted">${this._candidates ? (this._showAll ? "No matching devices." : `Nothing heard in the last ${RECENT_SECS} s matches; switch on "Show all" for everything Bermuda remembers.`) : "Loading…"}</td></tr>`}
@@ -1160,8 +1160,9 @@ class SextantDevices extends LitElement {
     @media (max-width: 720px) { .wrap td:first-child { min-width: 150px; max-width: 46vw; overflow-wrap: anywhere; } }
     /* A phone shows who and where; the id, height and ref trim are in the dialog the name opens. */
     @media (max-width: 720px) { .tracked .num, .tracked .addr { display: none; } .wrap .tracked td:first-child { min-width: 0; max-width: none; } }
+    .ponly { display: none; }
     /* p-N: column N is left out on a phone (it is in the dialog, or only detail). */
-    @media (max-width: 720px) { .p-2 tr > :nth-child(2):not([colspan]), .p-4 tr > :nth-child(4), .p-5 tr > :nth-child(5), .p-6 tr > :nth-child(6) { display: none; } .dialog h3 { overflow-wrap: anywhere; } .dialog h3 span { display: block; } }
+    @media (max-width: 720px) { .p-2 tr > :nth-child(2):not([colspan]), .p-4 tr > :nth-child(4), .p-5 tr > :nth-child(5), .p-6 tr > :nth-child(6) { display: none; } .dialog h3 { overflow-wrap: anywhere; flex-wrap: wrap; } .dialog h3 span { flex-basis: 100%; } .ponly { display: inline; } }
     @media (pointer: coarse) { a.name { display: inline-block; padding: 6px 0; } }
     td.actions { white-space: nowrap; }
     button.iconbtn.danger { color: var(--error-color, #b00020); border-color: transparent; }

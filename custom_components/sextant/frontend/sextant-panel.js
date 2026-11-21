@@ -460,6 +460,7 @@ class SextantPanel extends LitElement {
       .modes { flex: 1 1 auto; min-width: 0; }
       .modes button { flex: 1 1 0; min-width: 0; padding: 0; justify-content: center; }
       /* Nine bare icons do not say where you are: the current one carries its name. */
+      .modes button { min-width: 28px; }
       .modes button.active { flex: 0 0 auto; flex-direction: column; gap: 2px; padding: 0 6px; }
       .modes button.active .mode-label { display: block; font-size: 10px; line-height: 1; }
       .spacer { display: none; }

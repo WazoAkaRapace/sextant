@@ -47,7 +47,6 @@ class SextantOccupancy extends LitElement {
     .chip ha-icon { --mdc-icon-size: 14px; }
     .who { position: relative; display: inline-block; max-width: 100%; }
     button.chip { font: inherit; font-size: 12px; color: var(--primary-text-color); cursor: pointer; text-align: start; }
-    @media (pointer: coarse) { button.chip { padding: 7px 10px; } }
     button.chip:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 1px; }
     @media (pointer: coarse) { button.chip { min-height: 32px; padding: 4px 10px; } }
     /* One line: a long spot ends in an ellipsis rather than wrapping under the name (the popup has it whole). */

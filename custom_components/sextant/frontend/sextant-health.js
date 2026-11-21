@@ -687,7 +687,7 @@ class SextantHealth extends LitElement {
       <p class="small muted">What phones, watches and the proxies on the Wi-Fi actually get, where Sextant has placed them: the median of each room's one-metre squares, weakest first. It is the signal to the access point each one is on. The map itself is on the Live page (the Wi-Fi signal switch).</p>
       ${rooms.length ? html`<div class="wrap"><table class="p-5">
         <tr><th>Room</th><th class="num">Median</th><th class="num">Weakest</th><th>Mostly on</th><th class="num">Squares</th></tr>
-        ${rooms.map((r) => html`<tr><td>${r.room} <span class="muted small">${r.floor}</span></td><td class="num nowrap">${this._dbmPill(r.dbm)}</td><td class="num nowrap">${fmtNum(r.worst, 0)} dBm</td><td>${h.aps?.[r.ap] || r.ap}</td><td class="num">${r.cells}</td></tr>`)}
+        ${rooms.map((r) => html`<tr><td>${r.room} <span class="muted small">${r.floor}<span class="ponly"> · ${r.cells} sq</span></span></td><td class="num nowrap">${this._dbmPill(r.dbm)}</td><td class="num nowrap">${fmtNum(r.worst, 0)} dBm</td><td>${h.aps?.[r.ap] || r.ap}</td><td class="num">${r.cells}</td></tr>`)}
       </table></div>` : html`<p class="small">No room has enough samples yet. The proxies on the Wi-Fi fill their own squares within minutes; phones and watches fill the rooms people use over a few days.</p>`}
       ${Object.keys(h.field?.models || {}).length ? html`<p class="small muted">The Live page's estimate between the measured squares is a model of each placed access point fitted to them, each Wi-Fi band on its own once it has a dozen squares: ${Object.entries(h.field.models).map(([b, m]) => `${b === "mixed" ? "all bands together" : `${b} GHz`}, walls ${fmtNum(m.wall, 1)} dB and a floor ${fmtNum(m.floor, 0)} dB, typically ${fmtNum(m.rms, 0)} dB off (${m.used} squares)`).join("; ")}. Most of what is left is the devices: a proxy's own transmit strength differs from the next by as much, and one that never moves cannot be told apart from where it is. Phones and watches walking about pin it down.</p>` : nothing}
       <div class="row small muted">${fmtNum(h.samples || 0, 0)} samples so far${offsets.length ? html` · learned offsets: ${offsets.map(([n, v]) => `${n} ${v > 0 ? "+" : ""}${fmtNum(v, 1)} dB`).join(", ")}` : nothing}
@@ -922,7 +922,8 @@ class SextantHealth extends LitElement {
     .tfield .chg { color: var(--warning-color, #f59e0b); font-weight: 600; }
     .tfield .treset { color: var(--primary-color); }
     @media (pointer: coarse) { .tfield .treset { display: inline-block; padding: 8px 6px; } }
-    @media (max-width: 720px) { .p-5 tr > :nth-child(5) { display: none; } .tfield { max-width: none; } .cols { grid-template-columns: 1fr; } .tfield, .tfield > * { width: 100%; } }
+    .ponly { display: none; }
+    @media (max-width: 720px) { .ponly { display: inline; } .p-5 tr > :nth-child(5) { display: none; } .tfield { max-width: none; } .cols { grid-template-columns: 1fr; } .tfield, .tfield > * { width: 100%; } }
   `];
 }
 
