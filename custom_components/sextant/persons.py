@@ -217,8 +217,11 @@ def still_on_charger(charging: bool, arrived, last_charging, since: float, full:
     """
     if charging:
         return True, since
-    if full and last_charging is None:
-        last_charging = since   # no charge seen or recorded: the full reading is the charge
+    if full:
+        # The full reading is itself a charge, from when it began: one finished while
+        # nobody watched (a restart, a sensor that skips "Charging") must still hold.
+        # shortcut: a late "Charged" can hold a watch already carried off until its next move; use the recorded charge start if that bites
+        last_charging = max(last_charging or 0, since)
     held = (isinstance(last_charging, (int, float)) and isinstance(arrived, (int, float))
             and arrived <= last_charging)
     return held, last_charging
