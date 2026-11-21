@@ -111,6 +111,11 @@ weight, 6 m at most). It is logged only; nothing is placed by it yet.
 `tools/replay_cross_floor.py` reads the log and says which fix was
 steadier, more often in the published room, and closer to the proxy a
 thing was sitting on.
+`tools/receiver_report.py` reads the same log and lists, per receiver,
+how often it was in the elected floor's fix and how far its ranges sat
+from that fix (a steady bias means a misplaced or miscalibrated
+receiver), with the placed receivers that never took part. Finished
+hours of the log are gzipped; the tools read both.
 
 **Rooms.** Membership, not a point test: samples on the filter's error
 ellipse are attributed to rooms and the shares smoothed. The current room

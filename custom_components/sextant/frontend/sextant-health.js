@@ -104,7 +104,7 @@ const TUNING_LABELS = {
   mmwave_verify_s: ["Count a target after (s)", "a target is drawn at once but counted, and claimed for a room, only once seen this long: a reflection flickers and is gone"],
   mmwave_hold_s: ["Keep a lost target for (s)", "where a radar loses someone they stay, counted and their room occupied, this long; a room's own 'Stays occupied for' on the Edit page overrides it"],
   mmwave_rooms: ["Rooms from mmWave", "a room's occupancy sensor is on while a radar track is in it, device or no device"],
-  election_log_hours: ["Election log (hours)", "keep every floor election on disk for this long (config/sextant_election_log, ~6 MB an hour for twenty things) for tools/replay_floors.py; 0 = off"],
+  election_log_hours: ["Election log (hours)", "keep every floor election on disk for this long (config/sextant_election_log, ~6 MB an hour for twenty things, gzipped to about a sixth once the hour is over) for tools/replay_floors.py; 0 = off"],
   stale_after_secs: ["Ghost after (s)", "a thing unheard this long is drawn faded on Live, with how long ago it was heard"],
   spot_proxy_near_m: ["Spot proxy: full within (m)", "a spot's own proxy hearing a thing this close counts fully as the thing being on the spot"],
   spot_proxy_far_m: ["Spot proxy: nothing from (m)", "from this far the spot's proxy says nothing; between the two it fades"],

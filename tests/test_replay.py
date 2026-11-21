@@ -71,3 +71,32 @@ def test_cross_floor_replay_measures_both_fixes():
     assert s["still"] == (2.0, 0.0, 1)                   # own jumped 2 m between still cycles, cross none
     assert s["room"] == (0.5, 1.0, 2)                    # own was outside the Den once
     assert s["anchor"] == (1.0, 0.0, 2)                  # median distance to the proxy it sat on
+
+
+def test_receiver_report_ranks_the_receiver_that_reads_long(tmp_path):
+    """tools/receiver_report.py: bias and spread per receiver, from a gzipped hour as well as a plain one."""
+    import gzip
+    import importlib.util
+    import json
+    import pathlib
+    spec = importlib.util.spec_from_file_location("rr", pathlib.Path(__file__).parent.parent / "tools" / "receiver_report.py")
+    rr = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(rr)
+    layout = {"floor": [{"name": "G", "scale": 100.0, "receivers": [
+        {"entity_id": "good", "height": 1.0, "cords": {"x": 300, "y": 0}},
+        {"entity_id": "long", "height": 1.0, "cords": {"x": 0, "y": 400}},
+        {"entity_id": "unheard", "cords": {"x": 9, "y": 9}}]}]}
+
+    def row(t):
+        return {"t": t, "ent": "cat", "floor": "G", "floor_cands": {"G": {"fix": [0, 0], "heard": [["good", 3.0], ["long", 5.5], ["elsewhere", 1.0]]}}}
+    (tmp_path / "2026-11-20T01Z.jsonl.gz").write_bytes(gzip.compress((json.dumps(row(1)) + "\n").encode()))
+    (tmp_path / "2026-11-20T02Z.jsonl").write_text(json.dumps(row(2)) + "\n")
+    (tmp_path / "2026-11-20T03Z.jsonl.gz.tmp").write_bytes(b"half a gzip")
+    rows = rr.load_rows(str(tmp_path))
+    assert [r["t"] for r in rows] == [1, 2]
+    assert rr.report(rows, layout) == [("G", "long", 2, 1.5, 1.5), ("G", "good", 2, 0.0, 0.0)]
+    # Heights as the live solve: a robot runs at 0.1 m, so a receiver 4 m above it reads 5 m at 3 m along.
+    robot = {**layout, "thing_classes": {"cat": "robot"}}
+    robot["floor"] = [{**layout["floor"][0], "receivers": [{"entity_id": "good", "height": 4.1, "cords": {"x": 300, "y": 0}}]}]
+    assert rr.report([{**row(1), "floor_cands": {"G": {"fix": [0, 0], "heard": [["good", 5.0]]}}}], robot) == [("G", "good", 1, 0.0, 0.0)]
+    assert rr.thing_height({"thing_heights": {"cat": 0}, "thing_height": 2}, "cat") == 0.0 and rr.thing_height({"thing_height": 2}, "cat") == 2.0

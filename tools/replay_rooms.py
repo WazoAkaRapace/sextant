@@ -4,7 +4,7 @@ The log has no Kalman covariance, so the filter's uncertainty is stood in for by
 sigma_k * rms_m; the first run checks how well that reproduces the published rooms at the live settings.
 usage: replay_rooms.py <sextant __init__.py> <layout.json> <log dir>
 """
-import ast, glob, json, math, sys, types, statistics
+import ast, glob, gzip, json, math, sys, types, statistics
 import numpy as np
 import shapely
 from shapely.geometry import Point, Polygon
@@ -58,8 +58,8 @@ for f in lay["floor"]:
             PROXY[rx.get("entity_id")] = Point(c["x"], c["y"])
 
 rows = []
-for fn in sorted(glob.glob(f"{log_dir}/*.jsonl")):
-    for line in open(fn):
+for fn in sorted(f for f in glob.glob(f"{log_dir}/*.jsonl*") if not f.endswith(".tmp")):
+    for line in (gzip.open(fn, "rt") if fn.endswith(".gz") else open(fn)):
         r = json.loads(line)
         if r.get("cords") and r.get("floor") in floors and r.get("zone_raw"):
             rows.append(r)

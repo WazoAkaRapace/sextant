@@ -47,7 +47,17 @@ def load_rows(dirpath: str, hours: float, now: float | None = None) -> list:
         hour = election_log.hour_of(name)
         if hour is None or hour + 3600.0 < since:
             continue
-        with open(os.path.join(dirpath, name), encoding="utf-8") as fh:
+        if name + ".gz" in names:
+            continue   # listed mid-compression: the gzip has the same rows
+        path = os.path.join(dirpath, name)
+        try:
+            fh = election_log.open_text(path)
+        except FileNotFoundError:
+            try:
+                fh = election_log.open_text(path + ".gz")   # gzipped since the listing
+            except OSError:
+                continue
+        with fh:
             for line in fh:
                 try:
                     r = json.loads(line)
