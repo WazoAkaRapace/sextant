@@ -119,6 +119,9 @@ it is late, a ghost once it is away.
 
 ## Grouped by person
 
+With more than eight things, a **Find a thing** box above the list narrows
+it by name or room.
+
 When things have owners (**Belongs to** on the Things page), each person
 gets a heading in the list - their picture, their name, and under it where
 their own location sensor puts them - and a click on the heading folds the
@@ -158,7 +161,10 @@ and fingerprint match and every reference gain, and shows how far each
 lands from your pin and how often it gets the room right. **Apply** on a
 row makes those the thing's settings (its blend weight, and a gain
 multiplier folded into its learned gain). One pin can overfit, so pin a
-thing in two or three rooms.
+thing in two or three rooms. Where the other floors' proxies heard the
+thing too, a line under the table says how far the fit would have landed
+with them helping, beside this floor's proxies alone. That is a comparison
+only: nothing is placed that way yet.
 
 A pin inside a spot is also evidence of being in that spot: a fix is the
 weighted blend of the pins and proxies it matched, and the share of that

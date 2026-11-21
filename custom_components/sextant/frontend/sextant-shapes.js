@@ -36,3 +36,18 @@ export function lostShapes(before, after) {
   }
   return lost;
 }
+
+/** The part of a layout the editor owns, as a string to compare: the floors,
+ * without what the server writes into them (ws.merge_editor_layout keeps
+ * those through a save: calibration, bias_field, each proxy's correction)
+ * and without the editor's display-only marks. Two layouts with the same key
+ * differ in nothing a save from the editor would overwrite. */
+export function planKey(layout) {
+  const floors = JSON.parse(JSON.stringify(layout?.floor || []));
+  for (const f of floors) {
+    delete f.calibration; delete f.bias_field;
+    for (const r of f.receivers || []) { delete r.correction; delete r.unmatched; delete r.label; }
+    for (const q of f.pins || []) { delete q.linked; delete q.miss; delete q.missLabel; }
+  }
+  return JSON.stringify(floors);
+}

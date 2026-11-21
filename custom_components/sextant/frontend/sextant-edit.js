@@ -10,7 +10,7 @@
 import { LitElement, html, css, nothing } from "./lit.js";
 import { SextantMap, polygonCentroid, snapToVertex, squareUp, thingHue, radarCalibration } from "./sextant-map.js";
 import { sharedStyles, widgetStyles, toast, callWS, confirmAsync, fmtNum, fmtLen, uiField, uiSelect, uiSwitch, uiButton, uiIconButton, uiMenu, uiSegmented, proxyName, lenUnit, toDisplayLen, fromDisplayLen, fmtScale, isImperial, THING_CLASSES, CLASS_FAMILIES, mapOverlayStyles, renderScaleBar, uiColour, mapUrlFor } from "./sextant-ui.js";
-import { lostShapes } from "./sextant-shapes.js";
+import { lostShapes, planKey } from "./sextant-shapes.js";
 
 // [id, label under the icon, icon, tooltip]
 /** The Anchor tool's "New anchor" choice (not a name any anchor can have). */
@@ -304,7 +304,11 @@ class SextantEdit extends LitElement {
 
   updated(changed) {
     if (!this._map) return;
-    if (changed.has("data")) this._syncDraft(!this._dirty);
+    if (changed.has("data")) {
+      // The reload after our own save: the store now holds this draft.
+      if (this._rebase) { this._rebase = false; this._base = planKey(this.data?.layout); }
+      this._syncDraft(!this._dirty);
+    }
     if (changed.has("floor")) { this._pushFloor(); this._proposal = null; }
     if (changed.has("hass")) this._map.setAreas(this.hass?.areas);
     if (changed.has("data")) this._map.setAccessPoints(Array.isArray(this.data?.access_points) ? this.data.access_points : null);
@@ -317,6 +321,9 @@ class SextantEdit extends LitElement {
   _syncDraft(replace) {
     if (replace || !this._draft) {
       this._draft = JSON.parse(JSON.stringify(this.data?.layout || { floor: [] }));
+      // What the stored plan looked like when this draft was taken: a save
+      // checks the store still looks like this (see _save).
+      this._base = planKey(this.data?.layout);
       this._dirty = false;
       this._selection = null;
       this._undo = [];
@@ -1128,9 +1135,26 @@ class SextantEdit extends LitElement {
     if (lost.length && !(await confirmAsync(`This save would break ${lost.length === 1 ? "a shape" : `${lost.length} shapes`}:\n\n${lost.join("\n")}\n\nSave anyway? The plan as it is now is kept under History.`))) return null;
     this._busy = true;
     const sent = layoutKey(draft);
+    // A save sends every floor whole, so it would undo whatever another tab,
+    // another person or the Health page's "Move it there" wrote since this
+    // draft was taken. Look first: auto-save holds off, Save asks.
+    // shortcut: read then write, so a change in the moment between is missed; a version check in sextant/layout/save would close it.
+    const fresh = this._base == null ? null : await this.hass.callWS({ type: "sextant/layout/get" }).catch(() => null);
+    if (fresh && planKey(fresh.layout) !== this._base) {
+      if (auto) {
+        this._busy = false;
+        this._autosaveHeld = sent;
+        toast(this, "Not saved automatically: the floor plan was changed somewhere else since this page loaded it. Save to write your copy over it, or Discard to load the other one.", 9000);
+        return null;
+      }
+      if (!(await confirmAsync("The floor plan was changed somewhere else since this page loaded it: another tab or person, or a proxy moved from the Health page.\n\nSaving writes your copy of every floor over that change. The plan as it is now is kept under History.\n\nSave anyway?"))) { this._busy = false; return null; }
+    }
     const r = await callWS(this, this.hass, { type: "sextant/layout/save", layout: draft, ...(removeMap ? { remove_map: removeMap } : {}) });
     this._busy = false;
     if (r) {
+      // Unknown until the reload this save asks for comes back (updated()).
+      this._base = null;
+      this._rebase = true;
       const n = r.confined?.length || 0;
       toast(this, n ? `Floor plan saved; ${n === 1 ? `${r.confined[0]} was` : `${n} spots were`} fitted inside ${n === 1 ? "its room" : "their rooms"}` : auto ? "Saved" : "Floor plan saved", auto && !n ? 1200 : undefined);
       // The server's own check, in case a shape went wrong on the way in.
@@ -1187,7 +1211,10 @@ class SextantEdit extends LitElement {
 
   async _discard() {
     if (this._dirty && !(await confirmAsync("Discard unsaved changes?", { ok: "Discard", danger: true }))) return;
+    // Reloads too, so Discard after "changed somewhere else" shows the other copy.
+    this._dirty = false;
     this._syncDraft(true);
+    this.dispatchEvent(new CustomEvent("layout-changed"));
   }
 
   async _adjust(target) {

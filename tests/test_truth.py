@@ -174,3 +174,24 @@ def test_the_buffer_holds_its_points_as_tuples_the_collector_ignores():
     gc.collect()
     assert not gc.is_tracked(fj["weighted"]) and not gc.is_tracked(fj["weighted"][0])
     assert not gc.is_tracked(fj["bounds"])
+
+
+def test_a_mark_scores_the_fit_with_the_other_floors_proxies_beside_it():
+    """Borrowed points are kept with the sample and re-solved as one extra,
+    unappliable row; only when asked, so "current settings" stays rows[0]."""
+    b = truth.Buffer()
+    S = 100.0
+    own = [(0.0, 0.0, 5.0 * S, 1.0, 5.0 * S), (600.0, 0.0, 5.0 * S, 1.0, 5.0 * S), (300.0, 800.0, 5.0 * S, 1.0, 5.0 * S)]
+    job = {"floor": "F", "weighted": own, "bounds": (-200, -200, 1000, 1000), "min_wr": 50.0, "scale": S}
+    below = ((300.0, 300.0, 0.5 * S, 0.5, 1.0 * S),)          # a light under the floor, right at the mark
+    for i in range(4):
+        b.remember("cat", [job], {}, 1.0, "geometric", now=i, cross={"F": (below, [["light", 0.5]])} if i else None)
+    samples = b.samples("cat")
+    assert "cross" not in samples[0]["floors"]["F"] and samples[1]["floors"]["F"]["cross"] == below
+    args = (samples, "F", (300.0, 300.0), S, lambda p: None, sextant._solve_floor_jobs, lambda gain: None)
+    assert all(not r.get("cross") for r in truth.evaluate(*args))
+    rows = truth.evaluate(*args, cross=True)
+    shadow = next(r for r in rows if r.get("cross"))
+    plain = next(r for r in rows if not r.get("cross"))
+    assert shadow["estimator"] == "cross-floor" and shadow["samples"] == 3 and plain["samples"] == 4
+    assert shadow["mean_m"] <= plain["mean_m"]

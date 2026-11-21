@@ -605,6 +605,7 @@ async def _evaluate_mark(hass, core, mark, weights=None, gains=None):
         kwargs["weights"] = weights
     if gains is not None:
         kwargs["gains"] = gains
+    kwargs["cross"] = weights is None   # the full sweep only: "current settings" must stay rows[0]
     return await hass.async_add_executor_job(
         lambda: truth_mod.evaluate(core._rebased_samples(layout, mark), floor, (mark["x"], mark["y"]), scale, zone_of, core._solve_floor_jobs, refs_for_gain, **kwargs)
     )
@@ -2158,6 +2159,44 @@ async def ws_election_log_clear(hass, connection, msg):
     connection.send_result(msg["id"], {"files": files, "bytes": size})
 
 
+@websocket_api.websocket_command({vol.Required("type"): "sextant/election_log/usage"})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_election_log_usage(hass, connection, msg):
+    """What the election log holds on disk now."""
+    from . import election_log  # noqa: PLC0415
+
+    files, size = await hass.async_add_executor_job(election_log.usage, election_log.get(hass).dirpath)
+    connection.send_result(msg["id"], {"files": files, "bytes": size})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "sextant/receiver_report",
+    vol.Optional("hours", default=6.0): vol.All(vol.Coerce(float), vol.Range(min=0.25, max=24.0)),
+})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_receiver_report(hass, connection, msg):
+    """Each placed receiver's ranges against the fixes they went into, from the
+    election log (receiver_report.py). Read-only."""
+    from . import election_log, receiver_report  # noqa: PLC0415
+
+    layout = get_layout(hass)
+    if not isinstance(layout, dict):
+        return _error(connection, msg, "No floor plan yet")
+    dirpath, since = election_log.get(hass).dirpath, time.time() - msg["hours"] * 3600.0
+
+    def _run():
+        lines = receiver_report.report(election_log.iter_rows(dirpath, since), layout)
+        return lines, receiver_report.silent(lines, layout)
+    lines, quiet = await hass.async_add_executor_job(_run)
+    connection.send_result(msg["id"], {
+        "hours": msg["hours"],
+        "rows": [{"floor": f, "receiver": slug, "heard": n, "bias_m": bias, "off_m": off} for f, slug, n, bias, off in lines],
+        "silent": [{"floor": f, "receiver": slug} for f, slug in quiet] if lines else [],
+    })
+
+
 @websocket_api.websocket_command({
     vol.Required("type"): "sextant/interval/set",
     # Seconds between cycles for the next quarter hour; null goes back to the
@@ -2196,7 +2235,7 @@ COMMANDS = (
     ws_advice,
     ws_snapshots_list, ws_snapshots_restore, ws_thing_forget, ws_person_trackers_set, ws_person_wifi_set,
     ws_wifi_heat, ws_wifi_heat_clear, ws_property, ws_site_set,
-    ws_robot_list, ws_robot_align, ws_robot_dock, ws_robot_remove, ws_election_log_clear, ws_interval_set,
+    ws_robot_list, ws_robot_align, ws_robot_dock, ws_robot_remove, ws_election_log_clear, ws_election_log_usage, ws_receiver_report, ws_interval_set,
     ws_radar_devices, ws_radar_targets,
     ws_layout_get, ws_layout_save, ws_tuning_set, ws_thing_tune,
     ws_history_index, ws_history_get, ws_history_timeline, ws_history_clear, ws_thing_readings, ws_floor_bias_map,

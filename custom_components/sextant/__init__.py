@@ -2878,9 +2878,18 @@ async def update_trilateration_and_zone(hass, new_global_data, entity):
             },
         })
     # Keep this cycle's inputs so a truth mark can re-solve it under other settings.
+    # The other floors' proxies as points on each floor's plan: kept with the
+    # mark's inputs, and solved as a shadow below while the election log records.
+    # Donors are every floor that heard it, not just the solved ones: one
+    # basement light is exactly the reading worth borrowing.
+    borrowed = {}
     if jobs:
+        try:
+            borrowed = _cross_floor_points(layout, _floor_frames(hass, layout), to_solve, candidates, _thing_height(layout, entity))
+        except Exception as e:  # noqa: BLE001 - a comparison must never cost the thing its position
+            _LOGGER.debug("Cross-floor points skipped for %s: %s", entity, e)
         _truth_buffer.remember(entity, jobs, thing_vec if estimator != "geometric" else fingerprint.thing_vector(layout), fp_gain, estimator,
-                               raw_vec=_raw_vector(layout))
+                               raw_vec=_raw_vector(layout), cross=borrowed)
 
     solved = {}  # floor name -> everything the publish pipeline needs
     if jobs:
@@ -2894,13 +2903,9 @@ async def update_trilateration_and_zone(hass, new_global_data, entity):
     # Shadow only, and only while the election log records: what each floor's
     # fix would be with the other floors' proxies helping. Nothing reads it.
     shadows = {}
-    if results and _tuning(layout, "election_log_hours") > 0:
+    if results and borrowed and _tuning(layout, "election_log_hours") > 0:
         try:
-            # Donors are every floor that heard it, not just the solved ones:
-            # one basement light is exactly the reading worth borrowing.
-            borrowed = _cross_floor_points(layout, _floor_frames(hass, layout), to_solve, candidates, _thing_height(layout, entity))
-            if borrowed:
-                shadows = await hass.async_add_executor_job(_solve_cross_floor, jobs, results, borrowed)
+            shadows = await hass.async_add_executor_job(_solve_cross_floor, jobs, results, borrowed)
         except Exception as e:  # noqa: BLE001 - a log line must never cost the thing its position
             _LOGGER.debug("Cross-floor shadow fix skipped for %s: %s", entity, e)
     for job, outcome in zip(jobs, results, strict=False):

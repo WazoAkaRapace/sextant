@@ -128,3 +128,19 @@ def test_switching_off_deletes_the_files_once_and_then_stops_scanning(tmp_path):
     run(log.flush(24, now=NOW))
     run(log.flush(0, now=NOW))
     assert not (d / el.file_for(NOW)).exists(), "switched on and off again: swept again"
+
+
+def test_rows_are_read_once_plain_or_gzipped_and_usage_counts_our_files(tmp_path):
+    import gzip
+    old, new = el.file_for(NOW - HOUR), el.file_for(NOW)
+    with gzip.open(tmp_path / (old + ".gz"), "wt") as fh:
+        fh.write(json.dumps({"t": NOW - HOUR, "ent": "a"}) + "\n")
+    # Listed mid-compression: the plain copy of a gzipped hour is not read twice.
+    (tmp_path / old).write_text(json.dumps({"t": NOW - HOUR, "ent": "a"}) + "\n")
+    (tmp_path / new).write_text(json.dumps({"t": NOW, "ent": "b"}) + "\n" + '{"t": cut short')
+    (tmp_path / "notes.txt").write_text("not ours")
+    assert [r["ent"] for r in el.iter_rows(str(tmp_path))] == ["a", "b"]
+    assert [r["ent"] for r in el.iter_rows(str(tmp_path), NOW - 60)] == ["b"]
+    files, size = el.usage(str(tmp_path))
+    assert files == 3 and size > 0
+    assert el.usage(str(tmp_path / "missing")) == (0, 0)
