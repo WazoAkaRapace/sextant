@@ -183,6 +183,13 @@ def on_charger(state) -> bool:
     return isinstance(state, str) and state.strip().lower() in CHARGER_STATES
 
 
+def charging_now(state) -> bool:
+    """Whether the sensor says it is drawing power right now. "Charged" and "Full"
+    do not: a source that refreshes rarely (iCloud3, Find My) goes on saying
+    "Charged" for hours after the watch is back on a wrist."""
+    return isinstance(state, str) and state.strip().lower() in {"charging", "on"}
+
+
 def last_charge_began(states):
     """When a charger sensor's last charge began, from its recorded states (oldest
     first, each with ``state`` and ``last_changed``); None if never. The START of
@@ -197,7 +204,7 @@ def last_charge_began(states):
     return began
 
 
-def still_on_charger(charging: bool, arrived, last_charging, since: float):
+def still_on_charger(charging: bool, arrived, last_charging, since: float, full: bool = False):
     """(on the charger, when it last began charging).
 
     A watch that reaches its charge limit reads "NotCharging" while it still
@@ -205,9 +212,16 @@ def still_on_charger(charging: bool, arrived, last_charging, since: float):
     until it moves: until it arrived where it is after that charge began.
     ``since`` is when the sensor's reading began, not now: a reading that
     lags a watch already carried off must not hold it where it lands.
+    ``full`` is a "Charged"/"Full" reading: it was on a charger, and like
+    "NotCharging" it holds only until the thing moves.
     """
     if charging:
         return True, since
+    if full:
+        # The full reading is itself a charge, from when it began: one finished while
+        # nobody watched (a restart, a sensor that skips "Charging") must still hold.
+        # shortcut: a late "Charged" can hold a watch already carried off until its next move; use the recorded charge start if that bites
+        last_charging = max(last_charging or 0, since)
     held = (isinstance(last_charging, (int, float)) and isinstance(arrived, (int, float))
             and arrived <= last_charging)
     return held, last_charging

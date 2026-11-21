@@ -170,6 +170,12 @@ def test_a_full_watch_stays_on_its_charger_until_it_moves():
     assert persons.still_on_charger(False, 250, 200, 5000) == (False, 200)
     # Never seen charging, or no arrival to go by: not on a charger.
     assert persons.still_on_charger(False, 100, None, 5000) == (False, None)
+    # "Charged" is not "charging": it holds a watch that has not moved since, and lets go of one that has
+    assert not persons.charging_now("Charged") and persons.charging_now("Charging") and not persons.charging_now(None)
+    assert persons.still_on_charger(False, 100, 200, 5000, full=True) == (True, 5000)
+    assert persons.still_on_charger(False, 300, 200, 250, full=True) == (False, 250)
+    assert persons.still_on_charger(False, 300, 200, 150, full=True) == (False, 200)
+    assert persons.still_on_charger(False, 100, None, 250, full=True) == (True, 250)
     assert persons.still_on_charger(False, None, 200, 5000) == (False, 200)
 
 
