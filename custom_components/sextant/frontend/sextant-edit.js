@@ -213,7 +213,7 @@ class SextantEdit extends LitElement {
       this._undoAction();
     } else if (mod && ((key === "z" && e.shiftKey) || key === "y")) {
       this._redoAction();
-    } else if ((key === "Delete" || key === "Backspace") && !mod) {
+    } else if ((key === "Delete" || key === "Backspace") && !mod && !this._listing) {
       if (drawing) this._map.undoDraftPoint();
       else if (this._selection) this._deleteSelection();
       else handled = false;
@@ -235,6 +235,11 @@ class SextantEdit extends LitElement {
   get _listing() { return this._phone && this._list !== false; }
 
   _pick(sel) { this._selection = sel; this._map?.setSelection(sel); }
+  _setList(on) {
+    if (on && this._drawing()) { toast(this, "Finish or cancel the shape first"); return; }
+    if (on && this._selection && this._selection.kind !== "zone") this._pick(null);
+    this._list = on;
+  }
 
   /** The phone view's side: the floor's rooms to tap, or the tapped room's settings. */
   _renderRoomList(f, sel) {
@@ -258,6 +263,9 @@ class SextantEdit extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     if (this.hasUpdated && this._tornDown) { this._tornDown = false; this._setup(false); }
+    this._mq = typeof matchMedia === "function" ? matchMedia("(max-width: 720px)") : null;
+    this._onMq = () => this.requestUpdate();
+    this._mq?.addEventListener("change", this._onMq);
   }
 
   _setup(first) {
@@ -301,6 +309,7 @@ class SextantEdit extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    this._mq?.removeEventListener("change", this._onMq);
     clearTimeout(this._alignTimer);
     clearInterval(this._radarTimer);
     clearInterval(this._autosaveTimer);
@@ -1313,7 +1322,7 @@ class SextantEdit extends LitElement {
     const placedAddr = new Set((this._draft?.floor || []).flatMap((fl) => (fl.receivers || []).map((r) => r.address)));
     return html`
       <div class="modebar">
-        ${uiSegmented({ value: listing ? "list" : "map", onChange: (v) => { this._list = v === "list"; }, options: [{ value: "list", label: "Rooms" }, { value: "map", label: "Map" }] })}
+        ${uiSegmented({ value: listing ? "list" : "map", onChange: (v) => this._setList(v === "list"), options: [{ value: "list", label: "Rooms" }, { value: "map", label: "Map" }] })}
         <span class="grow"></span>
         ${uiButton({ label: "Save", kind: "primary", disabled: !this._dirty || this._busy, onClick: () => this._save() })}
       </div>
@@ -1516,7 +1525,7 @@ class SextantEdit extends LitElement {
           onChange: (v) => this._edit("calibrate", v ? false : undefined) })}
         <div class="muted small">Calibration skips it: it is left out of the fit and its correction is never overwritten. For a radio whose distances are the wrong shape rather than the wrong scale - a tablet or a phone, which read long up close and far too short across a room - where no single multiplier fits.</div>
         <div class="muted small">${item.unmatched ? "Bermuda does not report this proxy right now." : "Linked."} x ${fmtNum(item.cords?.x, 0)}, y ${fmtNum(item.cords?.y, 0)}</div>` : nothing}
-      ${sel.kind === "zone" ? uiSwitch({ label: "No-go area (things can never be here)", checked: !!item.no_go, onChange: (v) => this._edit("no_go", v) }) : nothing}
+      ${sel.kind === "zone" && !this._listing ? uiSwitch({ label: "No-go area (things can never be here)", checked: !!item.no_go, onChange: (v) => this._edit("no_go", v) }) : nothing}
       ${sel.kind === "zone" && !item.no_go ? html`<div class="row">${uiColour({ host: this, value: item.color || null, auto: "Automatic (from the name)", autoSwatch: `hsl(${thingHue(item.entity_id || "")}, 60%, 55%)`, custom: this._customColourFor === item, onCustom: (on) => { this._customColourFor = on ? item : null; this.requestUpdate(); }, onChange: (v) => this._edit("color", v || undefined) })}</div>` : nothing}
       ${sel.kind === "zone" && !item.no_go ? this._renderAreaLink(item) : nothing}
       ${sel.kind === "zone" && !item.no_go ? this._renderOccupancyOptions(item) : nothing}
@@ -1544,7 +1553,7 @@ class SextantEdit extends LitElement {
         </div>
         ${this._renderSpotSize(item, f)}
         ${this._renderSpotEvidence(item, f)}` : nothing}
-      <div class="row"><span class="muted small">${(item.cords?.length ?? 1)} point(s)</span><span class="grow"></span>${sel.kind === "zone" || sel.kind === "subzone" ? uiButton({ label: "Square up", icon: "mdi:vector-square", onClick: () => this._squareUp(), title: "Make every edge that is nearly horizontal, vertical or 45° exactly that. Other angles stay as drawn" }) : nothing}${uiButton({ label: "Delete", kind: "danger", onClick: () => this._deleteSelection() })}</div>
+      <div class="row" ?hidden=${this._listing}><span class="muted small">${(item.cords?.length ?? 1)} point(s)</span><span class="grow"></span>${sel.kind === "zone" || sel.kind === "subzone" ? uiButton({ label: "Square up", icon: "mdi:vector-square", onClick: () => this._squareUp(), title: "Make every edge that is nearly horizontal, vertical or 45° exactly that. Other angles stay as drawn" }) : nothing}${uiButton({ label: "Delete", kind: "danger", onClick: () => this._deleteSelection() })}</div>
     </div>`;
   }
 
