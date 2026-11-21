@@ -4603,6 +4603,7 @@ async def _restore_runtime(hass):
     _person_visits.update(back.get("visits") or {})
     _person_sleep.update(back.get("sleep") or {})
     _gps_asked.update(back.get("asked") or {})
+    _last_charging.update(back.get("charging") or {})
     if back.get("wifi"):
         _wifi_store.update(back["wifi"])
     # The floor election, and with it the fact that this thing's floor is not
@@ -4738,7 +4739,7 @@ async def _save_runtime(hass, final=False):
         # a dying tag, was gone entirely after the 15:34 restart.
         rows = _rows_with_last_seen(rows, _last_seen)
         data = runtime_mod.snapshot(time.time(), kf=_kf_position_state, zones=_zone_state,
-                                    spots=_subzone_state, arrivals=_arrivals, rows=rows, visits=_person_visits, sleep=_person_sleep, asked=_gps_asked, wifi=_wifi_store,
+                                    spots=_subzone_state, arrivals=_arrivals, rows=rows, visits=_person_visits, sleep=_person_sleep, asked=_gps_asked, wifi=_wifi_store, charging=_last_charging,
                                     floors=_floor_elections(), sensors={"bad": _sensor_bad_since, "on": {e: v[0] for e, v in _sensor_on_since.items()}})
         await save_runtime(hass, data)
     except Exception as e:  # noqa: BLE001
@@ -4765,6 +4766,9 @@ def _history_arrival(hass, ent, floor, x, y, now):
 # How long after first seeing a thing the history is asked again when it had
 # no answer: it is loaded from disk a little after the first cycle of a start.
 ARRIVAL_RETRY_SECS = 600.0
+
+
+_last_charging: dict = {}   # ent -> when its on-charger sensor last began to say charging
 
 
 def _arrived_at(hass, layout, ent, row, now):
@@ -5282,14 +5286,23 @@ def _update_person_sensors(hass):
             row = rows.get(ent)
             if not row:
                 continue
+            arrived = _arrived_at(hass, layout, ent, row, now)
+            charging = False
+            if chargers.get(ent):
+                cst = hass.states.get(chargers[ent])
+                changed = getattr(cst, "last_changed", None)
+                charging, _last_charging[ent] = persons_mod.still_on_charger(
+                    persons_mod.on_charger(getattr(cst, "state", None)), arrived, _last_charging.get(ent),
+                    changed.timestamp() if changed else now)
+            else:
+                _last_charging.pop(ent, None)   # no sensor named any more: nothing holds it
             candidates.append({
                 "ent": ent, "cls": classes.get(ent), "updated": _graced(row.get("updated"), now),
-                "arrived": _arrived_at(hass, layout, ent, row, now),
+                "arrived": arrived,
                 "zone": row.get("zone"), "zone_raw": row.get("zone_raw"), "sub_zone": row.get("sub_zone"), "floor": row.get("floor"),
                 "outside": bool(row.get("outside")), **{k: row.get(k) for k in persons_mod.FIT_KEYS},
                 "area": room_area(layout, row.get("floor"), row.get("zone")),
-                "on_charger": bool(chargers.get(ent)) and persons_mod.on_charger(
-                    getattr(hass.states.get(chargers[ent]), "state", None)),
+                "on_charger": charging,
             })
         slug = person.split(".", 1)[1]
         gps, ignored = persons_mod.choose_gps(hass.states.get, layout, person, now, gps_stale)

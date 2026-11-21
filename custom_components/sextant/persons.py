@@ -183,6 +183,22 @@ def on_charger(state) -> bool:
     return isinstance(state, str) and state.strip().lower() in CHARGER_STATES
 
 
+def still_on_charger(charging: bool, arrived, last_charging, since: float):
+    """(on the charger, when it last began charging).
+
+    A watch that reaches its charge limit reads "NotCharging" while it still
+    sits on the puck. So once seen charging, a thing stays on its charger
+    until it moves: until it arrived where it is after that charge began.
+    ``since`` is when the sensor's reading began, not now: a reading that
+    lags a watch already carried off must not hold it where it lands.
+    """
+    if charging:
+        return True, since
+    held = (isinstance(last_charging, (int, float)) and isinstance(arrived, (int, float))
+            and arrived <= last_charging)
+    return held, last_charging
+
+
 def settled_since(points, here, radius=STAY_RADIUS_M, confirm_secs=MOVE_CONFIRM_SECS,
                   absence_secs=ABSENCE_ENDS_STAY_SECS):
     """When a thing arrived within ``radius`` metres of ``here``, from its history.
