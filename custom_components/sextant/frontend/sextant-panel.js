@@ -459,6 +459,9 @@ class SextantPanel extends LitElement {
       /* Nine tabs share the row evenly, so none is off the right edge. */
       .modes { flex: 1 1 auto; min-width: 0; }
       .modes button { flex: 1 1 0; min-width: 0; padding: 0; justify-content: center; }
+      /* Nine bare icons do not say where you are: the current one carries its name. */
+      .modes button.active { flex: 0 0 auto; flex-direction: column; gap: 2px; padding: 0 6px; }
+      .modes button.active .mode-label { display: block; font-size: 10px; line-height: 1; }
       .spacer { display: none; }
       /* The floor picker scrolls inside the bar: wider than the bar, it ran
          off the left edge and took the first floors out of reach. */
@@ -1796,8 +1799,8 @@ class SextantLive extends LitElement {
             ${sel.robot ? nothing : this._renderLinks(sel.ent)}
           </div>` : nothing}
         ${this._isAdmin() && !this._pin && !sel ? html`
-          <button class="pinfab narrow-only" title="Quick pin: say where a thing really is" @click=${() => this._startPin()}>
-            <ha-icon icon="mdi:map-marker-check"></ha-icon><span>Pin</span></button>` : nothing}
+          <button class="pinfab narrow-only" title="Quick pin: say where a thing really is" aria-label="Pin where a thing really is" @click=${() => this._startPin()}>
+            <ha-icon icon="mdi:map-marker-check"></ha-icon></button>` : nothing}
         ${this._pin?.step === "who" ? this._renderPinWho() : this._pin?.step === "done" ? this._renderPinDone() : nothing}
     `;
   }
@@ -2150,7 +2153,7 @@ class SextantLive extends LitElement {
     /* Quick pin (phones; see _startPin). The list and done steps are sheets
        over the whole screen; the map step is the stage itself gone
        full-screen, with the chips, the ring and one button laid over it. */
-    .pinfab { position: fixed; right: 16px; bottom: calc(64px + env(safe-area-inset-bottom, 0px)); z-index: 6; height: 52px; padding: 0 20px 0 16px; border: 0; border-radius: 999px; background: var(--primary-color, #03a9f4); color: var(--text-primary-color, #fff); font: inherit; font-weight: 600; font-size: 15px; align-items: center; gap: 6px; box-shadow: 0 6px 20px rgba(0,0,0,0.35); cursor: pointer; }
+    .pinfab { position: fixed; right: 16px; bottom: calc(64px + env(safe-area-inset-bottom, 0px)); z-index: 6; height: 52px; width: 52px; padding: 0; justify-content: center; border: 0; border-radius: 999px; background: var(--primary-color, #03a9f4); color: var(--text-primary-color, #fff); font: inherit; font-weight: 600; font-size: 15px; align-items: center; gap: 6px; box-shadow: 0 6px 20px rgba(0,0,0,0.35); cursor: pointer; }
     .pinfab ha-icon { --mdc-icon-size: 22px; }
     .pinsheet { position: fixed; inset: 0; z-index: 8; display: flex; flex-direction: column; background: var(--primary-background-color, #fafafa); color: var(--primary-text-color); }
     .pinhead { display: flex; align-items: center; gap: 12px; padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 8px; }
