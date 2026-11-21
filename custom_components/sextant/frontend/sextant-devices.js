@@ -1165,9 +1165,10 @@ class SextantDevices extends LitElement {
     @media (max-width: 720px) { .p-2 tr > :nth-child(2):not([colspan]), .p-4 tr > :nth-child(4), .p-5 tr > :nth-child(5), .p-6 tr > :nth-child(6) { display: none; } .dialog h3 { overflow-wrap: anywhere; flex-wrap: wrap; } .dialog h3 span { flex-basis: 100%; } .ponly { display: inline; } }
     /* stack: on a phone each row is a block, its cells one under another; act puts the last cell (the action) at the right. */
     @media (max-width: 720px) {
-      .stack, .stack tbody { display: block; } .stack th { display: none; }
+      .stack, .stack tbody { display: block; } .stack th { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }   /* off screen, still read out */
+      .stack tr:first-child { border: 0; padding: 0; }
       .stack tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; border-top: 1px solid var(--divider-color); padding: 6px 0; }
-      .stack td { display: block; grid-column: 1; border: 0; padding: 2px 8px; }
+      .stack td { display: block; grid-column: 1; border: 0; }
       .wrap .stack td:first-child { min-width: 0; max-width: none; position: static; background: none; box-shadow: none; border-right: 0; }
       .stack td.who { display: flex; }
       .stack.act td:last-child:not(:first-child) { grid-column: 2; grid-row: 1 / span 3; align-self: center; }
