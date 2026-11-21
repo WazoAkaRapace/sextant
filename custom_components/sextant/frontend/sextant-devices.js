@@ -865,7 +865,7 @@ class SextantDevices extends LitElement {
           ${uiButton({ label: "Refresh", kind: "text", icon: "mdi:refresh", onClick: () => this._refreshLight() })}
         </div>
         ${finding ? html`<p class="small">Hold the device against <b>${findName}</b>: the loudest there comes first. The list refreshes every 3 s; set Find near back to Off when done.</p>` : nothing}
-        <div class="wrap"><table class="compact">
+        <div class="wrap"><table class="compact p-2 p-4 p-5">
           <tr><th>Device</th><th>Maker</th><th>Where</th><th class="num">Proxies</th><th class="num">Signal</th><th>Seen</th><th></th></tr>
           ${candidates.slice(0, 200).map((c, i) => { const w = this._heardWhere(c, index); return html`<tr>
             <td><b>${c.name}</b> ${finding && i === 0 ? html`<span class="pill ok">loudest</span>` : nothing} ${c.kind === "tile" ? html`<span class="pill">Tile</span>` : c.kind === "ibeacon" ? html`<span class="pill">iBeacon</span>` : nothing}<br><span class="muted small">${c.address}</span></td>
@@ -908,7 +908,7 @@ class SextantDevices extends LitElement {
 
       <section class="card">
         <h3>FindMy accessories <span class="muted">${(this._findmy || []).length}</span></h3>
-        <div class="wrap"><table class="compact">
+        <div class="wrap"><table class="compact p-2">
           <tr><th>Accessory</th><th>Model</th><th>Status</th><th></th></tr>
           ${(this._findmy || []).map((a) => html`<tr>
             <td><b>${a.name}</b><br><span class="muted small">${a.address}</span></td>
@@ -1077,7 +1077,7 @@ class SextantDevices extends LitElement {
       .sort((a, b) => a.where.localeCompare(b.where));
     return html`
       <p class="small muted">Click a Tile's name to call it "Kitchen keys"; the map and the Things page use that name. Bermuda follows each Tile across its address rotations by RSSI pattern and remembers where it last was, so it finds it again after a restart; that works while the Tile is not sitting among other Tiles. A Tile marked <span class="pill warn">not heard</span> has rotated away unseen: pick the live address that is where the Tile is and Adopt. On Private ID Tiles the ID readable over Bluetooth rotates too, so it cannot name a tag; probing stays off unless "Tile identity probes" is on above.</p>
-      <div class="wrap"><table class="compact">
+      <div class="wrap"><table class="compact p-4">
         <tr><th>Tile</th><th>Bound address</th><th>This Tile is…</th><th>History</th></tr>
         ${bindings.map(([id, sources]) => { const lost = t.bound_age?.[id] == null || t.bound_age[id] > 300; return html`<tr>
           <td><a href="#" class="name" title="Name this Tile (and set its class, height and icon)" @click=${(e) => { e.preventDefault(); this._openWizard(id, sources[0]); }}>${thingName(this.data, id)}</a>${this.data?.layout?.thing_names?.[id] ? nothing : html`<br><span class="muted small">click to name it</span>`}${t.uids?.[id] ? html`<br><code class="small">${t.uids[id]}</code>` : nothing}</td>
@@ -1121,7 +1121,7 @@ class SextantDevices extends LitElement {
       return { room: p.room ? `${p.room} · ${p.floor}` : p.floor, proxy: `${p.name} (${hit.rssi} dBm)`, unplaced: heard.length - heard.filter((h) => placed.has(String(h.address || "").toLowerCase())).length };
     };
     return html`<h4>Tile IDs heard <span class="muted small">read from the tags; pick which configured Tile each one is. To tell two apart, ring one from the Tile app, carry it to another room for two minutes and watch which ID moves.</span></h4>
-      <div class="wrap"><table class="compact">
+      <div class="wrap"><table class="compact p-4 p-6">
         <tr><th>Tile ID</th><th>Last heard</th><th>Where</th><th>Loudest placed proxy</th><th>Is</th><th></th></tr>
         ${ids.map((row) => { const w = where(row); return html`<tr>
           <td><code>${row.uid}</code></td>
@@ -1160,6 +1160,8 @@ class SextantDevices extends LitElement {
     @media (max-width: 720px) { .wrap td:first-child { min-width: 150px; max-width: 46vw; overflow-wrap: anywhere; } }
     /* A phone shows who and where; the id, height and ref trim are in the dialog the name opens. */
     @media (max-width: 720px) { .tracked .num, .tracked .addr { display: none; } .wrap .tracked td:first-child { min-width: 0; max-width: none; } }
+    /* p-N: column N is left out on a phone (it is in the dialog, or only detail). */
+    @media (max-width: 720px) { .p-2 tr > :nth-child(2):not([colspan]), .p-4 tr > :nth-child(4), .p-5 tr > :nth-child(5), .p-6 tr > :nth-child(6) { display: none; } .dialog h3 { overflow-wrap: anywhere; } .dialog h3 span { display: block; } }
     @media (pointer: coarse) { a.name { display: inline-block; padding: 6px 0; } }
     td.actions { white-space: nowrap; }
     button.iconbtn.danger { color: var(--error-color, #b00020); border-color: transparent; }
