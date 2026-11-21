@@ -256,6 +256,11 @@ def test_location_asks_come_back_whatever_the_gap():
     assert runtime.restore(data, 1000.0 + 10 * 86400)["asked"] == {"person.alex": 870.5}
     assert runtime.restore({"asked": {"person.bad": True}}, 1000.0)["asked"] == {}
     assert "asked" not in runtime.snapshot(1000.0)
+    # The charger hold comes back the same way: a full watch on its puck stays held over a restart.
+    data = runtime.snapshot(1000.0, charging={"watch": 870.5, "never": None})
+    assert data["charging"] == {"watch": 870.5}
+    assert runtime.restore(data, 1000.0 + 86400)["charging"] == {"watch": 870.5}
+    assert runtime.restore({"charging": {"watch": True}}, 1000.0)["charging"] == {}
 
 
 def test_visits_come_back_whatever_the_gap():

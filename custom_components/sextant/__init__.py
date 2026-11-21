@@ -4603,6 +4603,7 @@ async def _restore_runtime(hass):
     _person_visits.update(back.get("visits") or {})
     _person_sleep.update(back.get("sleep") or {})
     _gps_asked.update(back.get("asked") or {})
+    _last_charging.update(back.get("charging") or {})
     if back.get("wifi"):
         _wifi_store.update(back["wifi"])
     # The floor election, and with it the fact that this thing's floor is not
@@ -4738,7 +4739,7 @@ async def _save_runtime(hass, final=False):
         # a dying tag, was gone entirely after the 15:34 restart.
         rows = _rows_with_last_seen(rows, _last_seen)
         data = runtime_mod.snapshot(time.time(), kf=_kf_position_state, zones=_zone_state,
-                                    spots=_subzone_state, arrivals=_arrivals, rows=rows, visits=_person_visits, sleep=_person_sleep, asked=_gps_asked, wifi=_wifi_store,
+                                    spots=_subzone_state, arrivals=_arrivals, rows=rows, visits=_person_visits, sleep=_person_sleep, asked=_gps_asked, wifi=_wifi_store, charging=_last_charging,
                                     floors=_floor_elections(), sensors={"bad": _sensor_bad_since, "on": {e: v[0] for e, v in _sensor_on_since.items()}})
         await save_runtime(hass, data)
     except Exception as e:  # noqa: BLE001
@@ -5290,7 +5291,6 @@ def _update_person_sensors(hass):
             if chargers.get(ent):
                 cst = hass.states.get(chargers[ent])
                 changed = getattr(cst, "last_changed", None)
-                # shortcut: the charge time is lost on a restart, so a full watch on its puck speaks again until it next charges; persist it if that bites.
                 charging, _last_charging[ent] = persons_mod.still_on_charger(
                     persons_mod.on_charger(getattr(cst, "state", None)), arrived, _last_charging.get(ent),
                     changed.timestamp() if changed else now)
