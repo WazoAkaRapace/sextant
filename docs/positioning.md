@@ -136,8 +136,8 @@ twice `zone_unlock_secs`: the lock holds through jitter on a boundary, not
 through the thing being somewhere else.
 
 **Across a restart.** A cycle's state - each thing's filter, its room and
-spot elections with their smoothed probabilities and timers, and when it
-arrived where it is - is written to `.storage/sextant_runtime` every two
+spot elections with their smoothed probabilities and timers, the proxy it
+is anchored to, and when it arrived where it is - is written to `.storage/sextant_runtime` every two
 minutes and again on a clean stop. A restart reads it back and carries on,
 as a starting point the next readings can disagree with, so a thing keeps
 its room and its spot instead of re-earning them and a person does not

@@ -322,8 +322,72 @@ def test_room_options_are_read_safely():
     z = {"entity_id": "X", "room_hold_secs": 45, "room_extended_secs": 5, "inputs": "binary_sensor.m, media_player.tv, junk",
          "door": "binary_sensor.d"}
     o = rooms.room_options(z)
-    assert o == {"hold_secs": 45.0, "extended_secs": None, "inputs": ["binary_sensor.m", "media_player.tv"], "door": "binary_sensor.d"}
-    assert rooms.room_options({"room_hold_secs": True, "inputs": 7, "door": ["x"]}) == {"hold_secs": None, "extended_secs": None, "inputs": [], "door": None}
+    none = {"keep": [], "mode_entity": None, "mode_label": None, "dark": None, "sleep_entity": None, "sleep_hold_secs": None, "extended_hold_secs": None}
+    assert o == {"hold_secs": 45.0, "extended_secs": None, "inputs": ["binary_sensor.m", "media_player.tv"], "door": "binary_sensor.d", **none}
+    assert rooms.room_options({"room_hold_secs": True, "inputs": 7, "door": ["x"]}) == {"hold_secs": None, "extended_secs": None, "inputs": [], "door": None, **none}
+    o = rooms.room_options({"inputs": "binary_sensor.m", "keep": "media_player.tv, binary_sensor.m, sensor.w>20", "mode_entity": "input_select.scene",
+                            "mode_label": " Movie ", "dark": "sensor.lux<20", "sleep_entity": "input_boolean.asleep", "room_sleep_hold_secs": 1800})
+    assert o["keep"] == ["media_player.tv", "sensor.w>20"] and o["mode_entity"] == "input_select.scene" and o["mode_label"] == "Movie"
+    assert o["dark"] == "sensor.lux<20" and o["sleep_entity"] == "input_boolean.asleep" and o["sleep_hold_secs"] == 1800.0
+
+
+def test_mode_dark_and_the_hold_that_applies():
+    assert rooms.mode_of("Movie") == "Movie" and rooms.mode_of("on", "Guests") == "Guests" and rooms.mode_of("playing") == "on"
+    assert rooms.mode_of("Idle", option=True) == "Idle" and rooms.mode_of("Home", "x", True) == "Home" and rooms.mode_of("unknown", option=True) is None
+    assert rooms.mode_of("off") is None and rooms.mode_of("unavailable") is None and rooms.mode_of(None) is None
+    states = {"sensor.lux": "12", "sun.sun": "above_horizon"}
+    assert rooms.is_dark("sensor.lux<20", states.get) is True and rooms.is_dark(None, states.get) is False
+    assert rooms.is_dark("sensor.gone<20", states.get) is None and rooms.is_dark(None, {}.get) is None
+    assert rooms.hold_for(False, False, 60, 1800, 300) == 60 and rooms.hold_for(True, True, 60, 1800, 300) == 1800
+    assert rooms.hold_for(False, True, 60, 1800, 300) == 300 and rooms.hold_for(True, True, 60, -1, None) == 60
+
+
+def test_publish_rooms_keep_sleep_mode_event_and_force_auto_off(hass, monkeypatch):
+    layout = {"tuning": {"room_force_max_secs": 60}, "floor": [{"name": "Ground Floor", "floor_id": "ground", "zones": [
+        {"entity_id": "Den", "inputs": "binary_sensor.den_motion", "keep": "media_player.den_tv", "mode_entity": "input_select.den",
+         "sleep_entity": "input_boolean.den_asleep", "room_sleep_hold_secs": 900, "cords": [{"x": 0, "y": 0}] * 3}]}]}
+    from sextant import switch as sw_platform
+    _added(hass)
+    monkeypatch.setattr(sextant, "get_layout", lambda h: layout)
+    hass.data["sextant_room_keys"] = rooms.room_keys(layout)
+    hass.data["sextant_aggregate_sensors"] = {}
+    platform.ensure_room_sensors(hass, layout)
+    hass.data["sextant_room_switches"], hass.data["sextant_switch_add"] = {}, lambda e, **k: None
+    sw_platform.ensure_room_switches(hass, layout)
+    key = ("Ground Floor", "Den")
+    states = {"binary_sensor.den_motion": "off", "media_player.den_tv": "playing", "input_select.den": "Movie", "input_boolean.den_asleep": "off"}
+    hass.states = type("S", (), {"get": staticmethod(lambda e: type("St", (), {"state": states[e]})() if e in states else None)})()
+    fired = hass.events
+    hass.data["sextant_room_answers"] = {key: (False, None)}
+    clock = [1000.0]
+    monkeypatch.setattr(sextant.time, "time", lambda: clock[0])
+    monkeypatch.setattr(sextant, "_rooms_from", 1.0)      # long past the settle after a start, when no room event fires
+    sensor = hass.data["sextant_room_sensors"][key]
+    sextant._publish_rooms(hass)
+    assert sensor._attr_is_on is False and not fired                 # the TV alone never starts a stay
+    states["binary_sensor.den_motion"] = "on"
+    sextant._publish_rooms(hass)
+    attrs = sensor._attr_extra_state_attributes
+    assert sensor._attr_is_on is True and attrs["mode"] == "Movie" and attrs["asleep"] is False
+    assert fired[-1][0] == "sextant_room_occupancy_changed" and fired[-1][1]["state"] == "occupied" and fired[-1][1]["previous"] == "clear"
+    states["binary_sensor.den_motion"] = "off"
+    sextant._publish_rooms(hass)
+    attrs = sensor._attr_extra_state_attributes
+    assert sensor._attr_is_on is True and "keep" in attrs["sources"] and attrs["hold_over"] is False   # the TV keeps it
+    states["media_player.den_tv"], states["input_boolean.den_asleep"] = "off", "on"
+    clock[0] += 600
+    sextant._publish_rooms(hass)
+    assert sensor._attr_is_on is True and sensor._attr_extra_state_attributes["hold_over"] is True      # asleep: 900 s, not 0
+    states["input_boolean.den_asleep"] = "off"
+    sextant._publish_rooms(hass)
+    assert sensor._attr_is_on is False and [d["state"] for _n, d in fired] == ["occupied", "extended", "clear"]
+    switch = hass.data["sextant_room_switches"][key]
+    switch._attr_is_on, switch.on_since, switch.async_write_ha_state = True, clock[0], lambda: None
+    sextant._publish_rooms(hass)
+    assert sensor._attr_is_on is True
+    clock[0] += 61
+    sextant._publish_rooms(hass)
+    assert switch._attr_is_on is False and sensor._attr_is_on is False                                   # the force switch timed out
 
 
 def test_inputs_on_and_door_closed():
@@ -655,3 +719,42 @@ def test_sensor_clocks_outlive_a_restart():
     rooms.sensor_problems(keys, {"binary_sensor.mm": _st("off", 0)}.get, now, 24 * 3600, 6 * 3600, back["bad"], back["on"])
     assert back["on"] == {}
     assert runtime.restore(saved, now + 2 * 3600)["sensors"] == {"bad": {}, "on": {}}
+
+
+def test_a_room_keeps_its_since_over_a_restart(hass):
+    import asyncio
+    import time
+    import types
+    from datetime import datetime, timezone
+    layout = {"floor": [{"name": "Ground Floor", "floor_id": "ground", "zones": [
+        {"entity_id": n, "cords": [{"x": 0, "y": 0}] * 3} for n in ("Kitchen", "Office", "Hall")]}]}
+    _added(hass)
+    hass.data["sextant_room_keys"] = rooms.room_keys(layout)
+    hass.data["sextant_aggregate_sensors"] = {}
+    platform.ensure_room_sensors(hass, layout)
+    hass.data["sextant_room_switches"] = {}
+    then = time.time() - 3600
+    iso = datetime.fromtimestamp(then, timezone.utc).isoformat(timespec="seconds")
+    was = {"Kitchen": "on", "Office": "on", "Hall": "off"}
+    sensors = {n: hass.data["sextant_room_sensors"][("Ground Floor", n)] for n in was}
+    for n, s in sensors.items():
+        s.hass = hass
+        s.async_write_ha_state = lambda: None
+        s._test_last_state = types.SimpleNamespace(state=was[n], attributes={"since": iso})
+        asyncio.run(s.async_added_to_hass())
+    hass.states = type("S", (), {"get": staticmethod(lambda e: None)})()
+
+    def shown(n):
+        a = sensors[n]._attr_extra_state_attributes
+        return sensors[n]._attr_is_on, a["state"], datetime.fromisoformat(a["since"]).timestamp()
+    hass.data["sextant_room_answers"] = {}
+    sextant._publish_rooms(hass)                      # nothing placed yet: the restored states show, with their since
+    assert shown("Kitchen") == (True, "extended", int(then)) and shown("Hall") == (False, "clear", int(then))
+    hass.data["sextant_room_answers"] = {("Ground Floor", "Kitchen"): (True, None)}
+    sextant._publish_rooms(hass)                      # the kitchen is confirmed: still the long stay it was
+    sextant._publish_rooms(hass)
+    assert shown("Kitchen") == (True, "extended", int(then))
+    sensors["Office"].restore_until = 1.0             # the office never was: it cleared now, not an hour ago
+    sextant._publish_rooms(hass)
+    assert shown("Office")[:2] == (False, "clear") and shown("Office")[2] > then + 3000
+    assert shown("Hall") == (False, "clear", int(then))

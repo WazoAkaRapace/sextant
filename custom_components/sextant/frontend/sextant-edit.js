@@ -11,6 +11,7 @@ import { LitElement, html, css, nothing } from "./lit.js";
 import { SextantMap, polygonCentroid, snapToVertex, squareUp, thingHue, radarCalibration } from "./sextant-map.js";
 import { sharedStyles, widgetStyles, toast, callWS, confirmAsync, fmtNum, fmtLen, uiField, uiSelect, uiSwitch, uiButton, uiIconButton, uiMenu, uiSegmented, proxyName, lenUnit, toDisplayLen, fromDisplayLen, fmtScale, isImperial, THING_CLASSES, CLASS_FAMILIES, mapOverlayStyles, renderScaleBar, uiColour, mapUrlFor } from "./sextant-ui.js";
 import { lostShapes, planKey } from "./sextant-shapes.js";
+import { ROOM_STEPS, areaEntities, suggestions, picked, toggled } from "./sextant-room-setup.js";
 
 // [id, label under the icon, icon, tooltip]
 /** The Anchor tool's "New anchor" choice (not a name any anchor can have). */
@@ -78,6 +79,7 @@ class SextantEdit extends LitElement {
     _nextPin: { state: true },   // the Pin tool's next name: one waiting on another floor, or NEW_PIN
     _selection: { state: true },
     _placing: { state: true },
+    _wizard: { state: true },    // the room setup wizard: {zone, step}, or null for the plain form
     _proxyFilter: { state: true },
     _proxyShow: { state: true },
     _measure: { state: true },
@@ -867,22 +869,42 @@ class SextantEdit extends LitElement {
 
   /** This room's occupancy sensor: its own timing, other sensors that say someone is here, and a door that holds it. */
   _renderOccupancyOptions(item) {
+    const wizard = this._wizard?.zone === item ? this._wizard : null;
+    const steps = wizard ? [ROOM_STEPS[wizard.step]] : ROOM_STEPS;
+    const go = (step) => { this._wizard = step == null ? null : { zone: item, step }; };
+    return html`<div class="row" style="margin-top: 8px; align-items: center">
+        <span class="muted small">Occupancy sensor${wizard ? html` · step ${wizard.step + 1} of ${ROOM_STEPS.length}: <b>${steps[0].title}</b>` : nothing}</span><span class="grow"></span>
+        ${wizard ? nothing : uiButton({ label: "Set up step by step", icon: "mdi:wizard-hat", onClick: () => go(0) })}
+      </div>
+      ${steps.map((step) => this._renderRoomStep(item, step, !!wizard))}
+      ${wizard ? html`<div class="row">
+          ${uiButton({ label: "Back", disabled: wizard.step === 0, onClick: () => go(wizard.step - 1) })}<span class="grow"></span>
+          ${uiButton({ label: "Show all", kind: "text", onClick: () => go(null) })}
+          ${wizard.step < ROOM_STEPS.length - 1 ? uiButton({ label: "Next", kind: "primary", onClick: () => go(wizard.step + 1) })
+            : uiButton({ label: "Done", kind: "primary", onClick: () => { go(null); toast(this, "Room set up. Save to keep it"); } })}
+        </div>` : html`
+        ${uiSwitch({ label: "Has an outside door (someone whose phone goes quiet here has gone out)", checked: !!item.exit, onChange: (v) => this._edit("exit", v || undefined) })}
+        <div class="muted small">Blank timings use the Tuning page's. "Set up step by step" explains each setting and offers the sensors in the room's area.</div>`}`;
+  }
+
+  /** One group of a room's occupancy fields (ROOM_STEPS); in the wizard, with what it is for and the area's sensors to click. */
+  _renderRoomStep(item, step, guided) {
     const tuning = this.data?.layout?.tuning || {};
     const spec = this.data?.tuning_spec || {};
-    const num = (key, lo, hi) => (v) => this._edit(key, v === "" || !Number.isFinite(Number(v)) ? undefined : Math.min(hi, Math.max(lo, Number(v))));
-    const text = (key) => (v) => this._edit(key, v.trim() || undefined);
-    return html`<div class="muted small" style="margin-top: 8px">Occupancy sensor</div>
-      <div class="row">
-        ${uiField({ label: "Clears after (s)", type: "number", step: 1, min: 0, max: 3600, value: item.room_hold_secs ?? "",
-          placeholder: String(tuning.room_hold_secs ?? spec.room_hold_secs?.default ?? 0), onChange: num("room_hold_secs", 0, 3600), style: "width: 150px" })}
-        ${uiField({ label: "Extended after (s)", type: "number", step: 1, min: 30, max: 86400, value: item.room_extended_secs ?? "",
-          placeholder: String(tuning.room_extended_secs ?? spec.room_extended_secs?.default ?? 600), onChange: num("room_extended_secs", 30, 86400), style: "width: 150px" })}
-      </div>
-      ${uiField({ label: "Other sensors that mean someone is here (entity ids)", value: Array.isArray(item.inputs) ? item.inputs.join(", ") : item.inputs ?? "",
-        placeholder: "binary_sensor.kitchen_motion, media_player.kitchen, sensor.tv_power>20", onChange: text("inputs"), style: "width: 100%" })}
-      ${uiField({ label: "Door contact (entity id)", value: item.door ?? "", placeholder: "binary_sensor.bedroom_door", onChange: text("door"), style: "width: 100%" })}
-      ${uiSwitch({ label: "Has an outside door (someone whose phone goes quiet here has gone out)", checked: !!item.exit, onChange: (v) => this._edit("exit", v || undefined) })}
-      <div class="muted small">Blank timings use the Tuning page's. A motion, media player or presence sensor listed here keeps the room occupied while it is on, so a guest with no beacon counts. With a door contact, someone who stays in the room for a while after the door closes keeps it occupied until the door opens.</div>`;
+    const usual = (key) => { const v = tuning[key] ?? spec[key]?.default; return v == null ? "" : v < 0 ? "as usual" : String(v); };
+    const show = (v) => (Array.isArray(v) ? v.join(", ") : v ?? "");
+    const field = (f) => f.num
+      ? uiField({ label: f.label, type: "number", step: 1, min: f.num[0], max: f.num[1], value: item[f.key] ?? "", placeholder: usual(f.tuning), style: "width: 190px",
+          onChange: (v) => this._edit(f.key, v === "" || !Number.isFinite(Number(v)) ? undefined : Math.min(f.num[1], Math.max(f.num[0], Number(v)))) })
+      : uiField({ label: f.label, value: show(item[f.key]), placeholder: f.placeholder, onChange: (v) => this._edit(f.key, v.trim() || undefined), style: "width: 100%" });
+    const offers = guided && step.pick ? suggestions(step.key, areaEntities(this.hass, item.area_id)) : [];
+    return html`
+      ${guided ? html`<div class="muted small">${step.help}</div>` : nothing}
+      ${offers.length ? html`<div class="chips">${offers.map((o) => html`<button class="chip ${picked(item[step.pick], o.value) ? "on" : ""}" title=${o.value}
+          aria-pressed=${picked(item[step.pick], o.value)} @click=${() => this._edit(step.pick, toggled(item[step.pick], o.value, step.many))}>${o.label}</button>`)}</div>`
+        : guided && step.pick ? html`<div class="muted small">${item.area_id ? "Nothing of this kind in the room's area: type an entity id, or leave it blank." : "Link the room to its Home Assistant area (above) and its sensors are offered here."}</div>` : nothing}
+      ${step.fields.some((f) => f.num) ? html`<div class="row">${step.fields.filter((f) => f.num).map(field)}</div>` : nothing}
+      ${step.fields.filter((f) => !f.num).map(field)}`;
   }
 
   /** Rooms named exactly like an area (whatever the case) are linked to it; linked rooms are left alone. */
@@ -1603,6 +1625,7 @@ class SextantEdit extends LitElement {
     .hint select { max-width: 100%; }
     .hint input[type="search"] { width: 200px; max-width: 100%; padding: 4px 6px; font: inherit; }
     .chip { padding: 2px 9px; border-radius: 999px; border: 1px solid var(--divider-color); background: var(--secondary-background-color); color: var(--primary-text-color); font: inherit; font-size: 12px; cursor: pointer; }
+    .chip.on { background: var(--primary-color); border-color: var(--primary-color); color: var(--text-primary-color, #fff); }
     .chip:hover { border-color: var(--primary-color); }
     .warn { color: var(--warning-color, #9a5b00); }
     .calib { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(240,140,0,0.45); background: rgba(240,140,0,0.06); }

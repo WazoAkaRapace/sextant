@@ -319,3 +319,18 @@ def test_slept_in_is_the_room_with_most_of_the_night_and_survives_a_restart():
     # A damaged save drops that person, not the restore.
     bad = {"saved_at": at(23, 0), "things": {}, "sleep": {"a": {"night": "x", "rooms": {"R (F)": 10 ** 400}, "places": {}}, "b": "junk"}}
     assert runtime.restore(bad, at(23, 1))["sleep"] == {}
+
+
+def test_the_last_charge_is_read_from_the_sensors_history():
+    from datetime import datetime, timezone
+    from types import SimpleNamespace as S
+    at = lambda h: datetime(2026, 11, 21, h, tzinfo=timezone.utc)   # noqa: E731
+    rows = [S(state="NotCharging", last_changed=at(3)), S(state="Charging", last_changed=at(4)),
+            S(state="NotCharging", last_changed=at(5)), S(state="unavailable", last_changed=at(8))]
+    began = persons.last_charge_began(rows)
+    assert began == at(4).timestamp()
+    # the watch sat down at 03:59, charged at 04:00 and stopped at its limit: still on the puck
+    assert persons.still_on_charger(False, at(4).timestamp() - 60, began, 0)[0] is True
+    full = rows[:2] + [S(state="Full", last_changed=at(6)), S(state="NotCharging", last_changed=at(7))]
+    assert persons.last_charge_began(full) == at(4).timestamp()     # Charging then Full is one charge
+    assert persons.last_charge_began(rows[:1]) is None and persons.last_charge_began(None) is None

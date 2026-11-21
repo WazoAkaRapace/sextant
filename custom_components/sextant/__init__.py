@@ -855,6 +855,13 @@ TUNING_SPEC = {
     # "extended" once it has been occupied for room_extended_secs.
     "room_hold_secs": (0.0, float, 0.0, 3600.0),
     "room_extended_secs": (600.0, float, 30.0, 86400.0),
+    # The clear-after while someone sleeps in the room (its "sleep" entity is on) and once a stay
+    # is extended. -1 = the same as room_hold_secs.
+    "room_sleep_hold_secs": (-1.0, float, -1.0, 86400.0),
+    "room_extended_hold_secs": (-1.0, float, -1.0, 86400.0),
+    # A room's "force occupied" switch turns itself off after this long (0 = never).
+    # shortcut: one time for every room, give rooms their own when one needs a different one
+    "room_force_max_secs": (0.0, float, 0.0, 604800.0),
     # Time-of-day prior (habits.py): how far a thing's usual room at this hour moves the margin a
     # challenger room must lead by. 0 turns it off.
     "habit_margin_gain": (0.10, float, 0.0, 0.3),
@@ -4600,6 +4607,8 @@ async def _restore_runtime(hass):
             state = {**state, "pending": (tuple(pending[0]), pending[1])}
         _subzone_state[entity] = {**_new_subzone_state(state.get("floor"), state.get("zone"), now), **state}
     _arrivals.update(back["arrivals"])
+    # Near-field anchors: without them every anchored thing drops from 0.9 confidence until it has dwelt again.
+    _anchor_state.update(back.get("anchors") or {})
     _person_visits.update(back.get("visits") or {})
     _person_sleep.update(back.get("sleep") or {})
     _gps_asked.update(back.get("asked") or {})
@@ -4739,7 +4748,7 @@ async def _save_runtime(hass, final=False):
         # a dying tag, was gone entirely after the 15:34 restart.
         rows = _rows_with_last_seen(rows, _last_seen)
         data = runtime_mod.snapshot(time.time(), kf=_kf_position_state, zones=_zone_state,
-                                    spots=_subzone_state, arrivals=_arrivals, rows=rows, visits=_person_visits, sleep=_person_sleep, asked=_gps_asked, wifi=_wifi_store, charging=_last_charging,
+                                    spots=_subzone_state, arrivals=_arrivals, rows=rows, visits=_person_visits, sleep=_person_sleep, asked=_gps_asked, wifi=_wifi_store, charging=_last_charging, anchors=_anchor_state,
                                     floors=_floor_elections(), sensors={"bad": _sensor_bad_since, "on": {e: v[0] for e, v in _sensor_on_since.items()}})
         await save_runtime(hass, data)
     except Exception as e:  # noqa: BLE001
@@ -4769,6 +4778,34 @@ ARRIVAL_RETRY_SECS = 600.0
 
 
 _last_charging: dict = {}   # ent -> when its on-charger sensor last began to say charging
+_charging_asked: set = set()   # (thing, sensor) pairs whose charge sensor's history has been asked (once a run)
+CHARGE_LOOKBACK_S = 3 * 86400.0
+
+
+def _ask_last_charge(hass, ent, sensor, now):
+    """A charge that finished before this run began (a restart, an upgrade) left no
+    record, and a watch full on its puck then won over the phone its owner carries.
+    Ask the recorder once for the sensor's last charging state."""
+    if (ent, sensor) in _charging_asked:
+        return
+    _charging_asked.add((ent, sensor))
+
+    async def ask():
+        try:
+            from homeassistant.components.recorder import get_instance, history  # noqa: PLC0415
+            start = datetime.fromtimestamp(now - CHARGE_LOOKBACK_S, timezone.utc)
+            found = await get_instance(hass).async_add_executor_job(
+                lambda: history.state_changes_during_period(
+                    hass, start, None, sensor, no_attributes=True, include_start_time_state=False))
+            began = persons_mod.last_charge_began(found.get(sensor))
+            same = (get_layout(hass) or {}).get("thing_charging_entity", {}).get(ent) == sensor   # not re-pointed meanwhile
+            if began is not None and same and _last_charging.get(ent) is None:   # a charge seen live meanwhile wins
+                _last_charging[ent] = began
+        except Exception as e:  # noqa: BLE001 - no recorder: the hold starts with the next charge
+            _LOGGER.debug("Charge history for %s not read: %s", sensor, e)
+            if "recorder" in hass.config.components:
+                _charging_asked.discard((ent, sensor))   # the recorder was not ready: ask again next cycle
+    hass.async_create_task(ask())
 
 
 def _arrived_at(hass, layout, ent, row, now):
@@ -5290,6 +5327,8 @@ def _update_person_sensors(hass):
             charging = False
             if chargers.get(ent):
                 cst = hass.states.get(chargers[ent])
+                if _last_charging.get(ent) is None:
+                    _ask_last_charge(hass, ent, chargers[ent], now)
                 changed = getattr(cst, "last_changed", None)
                 charging, _last_charging[ent] = persons_mod.still_on_charger(
                     persons_mod.on_charger(getattr(cst, "state", None)), arrived, _last_charging.get(ent),
@@ -5570,6 +5609,24 @@ def _restored_memory(sensor, now):
     return getattr(sensor, "memory", None)
 
 
+def _carry_since(sensor, m, grace, now, extended_s):
+    """Keep the room's ``since`` (and so occupied/extended) over a restart: while
+    the restored state still shows, and after it if the first real answer agrees
+    with it. Edits ``m`` (a settle() result)."""
+    keep = getattr(sensor, "restored_since", None)
+    if keep is None:
+        return
+    since, was_on = keep
+    shown = m["on"] or grace
+    if not grace:
+        sensor.restored_since = None     # the first real answer: carried once, then the memory holds it
+    m["since"] = min(since, now) if shown == was_on else now
+    m["state"] = "clear" if not shown else ("extended" if now - m["since"] >= extended_s else "occupied")
+
+
+_rooms_from = 0.0     # when the rooms first published this run
+
+
 def _publish_rooms(hass):
     """Each room's sensor from two answers: the things' (rooms.occupancy, once
     a cycle) and the radars' (the tracks in each room, every reading). A
@@ -5587,6 +5644,10 @@ def _publish_rooms(hass):
     layout = layout if isinstance(layout, dict) else {}
     hold, extended, now = _tuning(layout, "room_hold_secs"), _tuning(layout, "room_extended_secs"), time.time()
     door_settle, door_max = _tuning(layout, "door_settle_secs"), _tuning(layout, "door_hold_max_secs")
+    sleep_hold, long_hold = _tuning(layout, "room_sleep_hold_secs"), _tuning(layout, "room_extended_hold_secs")
+    force_max = _tuning(layout, "room_force_max_secs")
+    global _rooms_from
+    _rooms_from = _rooms_from or now
 
     def elsewhere(here):
         """The people the other rooms hold right now."""
@@ -5604,31 +5665,59 @@ def _publish_rooms(hass):
             attrs = {"room": key[1], "floor": key[0], "area_id": link.get("area_id"), "floor_id": link.get("floor_id"),
                      "count": 0, "people": [], "pets": [], "things": [], "ids": {}, "spots": [], "presence": None}
         seen = radar.get(key) or {"count": 0, "held": 0}
-        forced = bool(getattr(switches.get(key), "_attr_is_on", False))
+        switch = switches.get(key)
+        if force_max > 0 and getattr(switch, "_attr_is_on", False) and now - (getattr(switch, "on_since", None) or now) >= force_max:
+            switch.expire()
+        forced = bool(getattr(switch, "_attr_is_on", False))
         link = links.get(key) or {}
         inputs = rooms_mod.inputs_on(link.get("inputs"), state_of)
+        keep = rooms_mod.inputs_on(link.get("keep"), state_of)
+        asleep = bool(link.get("sleep_entity")) and bool(rooms_mod.inputs_on([link["sleep_entity"]], state_of))
         sensed = bool(is_on) or seen["count"] > 0 or bool(inputs)
         grace = _restoring(sensor, sensed, now)
         door = rooms_mod.door_closed(state_of(link["door"])) if link.get("door") else None
         own_hold, own_ext = link.get("hold_secs"), link.get("extended_secs")
-        sensor.memory = rooms_mod.settle(_restored_memory(sensor, now), sensed or forced, now,
-                                         hold if own_hold is None else own_hold, extended if own_ext is None else own_ext,
-                                         door, door_settle, door_max)
+        own_sleep, own_long = link.get("sleep_hold_secs"), link.get("extended_hold_secs")
+
+        def settled(prev, raw):
+            """(settle()'s answer, kept): a keep-only sensor holds a room that is already on, and the
+            clear-after is the sleep or extended one when that applies."""
+            prev = prev or {}
+            # Only a stay confirmed since the start is kept: a restored "on" proves nobody is here now.
+            kept = bool(keep) and not raw and bool(prev.get("on"))
+            ext_s = extended if own_ext is None else own_ext
+            # By the clock, not the last published state: a publish may come after the stay passed the threshold.
+            long = bool(prev.get("on")) and prev.get("since") is not None and now - prev["since"] >= ext_s
+            hold_s = rooms_mod.hold_for(asleep, long, hold if own_hold is None else own_hold,
+                                        sleep_hold if own_sleep is None else own_sleep, long_hold if own_long is None else own_long)
+            # A keep-only sensor is not a person: it never starts the door's shut-in wait (an open door still ends one).
+            return rooms_mod.settle(prev, raw or kept, now, hold_s, ext_s,
+                                    None if kept and door else door, door_settle, door_max), kept
+        sensor.memory, kept = settled(_restored_memory(sensor, now), sensed or forced)
         if sensed and attrs.get("people"):
             sensor.door_people = list(attrs["people"])   # a lingering radar track has none: keep who was there
         if not sensed and rooms_mod.release_if_elsewhere(sensor.memory, getattr(sensor, "door_people", None), elsewhere(key)):
-            sensor.memory = rooms_mod.settle(sensor.memory, forced, now, hold if own_hold is None else own_hold,
-                                             extended if own_ext is None else own_ext, door, door_settle, door_max)
+            sensor.memory, kept = settled(sensor.memory, forced)
         m = sensor.memory
+        _carry_since(sensor, m, grace, now, extended if own_ext is None else own_ext)
         since = datetime.fromtimestamp(m["since"], timezone.utc).isoformat(timespec="seconds")
         attrs = {**attrs, "radar": seen["count"], "held": not is_on and seen["count"] > 0 and seen["held"] == seen["count"],
                  "state": m["state"], "since": since, "forced": forced, "inputs": inputs, "door_hold": m["door_hold"],
                  "door_at": m["door_at"], "door_people": list(getattr(sensor, "door_people", None) or []),
-                 "hold_over": m["on"] and not sensed and not forced and not m["door_hold"]}
+                 "hold_over": m["on"] and not sensed and not forced and not kept and not m["door_hold"],
+                 "keep": keep, "asleep": asleep, "dark": rooms_mod.is_dark(link.get("dark"), state_of),
+                 "mode": rooms_mod.mode_of(state_of(link["mode_entity"]), link.get("mode_label"), link["mode_entity"].split(".")[0] in ("input_select", "select")) if link.get("mode_entity") else None}
         attrs["sources"] = rooms_mod.sources(bool(is_on), seen["count"] > 0, inputs, forced, m["door_hold"],
-                                             grace and not m["on"], attrs["hold_over"])
+                                             grace and not m["on"], attrs["hold_over"], kept)
         on = m["on"] or grace          # a restart's carried-over state shows, but never feeds the hold or the door latch
         sensor.set_occupancy(on, attrs)
+        was, sensor.event_state = getattr(sensor, "event_state", None), m["state"]
+        # Never the first answer after a start, nor while the house settles (radar-only houses never set _events_from).
+        if was is not None and was != m["state"] and now >= max(_events_from, _rooms_from + EVENTS_SETTLE_S):
+            hass.bus.async_fire("sextant_room_occupancy_changed", {
+                "entity_id": getattr(sensor, "entity_id", None), "room": key[1], "floor": key[0], "area_id": attrs.get("area_id"),
+                "state": m["state"], "previous": was, "people": attrs.get("people") or [], "pets": attrs.get("pets") or [],
+                "sources": attrs["sources"], "mode": attrs["mode"], "dark": attrs["dark"], "asleep": asleep})
         published[key] = (on, attrs)
         who = people_sensors.get(key)
         if who is not None:
@@ -5637,18 +5726,16 @@ def _publish_rooms(hass):
             if humans and attrs.get("people"):
                 who.door_people = list(attrs["people"])
             who_grace = _restoring(who, humans, now)
-            who.memory = rooms_mod.settle(_restored_memory(who, now), humans or forced, now,
-                                          hold if own_hold is None else own_hold, extended if own_ext is None else own_ext,
-                                          door, door_settle, door_max)
+            who.memory, who_kept = settled(_restored_memory(who, now), humans or forced)
             if not humans and rooms_mod.release_if_elsewhere(who.memory, getattr(who, "door_people", None), elsewhere(key)):
-                who.memory = rooms_mod.settle(who.memory, forced, now, hold if own_hold is None else own_hold,
-                                              extended if own_ext is None else own_ext, door, door_settle, door_max)
+                who.memory, who_kept = settled(who.memory, forced)
             wm = who.memory
-            hold_over = wm["on"] and not humans and not forced and not wm["door_hold"]
+            _carry_since(who, wm, who_grace, now, extended if own_ext is None else own_ext)
+            hold_over = wm["on"] and not humans and not forced and not who_kept and not wm["door_hold"]
             people_on = wm["on"] or who_grace
             who.set_occupancy(people_on, {**attrs, "state": wm["state"],
                                          "sources": rooms_mod.sources(bool(attrs.get("humans") or attrs.get("people")), seen["count"] > 0, inputs, forced,
-                                                                      wm["door_hold"], who_grace and not wm["on"], hold_over),
+                                                                      wm["door_hold"], who_grace and not wm["on"], hold_over, who_kept),
                                          "since": datetime.fromtimestamp(wm["since"], timezone.utc).isoformat(timespec="seconds"), "people_only": True,
                                          "door_hold": wm["door_hold"],
                                          "door_at": wm["door_at"], "door_people": list(getattr(who, "door_people", None) or []),
