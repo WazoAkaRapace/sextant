@@ -4771,6 +4771,30 @@ ARRIVAL_RETRY_SECS = 600.0
 
 
 _last_charging: dict = {}   # ent -> when its on-charger sensor last began to say charging
+_charging_asked: set = set()   # things whose charge sensor's history has been asked (once a run)
+CHARGE_LOOKBACK_S = 3 * 86400.0
+
+
+def _ask_last_charge(hass, ent, sensor, now):
+    """A charge that finished before this run began (a restart, an upgrade) left no
+    record, and a watch full on its puck then won over the phone its owner carries.
+    Ask the recorder once for the sensor's last charging state."""
+    if ent in _charging_asked:
+        return
+    _charging_asked.add(ent)
+
+    async def ask():
+        try:
+            from homeassistant.components.recorder import get_instance, history  # noqa: PLC0415
+            start = datetime.fromtimestamp(now - CHARGE_LOOKBACK_S, timezone.utc)
+            found = await get_instance(hass).async_add_executor_job(
+                history.state_changes_during_period, hass, start, None, sensor)
+            began = persons_mod.last_charge_began(found.get(sensor))
+            if began is not None and _last_charging.get(ent) is None:   # a charge seen live meanwhile wins
+                _last_charging[ent] = began
+        except Exception as e:  # noqa: BLE001 - no recorder: the hold starts with the next charge
+            _LOGGER.debug("Charge history for %s not read: %s", sensor, e)
+    hass.async_create_task(ask())
 
 
 def _arrived_at(hass, layout, ent, row, now):
@@ -5292,6 +5316,8 @@ def _update_person_sensors(hass):
             charging = False
             if chargers.get(ent):
                 cst = hass.states.get(chargers[ent])
+                if _last_charging.get(ent) is None:
+                    _ask_last_charge(hass, ent, chargers[ent], now)
                 changed = getattr(cst, "last_changed", None)
                 charging, _last_charging[ent] = persons_mod.still_on_charger(
                     persons_mod.on_charger(getattr(cst, "state", None)), arrived, _last_charging.get(ent),

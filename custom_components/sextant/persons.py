@@ -183,6 +183,16 @@ def on_charger(state) -> bool:
     return isinstance(state, str) and state.strip().lower() in CHARGER_STATES
 
 
+def last_charge_began(states):
+    """When a charger sensor last turned to a charging state, from its recorded
+    states (oldest first, each with ``state`` and ``last_changed``); None if never."""
+    for st in reversed(list(states or [])):
+        changed = getattr(st, "last_changed", None)
+        if on_charger(getattr(st, "state", None)) and changed is not None:
+            return changed.timestamp()
+    return None
+
+
 def still_on_charger(charging: bool, arrived, last_charging, since: float):
     """(on the charger, when it last began charging).
 
