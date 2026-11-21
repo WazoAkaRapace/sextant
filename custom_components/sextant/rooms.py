@@ -91,9 +91,54 @@ def room_options(zone) -> dict:
     ``door`` (a contact entity whose closed state keeps the room occupied)."""
     door = _entity_ids(zone.get("door"))
     # Never a Sextant occupancy sensor (it would hold itself on) nor the door (an open door is not a person).
-    inputs = [e for e in _input_specs(zone.get("inputs")) if not re.search(r"sextant.*occupancy(_\d+)?$", spec_entity(e)) and spec_entity(e) not in door]
+    def specs(value):
+        return [e for e in _input_specs(value) if not re.search(r"sextant.*occupancy(_\d+)?$", spec_entity(e)) and spec_entity(e) not in door]
+    inputs = specs(zone.get("inputs"))
+    mode, sleep, dark = _entity_ids(zone.get("mode_entity")), _entity_ids(zone.get("sleep_entity")), _input_specs(zone.get("dark"))
+    label = zone.get("mode_label")
     return {"hold_secs": _secs(zone.get("room_hold_secs"), 0.0, 3600.0), "extended_secs": _secs(zone.get("room_extended_secs"), 30.0, 86400.0),
-            "inputs": inputs, "door": door[0] if door else None}
+            "inputs": inputs, "door": door[0] if door else None,
+            # Sensors that keep an occupied room on but never turn an empty one on (a TV, a flappy tracker).
+            "keep": [e for e in specs(zone.get("keep")) if e not in inputs],
+            # The room's mode (mode_of), whether it is dark (is_dark) and whether someone sleeps there, each from one entity.
+            "mode_entity": mode[0] if mode else None,
+            "mode_label": label.strip()[:40] if isinstance(label, str) and label.strip() else None,
+            "dark": dark[0] if dark else None, "sleep_entity": sleep[0] if sleep else None,
+            # Clear-after while asleep or once extended (None = the global tuning, which may itself say "as usual").
+            "sleep_hold_secs": _secs(zone.get("room_sleep_hold_secs"), 0.0, 86400.0),
+            "extended_hold_secs": _secs(zone.get("room_extended_hold_secs"), 0.0, 86400.0)}
+
+
+# States that mean "nothing" for a mode entity; anything else that is not an "on" state is the mode's own name.
+_NO_MODE = {"", "off", "idle", "standby", "paused", "none", "unknown", "unavailable", "not_home", "false"}
+
+
+def mode_of(state, label=None):
+    """The room's mode from its mode entity's state: a dropdown's option as it is
+    ("movie"), ``label`` (or "on") while an on/off entity is on, None otherwise."""
+    text = str(state if state is not None else "").strip()
+    if text.lower() in _NO_MODE:
+        return None
+    return (label or "on") if text.lower() in ACTIVE_STATES else text[:40]
+
+
+def is_dark(spec, get_state):
+    """True/False from the room's ``dark`` entity (on = dark, or a number test such
+    as ``sensor.lux<20``), or from the sun when the room has none; None when unknown."""
+    if spec:
+        state = get_state(spec_entity(spec))
+        return None if state in (None, "unknown", "unavailable") else _input_on(spec, state)
+    sun = get_state("sun.sun")
+    return {"below_horizon": True, "above_horizon": False}.get(sun)
+
+
+def hold_for(asleep, extended, hold_s, sleep_s=None, extended_s=None):
+    """The clear-after that applies now: the sleep one while someone sleeps here,
+    the extended one after a long stay, else the usual. None or negative = the usual."""
+    for on, secs in ((asleep, sleep_s), (extended, extended_s)):
+        if on and isinstance(secs, (int, float)) and secs >= 0:
+            return float(secs)
+    return hold_s
 
 
 # States that say "someone is here" for a motion/presence/occupancy sensor, a
@@ -140,7 +185,7 @@ def sensor_problems(keys, get, now, stuck_s, gone_s, bad_since=None, on_since=No
     seen_bad = set()
     for key in keys:
         room = f"{key['room']} ({key['floor']})"
-        for spec in (key.get("inputs") or []) + ([key["door"]] if key.get("door") else []):
+        for spec in (key.get("inputs") or []) + (key.get("keep") or []) + ([key["door"]] if key.get("door") else []):
             ent = spec_entity(spec)
             st = get(ent)
             found = None
@@ -381,11 +426,11 @@ def people_aggregate_ids(ids) -> dict:
             "name": ids["name"].replace("Occupancy", "People Occupancy"), "device_id": ids["unique_id"]}
 
 
-def sources(things, radar, inputs, forced, door_hold, restoring, hold_over) -> list:
+def sources(things, radar, inputs, forced, door_hold, restoring, hold_over, kept=False) -> list:
     """Why a room is on, for its ``sources`` attribute: ``bluetooth`` (a tracked
     thing placed there), ``radar``, ``media_player`` / ``sensor`` (an input, named
     in ``inputs``), ``forced``, ``door`` (shut in), ``restored`` (carried over a
-    restart) and ``hold`` (nothing now, the clear-after hold still running)."""
+    restart), ``keep`` (only a keep-only sensor) and ``hold`` (nothing now, the clear-after hold still running)."""
     out = []
     for name, on in (("bluetooth", things), ("radar", radar)):
         if on:
@@ -394,7 +439,7 @@ def sources(things, radar, inputs, forced, door_hold, restoring, hold_over) -> l
         out.append("media_player")
     if any(not str(e).startswith("media_player.") for e in inputs or []):
         out.append("sensor")
-    for name, on in (("forced", forced), ("door", door_hold), ("restored", restoring), ("hold", hold_over)):
+    for name, on in (("forced", forced), ("door", door_hold), ("restored", restoring), ("keep", kept), ("hold", hold_over)):
         if on:
             out.append(name)
     return out
