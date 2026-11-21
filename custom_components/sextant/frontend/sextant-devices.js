@@ -826,7 +826,7 @@ class SextantDevices extends LitElement {
           <span class="grow"></span>
           ${uiButton({ label: "Add a thing…", kind: "primary", icon: "mdi:plus", onClick: () => { this._addWizard = { kind: null, irk: "", error: null }; } })}
         </h3>
-        <div class="wrap"><table class="compact">
+        <div class="wrap"><table class="compact tracked">
           <tr><th>Thing</th><th>Where</th><th class="num">Height</th><th class="num">Ref trim</th><th></th></tr>
           ${tracked.map(([address, d]) => {
             const slug = d.slug, p = live.get(slug), name = thingName(this.data, slug), mdi = classIcon(classes[slug]);
@@ -835,7 +835,7 @@ class SextantDevices extends LitElement {
                 <button class="iconpick" title="Change the icon or class of ${name}" @click=${() => this._openWizard(slug, address)}>
                   ${icons[slug] ? html`<img class="icon round" src=${icons[slug]} alt="" style="box-shadow: 0 0 0 2px ${thingColor(slug, colors[slug])}">` : html`<ha-icon class="icon" icon=${mdi || "mdi:tag-outline"} style="color: ${thingColor(slug, colors[slug])}"></ha-icon>`}
                 </button>
-                <div><a href="#" class="name" title="Edit name, class, height, ref trim and icon" @click=${(e) => { e.preventDefault(); this._openWizard(slug, address); }}>${name}</a><br><span class="muted small">${address}${classes[slug] ? ` · ${(THING_CLASSES.find(([k]) => k === classes[slug]) || [])[1] || classes[slug]}` : ""}${layout.thing_estimators?.[slug] ? ` · ${layout.thing_estimators[slug]} only` : ""}</span></div>
+                <div><a href="#" class="name" title="Edit name, class, height, ref trim and icon" @click=${(e) => { e.preventDefault(); this._openWizard(slug, address); }}>${name}</a><br><span class="muted small"><span class="addr">${address}${classes[slug] ? " · " : ""}</span>${classes[slug] ? `${(THING_CLASSES.find(([k]) => k === classes[slug]) || [])[1] || classes[slug]}` : ""}${layout.thing_estimators?.[slug] ? ` · ${layout.thing_estimators[slug]} only` : ""}</span></div>
               </td>
               <td>${p ? html`${p.zone}${p.sub_zone && p.sub_zone !== "unknown" ? ` · ${p.sub_zone}` : ""}<br><span class="muted small">${p.floor}</span>`
                 : d.last_seen_age != null ? html`<span class="muted">no position</span><br><span class="muted small">seen ${fmtAge(d.last_seen_age)} ago</span>`
@@ -1158,6 +1158,8 @@ class SextantDevices extends LitElement {
     /* The pinned column held a long id on one line and took the whole screen,
        leaving a letter's width of the next column: here it wraps instead. */
     @media (max-width: 720px) { .wrap td:first-child { min-width: 150px; max-width: 46vw; overflow-wrap: anywhere; } }
+    /* A phone shows who and where; the id, height and ref trim are in the dialog the name opens. */
+    @media (max-width: 720px) { .tracked .num, .tracked .addr { display: none; } .wrap .tracked td:first-child { min-width: 0; max-width: none; } }
     @media (pointer: coarse) { a.name { display: inline-block; padding: 6px 0; } }
     td.actions { white-space: nowrap; }
     button.iconbtn.danger { color: var(--error-color, #b00020); border-color: transparent; }
