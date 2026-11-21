@@ -39,32 +39,9 @@ def load_rows(dirpath: str, hours: float, now: float | None = None) -> list:
     """The log's rows from the last ``hours`` that the room election can replay, oldest first."""
     since = (time.time() if now is None else now) - hours * 3600.0
     rows = []
-    try:
-        names = sorted(os.listdir(dirpath))
-    except OSError:
-        return rows
-    for name in names:
-        hour = election_log.hour_of(name)
-        if hour is None or hour + 3600.0 < since:
-            continue
-        if name + ".gz" in names:
-            continue   # listed mid-compression: the gzip has the same rows
-        path = os.path.join(dirpath, name)
-        try:
-            fh = election_log.open_text(path)
-        except FileNotFoundError:
-            try:
-                fh = election_log.open_text(path + ".gz")   # gzipped since the listing
-            except OSError:
-                continue
-        with fh:
-            for line in fh:
-                try:
-                    r = json.loads(line)
-                except ValueError:
-                    continue   # a line cut short by a restart
-                if r.get("t", 0) >= since and r.get("cords") and r.get("floor") and r.get("zone_raw"):
-                    rows.append({k: r.get(k) for k in ("t", "ent", "floor", "cords", "zone_raw", "zone", "anchor", "rms_m", "speed")})
+    for r in election_log.iter_rows(dirpath, since):
+        if r.get("cords") and r.get("floor") and r.get("zone_raw"):
+            rows.append({k: r.get(k) for k in ("t", "ent", "floor", "cords", "zone_raw", "zone", "anchor", "rms_m", "speed")})
     rows.sort(key=lambda r: r["t"])
     return rows
 

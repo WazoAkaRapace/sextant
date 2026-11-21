@@ -314,6 +314,8 @@ class CustomDistanceSensor(SensorEntity, RestoreEntity):
                 name=device_name or device_key,
                 manufacturer="Sextant",
                 model=model or "Tracked thing",
+                # "Visit" on the device page opens the Sextant panel.
+                configuration_url="homeassistant://sextant",
             )
             if via_device:
                 info["via_device_id"] = via_device

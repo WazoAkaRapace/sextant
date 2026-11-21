@@ -456,6 +456,18 @@ class SextantPanel extends LitElement {
       /* Freeing the floor picker and stamp usually leaves enough room for
          all 8 tabs; this is only a safety net on a very narrow phone. */
       .modes { overflow-x: auto; scrollbar-width: none; }
+      /* Nine tabs share the row evenly, so none is off the right edge. */
+      .modes { flex: 1 1 auto; min-width: 0; }
+      .modes button { flex: 1 1 0; min-width: 0; padding: 0; justify-content: center; }
+      .spacer { display: none; }
+      /* The floor picker scrolls inside the bar: wider than the bar, it ran
+         off the left edge and took the first floors out of reach. */
+      .bottombar .floor-tabs { flex: 0 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+      .bottombar .floor-tabs button { flex: none; padding: 8px 12px; }
+      .bottombar .stampbtn { padding: 8px 6px; }
+    }
+    /* The mark is a second way to Live; a phone needs the width for the tabs. */
+    @media (max-width: 480px) { .brand { display: none; }
     }
   `];
 }
@@ -482,6 +494,7 @@ class SextantLive extends LitElement {
     _blend: { state: true },
     _optionsOpen: { state: true },
     _mapOpen: { state: true },
+    _find: { state: true },
     _timeline: { state: true },
     _timelineAll: { state: true },
     _pin: { state: true },
@@ -929,7 +942,7 @@ class SextantLive extends LitElement {
 
   _renderPinDone() {
     const pin = this._pin, ent = pin.ent, name = this._label(ent), pn = this._pn(ent), t = pin.result;
-    const rows = (t?.rows || []).slice(0, 6), best = rows[0];
+    const rows = (t?.rows || []).filter((r) => !r.cross).slice(0, 6), best = rows[0];
     const where = pin.spot ? `${pin.spot} · ${pin.room || this.floor}` : (pin.room || this.floor);
     return html`<div class="pinsheet" role="dialog" aria-label="Quick pin: done">
       <div class="pinhead">
@@ -1607,6 +1620,8 @@ class SextantLive extends LitElement {
 
   render() {
     const rows = this._allRows();
+    const find = rows.length > 8 ? (this._find || "").trim().toLowerCase() : "";   // no box, no filter
+    const shown = find ? rows.filter((p) => `${this._label(p.ent)} ${p.ent} ${p.zone || ""}`.toLowerCase().includes(find)) : rows;
     const sel = rows.find((p) => p.ent === this._selected);
     const h = this._history;
     const pinning = this._pin?.step === "where";
@@ -1723,9 +1738,10 @@ class SextantLive extends LitElement {
             onClick: () => { this._mapOpen = !this._mapOpen; },
           })}</span>
         </h3>
+        ${rows.length > 8 ? html`<input class="tsearch" type="search" placeholder="Find a thing" aria-label="Find a thing" .value=${this._find || ""} @input=${(e) => { this._find = e.target.value; }}>` : nothing}
         <ul class="list">
-          ${this._renderGroupedRows(rows)}
-          ${rows.length ? nothing : html`<li class="muted">No positions yet.</li>`}
+          ${this._renderGroupedRows(shown)}
+          ${rows.length ? (shown.length ? nothing : html`<li class="muted">Nothing matches "${this._find}".</li>`) : html`<li class="muted">No positions yet.</li>`}
         </ul>
       </aside>
         ${sel ? html`
@@ -1907,7 +1923,9 @@ class SextantLive extends LitElement {
   _renderTruth(sel) {
     const ent = sel.ent;
     const t = this._truth && this._truth.mark?.entity === ent ? this._truth : null;
-    const rows = (t?.rows || []).slice(0, 6);
+    const rows = (t?.rows || []).filter((r) => !r.cross).slice(0, 6);
+    // The cross-floor fit is a comparison only: nothing places a thing that way.
+    const cross = (t?.rows || []).find((r) => r.cross);
     return html`<div class="truth">
       ${this._marking ? nothing
         : html`<div class="row">
@@ -1918,6 +1936,7 @@ class SextantLive extends LitElement {
           ${rows.map((r) => html`<tr><td>${r.estimator}${r.estimator === "fused" ? ` ${Math.round(r.weight * 100)}%` : ""}</td><td class="num">×${fmtNum(r.gain, 1)}</td><td class="num">${fmtLen(r.mean_m, this.hass)}</td><td class="num">${Math.round(r.room_ok * 100)}%</td>
             <td>${uiButton({ label: "Apply", kind: "text", onClick: () => this._applyRow(ent, r) })}</td></tr>`)}
         </table>
+        ${cross ? html`<p class="small">With the other floors' proxies helping: ${fmtLen(cross.mean_m, this.hass)} from the pin, right room ${Math.round(cross.room_ok * 100)}% (${cross.samples} cycles)${cross.alone_m != null ? html`; this floor's proxies alone over the same cycles: ${fmtLen(cross.alone_m, this.hass)}, ${Math.round(cross.alone_room_ok * 100)}%` : nothing}. <span class="muted">A comparison only, nothing to apply.</span></p>` : nothing}
         <p class="muted small">Error is the mean distance from the pin; Room is how often the fix landed in the pin's room. One pin can overfit: pin ${this._pn(ent).obj} in another room too.</p>` : html`<p class="muted small">Nothing could be re-solved for this mark.</p>`}
         <div class="row">${uiButton({ label: "Close", kind: "text", onClick: () => { this._truth = null; } })}${uiButton({ label: "Forget pin", kind: "text", onClick: () => this._deleteMark(t.mark.id) })}</div>
       </div>` : nothing}
@@ -2015,6 +2034,7 @@ class SextantLive extends LitElement {
     @media (min-width: 721px) and (max-width: 1000px) { .mapcorner.besidecard { display: none; } }
     .detail h4 { display: flex; align-items: center; gap: 6px; }
     .list { list-style: none; margin: 0 0 12px; padding: 0; }
+    .tsearch { width: 100%; box-sizing: border-box; margin: 0 0 8px; padding: 6px 8px; font: inherit; color: var(--primary-text-color); background: var(--card-background-color); border: 1px solid var(--divider-color); border-radius: 6px; }
     .list li { display: grid; grid-template-columns: 30px 1fr auto; grid-template-rows: auto auto; column-gap: 10px; align-items: center; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
     .avatar { grid-row: 1 / 3; width: 30px; height: 30px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,0.15); display: flex; align-items: center; justify-content: center; overflow: hidden; color: #fff; }
     .avatar ha-icon { --mdc-icon-size: 18px; }
@@ -2214,6 +2234,8 @@ class SextantLive extends LitElement {
       .side h3 { position: sticky; top: 0; z-index: 2; margin: 0; padding: 8px 0; background: var(--card-background-color); }
       .stage { order: 2; flex: 0 0 48vh; }
       .stage.collapsed { display: none; }
+      /* Room to scroll the last rows clear of the Pin button. */
+      .side .list:last-of-type { padding-bottom: 72px; }
       .wide-only { display: none; }
       .narrow-only { display: flex; }
     }

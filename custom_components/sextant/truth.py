@@ -58,7 +58,10 @@ class Buffer:
         self._by_entity = {}
         self._maxlen = maxlen
 
-    def remember(self, entity, jobs, thing_vec, gain, estimator, now=None, raw_vec=None):
+    def remember(self, entity, jobs, thing_vec, gain, estimator, now=None, raw_vec=None, cross=None):
+        """``cross`` is {floor: (points, heard)}: the other floors' proxies as
+        solver points on that floor (``_cross_floor_points``), kept so a mark
+        can say whether borrowing them would have landed nearer."""
         floors = {}
         for job in jobs:
             # Tuples of floats, not lists: CPython's cyclic collector stops
@@ -76,6 +79,9 @@ class Buffer:
                 "min_wr": float(job.get("min_wr") or 1e-3),
                 "scale": float(job.get("scale") or 0.0),
             }
+            borrowed = ((cross or {}).get(job["floor"]) or ((),))[0]
+            if borrowed:
+                floors[job["floor"]]["cross"] = tuple(tuple(float(v) for v in pt) for pt in borrowed)
         if not floors:
             return
         sample = {
@@ -158,7 +164,7 @@ def rebase(samples, mult, rx_at, min_radius_m):
 
 
 def evaluate(samples, floor, mark, scale, zone_of, solve, refs_for_gain, k=3, missing_m=12.0,
-             base_gain=1.0, weights=WEIGHTS, gains=GAIN_STEPS):
+             base_gain=1.0, weights=WEIGHTS, gains=GAIN_STEPS, cross=False):
     """Re-solve ``samples`` (Buffer samples holding ``floor``) under every
     blend weight and gain multiplier, scored against ``mark`` (x, y in
     floor pixels; ``scale`` px per metre).
@@ -169,6 +175,11 @@ def evaluate(samples, floor, mark, scale, zone_of, solve, refs_for_gain, k=3, mi
     None. Returns rows sorted best first: weight, gain multiplier, the
     estimator that weight means, samples used, mean and median error in
     metres, and the share of cycles that landed in the mark's room.
+
+    With ``cross``, one more row (``"cross": True``, estimator "cross-floor"):
+    the geometric fit with the other floors' proxies helping, over the samples
+    that recorded them. It is a comparison only: nothing places a thing this
+    way, so it cannot be applied. Its partner is the geometric row.
     """
     usable = [s for s in samples if floor in s.get("floors", {})]
     if not usable or not scale:
@@ -196,26 +207,45 @@ def evaluate(samples, floor, mark, scale, zone_of, solve, refs_for_gain, k=3, mi
                     "min_wr": fj["min_wr"], "stable_hint": None, "scale": fj["scale"] or scale,
                     "zone_polys": [], "fingerprint": spec,
                 })
-            errors, right = [], 0
-            for outcome in solve(jobs):
-                if outcome is None:
-                    continue
-                fix = outcome[0]
-                errors.append(math.hypot(fix[0] - mark[0], fix[1] - mark[1]) / scale)
-                if mark_zone is not None and zone_of(fix) == mark_zone:
-                    right += 1
-            if not errors:
-                continue
-            errors.sort()
-            rows.append({
-                "weight": w, "gain": round(g, 2), "estimator": estimator_for(w),
-                "samples": len(errors),
-                "mean_m": round(sum(errors) / len(errors), 2),
-                "median_m": round(errors[len(errors) // 2], 2),
-                "room_ok": round(right / len(errors), 2),
-            })
+            row = _score(solve(jobs), mark, scale, zone_of, mark_zone)
+            if row:
+                rows.append({"weight": w, "gain": round(g, 2), "estimator": estimator_for(w), **row})
+    if cross:
+        # Only the cycles some other floor heard, solved with and without the
+        # borrowed points: the same cycles, or the comparison measures which
+        # cycles were easy rather than what borrowing did.
+        heard = [fj for fj in (s["floors"][floor] for s in usable) if fj.get("cross")]
+
+        def _fit(borrow):
+            return _score(solve([{
+                "floor": floor, "weighted": [tuple(pt) for pt in fj["weighted"]] + ([tuple(pt) for pt in fj["cross"]] if borrow else []),
+                "bounds": None if fj.get("bounds") is None else tuple(fj["bounds"]),
+                "min_wr": fj["min_wr"], "stable_hint": None, "scale": fj["scale"] or scale,
+                "zone_polys": [], "fingerprint": None,
+            } for fj in heard]), mark, scale, zone_of, mark_zone) if heard else None
+        row, alone = _fit(True), _fit(False)
+        if row:
+            rows.append({"weight": 0.0, "gain": 1.0, "estimator": "cross-floor", "cross": True, **row,
+                         "alone_m": alone and alone["mean_m"], "alone_room_ok": alone and alone["room_ok"]})
     rows.sort(key=lambda r: (r["mean_m"], -r["room_ok"]))
     return rows
+
+
+def _score(outcomes, mark, scale, zone_of, mark_zone):
+    """Samples used, mean and median error (m) and the share in the mark's room, or None."""
+    errors, right = [], 0
+    for outcome in outcomes:
+        if outcome is None:
+            continue
+        fix = outcome[0]
+        errors.append(math.hypot(fix[0] - mark[0], fix[1] - mark[1]) / scale)
+        if mark_zone is not None and zone_of(fix) == mark_zone:
+            right += 1
+    if not errors:
+        return None
+    errors.sort()
+    return {"samples": len(errors), "mean_m": round(sum(errors) / len(errors), 2),
+            "median_m": round(errors[len(errors) // 2], 2), "room_ok": round(right / len(errors), 2)}
 
 
 def mark_reference(mark, samples=None):

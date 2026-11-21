@@ -83,6 +83,58 @@ def open_text(path: str):
     return gzip.open(path, "rt", encoding="utf-8") if path.endswith(".gz") else open(path, encoding="utf-8")
 
 
+def iter_rows(dirpath: str, since: float = 0.0):
+    """Every logged row from ``since`` on, one at a time (a day is hundreds of
+    megabytes: never the whole log in memory). Files in name order."""
+    import json
+    try:
+        names = sorted(os.listdir(dirpath))
+    except OSError:
+        return
+    for name in names:
+        hour = hour_of(name)
+        if hour is None or hour + 3600.0 < since:
+            continue
+        if name + ".gz" in names:
+            continue   # listed mid-compression: the gzip has the same rows
+        path = os.path.join(dirpath, name)
+        try:
+            fh = open_text(path)
+        except FileNotFoundError:
+            try:
+                fh = open_text(path + ".gz")   # gzipped since the listing
+            except OSError:
+                continue
+        with fh:
+            try:
+                for line in fh:
+                    try:
+                        row = json.loads(line)
+                    except ValueError:
+                        continue   # a line cut short by a restart
+                    if isinstance(row, dict) and row.get("t", 0) >= since:
+                        yield row
+            except (OSError, EOFError) as e:
+                _LOGGER.debug("Election log %s not read to its end: %s", name, e)
+
+
+def usage(dirpath: str):
+    """(files, bytes) the log holds on disk now."""
+    files = size = 0
+    try:
+        names = os.listdir(dirpath)
+    except OSError:
+        return 0, 0
+    for name in names:
+        if hour_of(name) is not None:
+            try:
+                size += os.path.getsize(os.path.join(dirpath, name))
+                files += 1
+            except OSError:
+                pass
+    return files, size
+
+
 def compress_closed(dirpath: str, now: float):
     """Gzip every plain file whose hour is over. The plain file goes only
     after its gzip is in place under the final name. Caller holds ``_FILES``."""

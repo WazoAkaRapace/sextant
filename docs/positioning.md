@@ -114,8 +114,10 @@ thing was sitting on.
 `tools/receiver_report.py` reads the same log and lists, per receiver,
 how often it was in the elected floor's fix and how far its ranges sat
 from that fix (a steady bias means a misplaced or miscalibrated
-receiver), with the placed receivers that never took part. Finished
-hours of the log are gzipped; the tools read both.
+receiver), with the placed receivers that never took part. The Health
+page shows the same report for the last six hours under **Receivers
+against real fixes**. Finished hours of the log are gzipped; the tools
+read both.
 
 **Rooms.** Membership, not a point test: samples on the filter's error
 ellipse are attributed to rooms and the shares smoothed. The current room

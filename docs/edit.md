@@ -99,6 +99,10 @@ change, once nothing is mid-drag or mid-draw. Every write, by hand or
 automatic, keeps a copy of the plan it replaces under History, and a
 change that would break a shape (a spot squashed to a line, say) is never
 written quietly: auto-save says so and waits for Save, which asks.
+A save sends every floor whole, so before each one the editor checks the
+stored plan is still the one it loaded. If another tab, another person or
+the Health page's **Move it there** changed it meanwhile, auto-save holds
+off and Save asks first; **Discard** loads the other copy.
 
 ## Colours and scale
 

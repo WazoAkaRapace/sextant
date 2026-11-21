@@ -150,6 +150,8 @@ class SextantHealth extends LitElement {
     _tfilter: { state: true },
     _cal: { state: true },
     _selftest: { state: true },
+    _report: { state: true },
+    _logUse: { state: true },
     _advice: { state: true },
     _kpi: { state: true },
     _accuracy: { state: true },
@@ -214,6 +216,10 @@ class SextantHealth extends LitElement {
 
   updated(changed) {
     if (changed.has("data") && this.data) this._tuning = { ...(this.data.layout?.tuning || {}) };
+    if (this.section === "tuning" && this._logUse === undefined && this.hass && this._isAdmin()) {
+      this._logUse = null;
+      this.hass.callWS({ type: "sextant/election_log/usage" }).then((r) => { this._logUse = r; }).catch(() => {});
+    }
   }
 
   async _refresh() {
@@ -272,6 +278,13 @@ class SextantHealth extends LitElement {
     const r = await callWS(this, this.hass, { type: "sextant/selftest" });
     this._busy = null;
     if (r) { this._selftest = { ...r, at: Date.now() }; remember("selftest", r); }
+  }
+
+  async _runReport() {
+    this._busy = "report";
+    const r = await callWS(this, this.hass, { type: "sextant/receiver_report", hours: 6 });
+    this._busy = null;
+    if (r) this._report = r;
   }
 
   /** Move a proxy the self-test calls misplaced to where the others hear it.
@@ -376,7 +389,7 @@ class SextantHealth extends LitElement {
       case "advice":
         return html`<div class="page"><div class="cols">${this._renderAdvice()}</div></div>`;
       default:
-        return html`<div class="page"><div class="cols">${this._renderReceivers()}${this._renderSelftest()}${this._renderWifiRooms()}</div></div>`;
+        return html`<div class="page"><div class="cols">${this._renderReceivers()}${this._renderSelftest()}${this._renderReport()}${this._renderWifiRooms()}</div></div>`;
     }
   }
 
@@ -632,6 +645,30 @@ class SextantHealth extends LitElement {
     </section>`;
   }
 
+  // --- Receivers against real fixes -------------------------------------------------
+
+  _renderReport() {
+    if (!this._isAdmin()) return nothing;
+    const r = this._report;
+    // Worst first: the receivers whose ranges disagree most with the fixes.
+    const rows = [...(r?.rows || [])].sort((a, b) => Math.abs(b.bias_m) - Math.abs(a.bias_m));
+    const len = (m) => `${m > 0 ? "+" : ""}${fmtLen(m, this.hass, 1)}`;
+    return html`<section class="card">
+      <h3>Receivers against real fixes</h3>
+      <p class="small muted">Each receiver's ranges set against the fixes they went into, from the election log: a receiver that reads far short or long of where things were placed is misplaced or needs calibrating. Unlike the self-test this uses the things you track, not the proxies hearing each other. It needs the election log (Tuning, Election log hours). A fix that came mostly from fingerprints can make a healthy receiver look off, so trust a receiver that is off across many readings.</p>
+      <div class="row">${uiButton({ label: this._busy === "report" ? "Reading…" : r ? "Refresh" : "Read the last 6 hours", kind: r ? "outline" : "primary", disabled: !!this._busy, onClick: () => this._runReport() })}</div>
+      ${r && !rows.length ? html`<p class="small muted">Nothing to read: the election log holds no range fixes for the last ${r.hours} hours.</p>` : nothing}
+      ${rows.length ? html`<div class="wrap"><table>
+        <tr><th>Receiver</th><th>Floor</th><th class="num">Heard</th><th class="num">Reads</th><th class="num">Off by</th></tr>
+        ${rows.slice(0, 12).map((v) => html`<tr><td>${proxyName(this.data, v.receiver)}</td><td class="muted">${v.floor}</td><td class="num">${v.heard}</td>
+          <td class="num">${Math.abs(v.bias_m) >= 2 ? html`<span class="pill warn">${len(v.bias_m)}</span>` : len(v.bias_m)}</td><td class="num">${fmtLen(v.off_m, this.hass, 1)}</td></tr>`)}
+      </table></div>
+      <p class="small muted">Reads: the usual gap between its range and the distance to the fix (minus is short). Off by: the typical size of that gap. ${rows.length > 12 ? `The worst 12 of ${rows.length}.` : ""}</p>` : nothing}
+      ${r?.silent?.length ? html`<details><summary>${r.silent.length} placed receiver${r.silent.length === 1 ? "" : "s"} in no fix</summary>
+        <p class="small">${r.silent.map((v) => `${proxyName(this.data, v.receiver)} (${v.floor})`).join(", ")}</p></details>` : nothing}
+    </section>`;
+  }
+
   // --- Wi-Fi signal by room --------------------------------------------------------
 
   /** A signal level as a pill: good from -60 dBm up, weak below -70. */
@@ -797,7 +834,7 @@ class SextantHealth extends LitElement {
       const reset = () => { const t = { ...this._tuning }; delete t[key]; this._tuning = t; };
       return html`<div class="tfield">${control}
         <code class="hint">${key}${changed ? html` <span class="chg">changed</span> <a class="treset" href="#" @click=${(e) => { e.preventDefault(); reset(); }}>reset</a>` : nothing}</code>
-        <span class="thelp">${tuningHelpLine(key, help, s.default, isImperial(this.hass))}</span></div>`;
+        <span class="thelp">${tuningHelpLine(key, help, s.default, isImperial(this.hass))}${key === "election_log_hours" && this._logUse?.files ? ` On disk now: ${fmtNum(this._logUse.bytes / 1048576, 0)} MB in ${this._logUse.files} files.` : ""}</span></div>`;
     };
     const shown = (keys) => keys.filter((k) => spec[k] && tuningMatches(k, (TUNING_LABELS[k] || [k, ""])[0], (TUNING_LABELS[k] || [k, ""])[1], this._tfilter));
     return html`<section class="card wide">
@@ -884,6 +921,7 @@ class SextantHealth extends LitElement {
     .tfield .thelp { font-size: 11px; color: var(--secondary-text-color); padding-left: 2px; overflow-wrap: anywhere; }
     .tfield .chg { color: var(--warning-color, #f59e0b); font-weight: 600; }
     .tfield .treset { color: var(--primary-color); }
+    @media (pointer: coarse) { .tfield .treset { display: inline-block; padding: 8px 6px; } }
     @media (max-width: 720px) { .tfield { max-width: none; } .cols { grid-template-columns: 1fr; } .tfield, .tfield > * { width: 100%; } }
   `];
 }
