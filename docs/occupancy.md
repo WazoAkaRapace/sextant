@@ -252,7 +252,7 @@ the room's **Other sensors**, or give your automation a short delay.
 Home Assistant restarts at minute 2. Sam is in the Lounge. The Kitchen was
 on only because of its clear-after hold, and nobody is really there.
 
-![A timeline over 16 minutes. Home Assistant restarts between minute 2 and minute 3. The Lounge occupancy is restored at minute 3 and becomes ordinary occupied at minute 4 when Sam's phone is placed again; its extended timer starts again from there. The Kitchen occupancy is restored at minute 3 and stays on until minute 13, when the grace runs out, then clears.](images/occupancy-restart.svg)
+![A timeline over 16 minutes. Home Assistant restarts between minute 2 and minute 3. The Lounge occupancy is restored at minute 3 and becomes ordinary occupied at minute 4 when Sam's phone is placed again; it keeps the `since` it had before the restart, so a long stay is still extended. The Kitchen occupancy is restored at minute 3 and stays on until minute 13, when the grace runs out, then clears.](images/occupancy-restart.svg)
 
 Right after a restart Sextant has not placed anything yet. Without help,
 every room would go off and back on. Instead:
@@ -265,8 +265,10 @@ every room would go off and back on. Instead:
   starts. Reloading Sextant does not grant a new one.
 - A door hold carries over the restart, and keeps its first start time, so
   the 8-hour limit is not reset.
-- A clear-after hold that was running is forgotten, and the `extended`
-  timer starts again after the restart.
+- A clear-after hold that was running is forgotten. The room keeps its
+  `since` while the restored state shows, and after it if the first real
+  reading agrees (the Lounge), so a long stay is still `extended`. A room
+  that turns out to be empty (the Kitchen) gets a new `since` when it clears.
 - How soon things are placed again depends on how long Home Assistant was
   down. Within `restore_state_secs` (5 minutes) Sextant picks up its room
   choices where it left them, and a thing heard in the 10 minutes before
