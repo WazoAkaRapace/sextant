@@ -79,7 +79,8 @@ class SextantEdit extends LitElement {
     _nextPin: { state: true },   // the Pin tool's next name: one waiting on another floor, or NEW_PIN
     _selection: { state: true },
     _placing: { state: true },
-    _wizard: { state: true },    // the room setup wizard: {zone, step}, or null for the plain form
+    _wizard: { state: true },
+    _list: { state: true },      // phone view: the floor's rooms as a list, the map only a locator    // the room setup wizard: {zone, step}, or null for the plain form
     _proxyFilter: { state: true },
     _proxyShow: { state: true },
     _measure: { state: true },
@@ -212,7 +213,7 @@ class SextantEdit extends LitElement {
       this._undoAction();
     } else if (mod && ((key === "z" && e.shiftKey) || key === "y")) {
       this._redoAction();
-    } else if ((key === "Delete" || key === "Backspace") && !mod) {
+    } else if ((key === "Delete" || key === "Backspace") && !mod && !this._listing) {
       if (drawing) this._map.undoDraftPoint();
       else if (this._selection) this._deleteSelection();
       else handled = false;
@@ -228,6 +229,33 @@ class SextantEdit extends LitElement {
 
   firstUpdated() { this._setup(true); }
 
+  /** A phone opens on the room list: its settings can be edited by touch, its shapes cannot. */
+  get _phone() { return typeof matchMedia === "function" && matchMedia("(max-width: 720px)").matches; }
+  /** The list shows only on a phone-width screen (the Rooms/Map switch is hidden on a wide one), and is where a phone starts. */
+  get _listing() { return this._phone && this._list !== false; }
+
+  _pick(sel) { this._selection = sel; this._map?.setSelection(sel); }
+  _setList(on) {
+    if (on && this._drawing()) { toast(this, "Finish or cancel the shape first"); return; }
+    if (on && this._selection && this._selection.kind !== "zone") this._pick(null);
+    this._list = on;
+  }
+
+  /** The phone view's side: the floor's rooms to tap, or the tapped room's settings. */
+  _renderRoomList(f, sel) {
+    if (sel) return html`<div class="row">${uiButton({ label: "Rooms", icon: "mdi:chevron-left", kind: "text", onClick: () => this._pick(null) })}</div>${this._renderSelection(sel, f)}`;
+    const rooms = (f?.zones || []).map((z, index) => ({ z, index })).filter(({ z }) => !z.no_go).sort((a, b) => String(a.z.entity_id).localeCompare(String(b.z.entity_id)));
+    const count = (v) => (Array.isArray(v) ? v : String(v ?? "").split(/[,\s]+/)).filter(Boolean).length;
+    const about = (z) => [this.hass?.areas?.[z.area_id]?.name ? null : "no area", count(z.inputs) + count(z.keep) ? `${count(z.inputs) + count(z.keep)} sensor${count(z.inputs) + count(z.keep) === 1 ? "" : "s"}` : null,
+      z.door ? "door" : null, z.sleep_entity ? "sleep" : null, z.mode_entity ? "mode" : null].filter(Boolean).join(" · ");
+    return html`<div class="card">
+      <h4>${f ? f.name : "No floor yet"} <span class="muted small">${rooms.length} room${rooms.length === 1 ? "" : "s"}</span></h4>
+      ${rooms.map(({ z, index }) => html`<button class="roomrow" @click=${() => this._pick({ kind: "zone", index })}>
+        <span class="grow">${z.entity_id}<span class="muted small">${about(z) ? html`<br>${about(z)}` : nothing}</span></span><ha-icon icon="mdi:chevron-right"></ha-icon></button>`)}
+      <div class="muted small">Tap a room for its settings and the wizard. Drawing and moving shapes is under Map, and easier on a computer.</div>
+    </div>`;
+  }
+
   /** Home Assistant can detach a panel and attach the same element again
    * later: firstUpdated does not run twice, so the map and the listeners
    * taken down in disconnectedCallback are built again here. The draft is
@@ -235,6 +263,9 @@ class SextantEdit extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     if (this.hasUpdated && this._tornDown) { this._tornDown = false; this._setup(false); }
+    this._mq = typeof matchMedia === "function" ? matchMedia("(max-width: 720px)") : null;
+    this._onMq = () => this.requestUpdate();
+    this._mq?.addEventListener("change", this._onMq);
   }
 
   _setup(first) {
@@ -278,6 +309,7 @@ class SextantEdit extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    this._mq?.removeEventListener("change", this._onMq);
     clearTimeout(this._alignTimer);
     clearInterval(this._radarTimer);
     clearInterval(this._autosaveTimer);
@@ -874,7 +906,7 @@ class SextantEdit extends LitElement {
     const go = (step) => { this._wizard = step == null ? null : { zone: item, step }; };
     return html`<div class="row" style="margin-top: 8px; align-items: center">
         <span class="muted small">Occupancy sensor${wizard ? html` · step ${wizard.step + 1} of ${ROOM_STEPS.length}: <b>${steps[0].title}</b>` : nothing}</span><span class="grow"></span>
-        ${wizard ? nothing : uiButton({ label: "Set up step by step", icon: "mdi:wizard-hat", onClick: () => go(0) })}
+        ${wizard ? nothing : uiButton({ label: "Wizard", icon: "mdi:wizard-hat", onClick: () => go(0) })}
       </div>
       ${steps.map((step) => this._renderRoomStep(item, step, !!wizard))}
       ${wizard ? html`<div class="row">
@@ -884,7 +916,7 @@ class SextantEdit extends LitElement {
             : uiButton({ label: "Done", kind: "primary", onClick: () => { go(null); toast(this, "Room set up. Save to keep it"); } })}
         </div>` : html`
         ${uiSwitch({ label: "Has an outside door (someone whose phone goes quiet here has gone out)", checked: !!item.exit, onChange: (v) => this._edit("exit", v || undefined) })}
-        <div class="muted small">Blank timings use the Tuning page's. "Set up step by step" explains each setting and offers the sensors in the room's area.</div>`}`;
+        <div class="muted small">Blank timings use the Tuning page's. The wizard explains each setting and offers the sensors in the room's area.</div>`}`;
   }
 
   /** One group of a room's occupancy fields (ROOM_STEPS); in the wizard, with what it is for and the area's sensors to click. */
@@ -1284,9 +1316,16 @@ class SextantEdit extends LitElement {
   render() {
     const f = this._floorObj();
     const sel = this._selection;
+    const listing = this._listing;
+    this.toggleAttribute("list", listing);
     const scanners = Object.entries(this.data?.scanners || {}).sort((a, b) => (a[1].name || "").localeCompare(b[1].name || ""));
     const placedAddr = new Set((this._draft?.floor || []).flatMap((fl) => (fl.receivers || []).map((r) => r.address)));
     return html`
+      <div class="modebar">
+        ${uiSegmented({ value: listing ? "list" : "map", onChange: (v) => this._setList(v === "list"), options: [{ value: "list", label: "Rooms" }, { value: "map", label: "Map" }] })}
+        <span class="grow"></span>
+        ${uiButton({ label: "Save", kind: "primary", disabled: !this._dirty || this._busy, onClick: () => this._save() })}
+      </div>
       <div class="stage">
         <canvas @click=${(e) => this._onCanvasClick(e)}></canvas>
         <div class="mapcorner">${renderScaleBar(this._floorObj()?.scale, this._map?.view?.k, isImperial(this.hass),
@@ -1334,6 +1373,8 @@ class SextantEdit extends LitElement {
         ${["zone", "subzone", "nogo"].includes(this._tool) ? html`<div class="hint">Click to add corners; click the first corner or double-click to close. An edge close to horizontal, vertical or 45° snaps exact (orange); hold Alt to place a corner freely. ${uiButton({ label: "Cancel", kind: "text", onClick: () => { this._map.cancelDraft(); } })}</div>` : nothing}
       </div>
       <aside class="side">
+        ${listing ? this._renderRoomList(f, sel?.kind === "zone" ? sel : null) : nothing}
+        <div ?hidden=${listing}>
         ${f ? html`
           <div class="card">
             <h4>${f.name} <span class="muted small">${fmtScale(f.scale, this.hass)}</span><span class="grow"></span>
@@ -1374,6 +1415,7 @@ class SextantEdit extends LitElement {
         </div>
         ${this._renderHistory()}
         ${(this.data?.scanner_diagnostics?.unplaced_scanners || []).length ? html`<div class="card small"><h4>Proxies reporting, not placed</h4>${this.data.scanner_diagnostics.unplaced_scanners.map((s) => proxyName(this.data, s)).join(", ")}</div>` : nothing}
+        </div>
       </aside>
     `;
   }
@@ -1483,7 +1525,7 @@ class SextantEdit extends LitElement {
           onChange: (v) => this._edit("calibrate", v ? false : undefined) })}
         <div class="muted small">Calibration skips it: it is left out of the fit and its correction is never overwritten. For a radio whose distances are the wrong shape rather than the wrong scale - a tablet or a phone, which read long up close and far too short across a room - where no single multiplier fits.</div>
         <div class="muted small">${item.unmatched ? "Bermuda does not report this proxy right now." : "Linked."} x ${fmtNum(item.cords?.x, 0)}, y ${fmtNum(item.cords?.y, 0)}</div>` : nothing}
-      ${sel.kind === "zone" ? uiSwitch({ label: "No-go area (things can never be here)", checked: !!item.no_go, onChange: (v) => this._edit("no_go", v) }) : nothing}
+      ${sel.kind === "zone" && !this._listing ? uiSwitch({ label: "No-go area (things can never be here)", checked: !!item.no_go, onChange: (v) => this._edit("no_go", v) }) : nothing}
       ${sel.kind === "zone" && !item.no_go ? html`<div class="row">${uiColour({ host: this, value: item.color || null, auto: "Automatic (from the name)", autoSwatch: `hsl(${thingHue(item.entity_id || "")}, 60%, 55%)`, custom: this._customColourFor === item, onCustom: (on) => { this._customColourFor = on ? item : null; this.requestUpdate(); }, onChange: (v) => this._edit("color", v || undefined) })}</div>` : nothing}
       ${sel.kind === "zone" && !item.no_go ? this._renderAreaLink(item) : nothing}
       ${sel.kind === "zone" && !item.no_go ? this._renderOccupancyOptions(item) : nothing}
@@ -1511,7 +1553,7 @@ class SextantEdit extends LitElement {
         </div>
         ${this._renderSpotSize(item, f)}
         ${this._renderSpotEvidence(item, f)}` : nothing}
-      <div class="row"><span class="muted small">${(item.cords?.length ?? 1)} point(s)</span><span class="grow"></span>${sel.kind === "zone" || sel.kind === "subzone" ? uiButton({ label: "Square up", icon: "mdi:vector-square", onClick: () => this._squareUp(), title: "Make every edge that is nearly horizontal, vertical or 45° exactly that. Other angles stay as drawn" }) : nothing}${uiButton({ label: "Delete", kind: "danger", onClick: () => this._deleteSelection() })}</div>
+      <div class="row" ?hidden=${this._listing}><span class="muted small">${(item.cords?.length ?? 1)} point(s)</span><span class="grow"></span>${sel.kind === "zone" || sel.kind === "subzone" ? uiButton({ label: "Square up", icon: "mdi:vector-square", onClick: () => this._squareUp(), title: "Make every edge that is nearly horizontal, vertical or 45° exactly that. Other angles stay as drawn" }) : nothing}${uiButton({ label: "Delete", kind: "danger", onClick: () => this._deleteSelection() })}</div>
     </div>`;
   }
 
@@ -1632,6 +1674,17 @@ class SextantEdit extends LitElement {
     .side { border-left: 1px solid var(--divider-color); overflow: auto; padding: 12px; }
     ul.plain { list-style: none; padding: 0; margin: 4px 0; }
     @media (max-width: 720px) { :host { grid-template-columns: 1fr; grid-template-rows: 1fr auto; } .side { border-left: 0; border-top: 1px solid var(--divider-color); max-height: 45vh; } .toolbar { flex-wrap: wrap; max-width: calc(100% - 20px); gap: 3px; padding: 4px; } .toolbar button.tool { width: 34px; height: 34px; } }
+    .modebar { display: none; }
+    .roomrow { display: flex; align-items: center; width: 100%; min-height: 48px; padding: 6px 4px; border: 0; border-top: 1px solid var(--divider-color); background: none; color: var(--primary-text-color); font: inherit; text-align: start; cursor: pointer; }
+    [hidden] { display: none !important; }
+    @media (max-width: 720px) {
+      :host { grid-template-rows: auto 1fr auto; }
+      .modebar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--divider-color); }
+      :host([list]) { grid-template-rows: auto 26vh 1fr; }
+      :host([list]) .toolbar, :host([list]) .zoom, :host([list]) .hint, :host([list]) .mapcorner { display: none; }
+      :host([list]) canvas { pointer-events: none; }
+      :host([list]) .side { max-height: none; }
+    }
     /* On a phone the tools sit above the map, not over a third of it. */
     @media (max-width: 720px) { .stage { display: flex; flex-direction: column; min-height: 0; } .stage canvas { flex: 1 1 0; min-height: 0; height: auto; } .toolbar { position: static; order: -1; max-width: none; border-radius: 0; box-shadow: none; border-bottom: 1px solid var(--divider-color); } }
   `];

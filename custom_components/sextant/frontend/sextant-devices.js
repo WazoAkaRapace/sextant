@@ -826,7 +826,7 @@ class SextantDevices extends LitElement {
           <span class="grow"></span>
           ${uiButton({ label: "Add a thing…", kind: "primary", icon: "mdi:plus", onClick: () => { this._addWizard = { kind: null, irk: "", error: null }; } })}
         </h3>
-        <div class="wrap"><table class="compact">
+        <div class="wrap"><table class="compact tracked">
           <tr><th>Thing</th><th>Where</th><th class="num">Height</th><th class="num">Ref trim</th><th></th></tr>
           ${tracked.map(([address, d]) => {
             const slug = d.slug, p = live.get(slug), name = thingName(this.data, slug), mdi = classIcon(classes[slug]);
@@ -835,7 +835,7 @@ class SextantDevices extends LitElement {
                 <button class="iconpick" title="Change the icon or class of ${name}" @click=${() => this._openWizard(slug, address)}>
                   ${icons[slug] ? html`<img class="icon round" src=${icons[slug]} alt="" style="box-shadow: 0 0 0 2px ${thingColor(slug, colors[slug])}">` : html`<ha-icon class="icon" icon=${mdi || "mdi:tag-outline"} style="color: ${thingColor(slug, colors[slug])}"></ha-icon>`}
                 </button>
-                <div><a href="#" class="name" title="Edit name, class, height, ref trim and icon" @click=${(e) => { e.preventDefault(); this._openWizard(slug, address); }}>${name}</a><br><span class="muted small">${address}${classes[slug] ? ` · ${(THING_CLASSES.find(([k]) => k === classes[slug]) || [])[1] || classes[slug]}` : ""}${layout.thing_estimators?.[slug] ? ` · ${layout.thing_estimators[slug]} only` : ""}</span></div>
+                <div><a href="#" class="name" title="Edit name, class, height, ref trim and icon" @click=${(e) => { e.preventDefault(); this._openWizard(slug, address); }}>${name}</a><br><span class="muted small"><span class="addr">${address}${classes[slug] || layout.thing_estimators?.[slug] ? " · " : ""}</span>${classes[slug] ? `${(THING_CLASSES.find(([k]) => k === classes[slug]) || [])[1] || classes[slug]}` : ""}${layout.thing_estimators?.[slug] ? `${classes[slug] ? " · " : ""}${layout.thing_estimators[slug]} only` : ""}</span></div>
               </td>
               <td>${p ? html`${p.zone}${p.sub_zone && p.sub_zone !== "unknown" ? ` · ${p.sub_zone}` : ""}<br><span class="muted small">${p.floor}</span>`
                 : d.last_seen_age != null ? html`<span class="muted">no position</span><br><span class="muted small">seen ${fmtAge(d.last_seen_age)} ago</span>`
@@ -865,7 +865,7 @@ class SextantDevices extends LitElement {
           ${uiButton({ label: "Refresh", kind: "text", icon: "mdi:refresh", onClick: () => this._refreshLight() })}
         </div>
         ${finding ? html`<p class="small">Hold the device against <b>${findName}</b>: the loudest there comes first. The list refreshes every 3 s; set Find near back to Off when done.</p>` : nothing}
-        <div class="wrap"><table class="compact">
+        <div class="wrap"><table class="compact p-2 p-4 p-5">
           <tr><th>Device</th><th>Maker</th><th>Where</th><th class="num">Proxies</th><th class="num">Signal</th><th>Seen</th><th></th></tr>
           ${candidates.slice(0, 200).map((c, i) => { const w = this._heardWhere(c, index); return html`<tr>
             <td><b>${c.name}</b> ${finding && i === 0 ? html`<span class="pill ok">loudest</span>` : nothing} ${c.kind === "tile" ? html`<span class="pill">Tile</span>` : c.kind === "ibeacon" ? html`<span class="pill">iBeacon</span>` : nothing}<br><span class="muted small">${c.address}</span></td>
@@ -877,7 +877,7 @@ class SextantDevices extends LitElement {
             <td>${w ? html`${w.room || w.floor}${w.room ? html`<br><span class="muted small">${w.floor}</span>` : nothing}<br><span class="muted small">${w.proxy}</span>` : c.area_name ? html`${c.area_name}` : html`<span class="muted">—</span>`}</td>
             <td class="num" title="placed proxies hearing it">${placed.size ? placedHearing(c) : c.scanners}</td>
             <td class="num" title=${finding ? `reading at ${findName} (RSSI)` : "strongest reading (RSSI)"}>${finding ? rssiAt(c) : w ? w.rssi : c.best_rssi ?? "—"} dBm</td>
-            <td class="small">${fmtAge(c.last_seen_age)} ago<br><span class="muted">first ${fmtAge(c.first_seen_age)}</span></td>
+            <td class="small">${fmtAge(c.last_seen_age)} ago<br><span class="muted">first ${fmtAge(c.first_seen_age)}</span><span class="ponly"><br>${finding ? rssiAt(c) : w ? w.rssi : c.best_rssi ?? "—"} dBm</span></td>
             <td>${uiButton({ label: "Track…", kind: "primary", disabled: this._busy, onClick: () => this._startTrack(c), title: "Choose its name, class and height first; Bermuda tracks it when you confirm" })}</td>
           </tr>`; })}
           ${candidates.length ? nothing : html`<tr><td colspan="7" class="muted">${this._candidates ? (this._showAll ? "No matching devices." : `Nothing heard in the last ${RECENT_SECS} s matches; switch on "Show all" for everything Bermuda remembers.`) : "Loading…"}</td></tr>`}
@@ -908,7 +908,7 @@ class SextantDevices extends LitElement {
 
       <section class="card">
         <h3>FindMy accessories <span class="muted">${(this._findmy || []).length}</span></h3>
-        <div class="wrap"><table class="compact">
+        <div class="wrap"><table class="compact p-2">
           <tr><th>Accessory</th><th>Model</th><th>Status</th><th></th></tr>
           ${(this._findmy || []).map((a) => html`<tr>
             <td><b>${a.name}</b><br><span class="muted small">${a.address}</span></td>
@@ -1077,7 +1077,7 @@ class SextantDevices extends LitElement {
       .sort((a, b) => a.where.localeCompare(b.where));
     return html`
       <p class="small muted">Click a Tile's name to call it "Kitchen keys"; the map and the Things page use that name. Bermuda follows each Tile across its address rotations by RSSI pattern and remembers where it last was, so it finds it again after a restart; that works while the Tile is not sitting among other Tiles. A Tile marked <span class="pill warn">not heard</span> has rotated away unseen: pick the live address that is where the Tile is and Adopt. On Private ID Tiles the ID readable over Bluetooth rotates too, so it cannot name a tag; probing stays off unless "Tile identity probes" is on above.</p>
-      <div class="wrap"><table class="compact">
+      <div class="wrap"><table class="compact p-4">
         <tr><th>Tile</th><th>Bound address</th><th>This Tile is…</th><th>History</th></tr>
         ${bindings.map(([id, sources]) => { const lost = t.bound_age?.[id] == null || t.bound_age[id] > 300; return html`<tr>
           <td><a href="#" class="name" title="Name this Tile (and set its class, height and icon)" @click=${(e) => { e.preventDefault(); this._openWizard(id, sources[0]); }}>${thingName(this.data, id)}</a>${this.data?.layout?.thing_names?.[id] ? nothing : html`<br><span class="muted small">click to name it</span>`}${t.uids?.[id] ? html`<br><code class="small">${t.uids[id]}</code>` : nothing}</td>
@@ -1121,7 +1121,7 @@ class SextantDevices extends LitElement {
       return { room: p.room ? `${p.room} · ${p.floor}` : p.floor, proxy: `${p.name} (${hit.rssi} dBm)`, unplaced: heard.length - heard.filter((h) => placed.has(String(h.address || "").toLowerCase())).length };
     };
     return html`<h4>Tile IDs heard <span class="muted small">read from the tags; pick which configured Tile each one is. To tell two apart, ring one from the Tile app, carry it to another room for two minutes and watch which ID moves.</span></h4>
-      <div class="wrap"><table class="compact">
+      <div class="wrap"><table class="compact p-4 p-6">
         <tr><th>Tile ID</th><th>Last heard</th><th>Where</th><th>Loudest placed proxy</th><th>Is</th><th></th></tr>
         ${ids.map((row) => { const w = where(row); return html`<tr>
           <td><code>${row.uid}</code></td>
@@ -1158,6 +1158,11 @@ class SextantDevices extends LitElement {
     /* The pinned column held a long id on one line and took the whole screen,
        leaving a letter's width of the next column: here it wraps instead. */
     @media (max-width: 720px) { .wrap td:first-child { min-width: 150px; max-width: 46vw; overflow-wrap: anywhere; } }
+    /* A phone shows who and where; the id, height and ref trim are in the dialog the name opens. */
+    @media (max-width: 720px) { .tracked .num, .tracked .addr { display: none; } .wrap .tracked td:first-child { min-width: 0; max-width: none; } }
+    .ponly { display: none; }
+    /* p-N: column N is left out on a phone (it is in the dialog, or only detail). */
+    @media (max-width: 720px) { .p-2 tr > :nth-child(2):not([colspan]), .p-4 tr > :nth-child(4), .p-5 tr > :nth-child(5), .p-6 tr > :nth-child(6) { display: none; } .dialog h3 { overflow-wrap: anywhere; flex-wrap: wrap; } .dialog h3 span { flex-basis: 100%; } .ponly { display: inline; } }
     @media (pointer: coarse) { a.name { display: inline-block; padding: 6px 0; } }
     td.actions { white-space: nowrap; }
     button.iconbtn.danger { color: var(--error-color, #b00020); border-color: transparent; }

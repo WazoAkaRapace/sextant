@@ -58,6 +58,7 @@ export const sharedStyles = css`
   button.iconbtn.on { background: var(--primary-text-color); color: var(--card-background-color); }
   button.iconbtn[disabled] { opacity: 0.4; cursor: default; }
   button.iconbtn ha-icon { --mdc-icon-size: 22px; }
+  @media (pointer: coarse) { button.iconbtn { min-width: 40px; min-height: 40px; } }
   /* The boxed kind, for a row of controls in a card (turn this way, nudge that
      way): the Edit toolbar's rounded squares, with an outline so they read as
      buttons away from the toolbar's own panel. */
