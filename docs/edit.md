@@ -234,7 +234,7 @@ With its tracks, a placed sensor does four things:
 - **Fills the room sensors.** A room with a track in it is occupied
   (`binary_sensor.<room>_sextant_occupancy`) whether or not the person
   carries anything, and stays so through the hold: see
-  [Rooms](automation.md#rooms).
+  [Rooms](automation.md#rooms) and [How occupancy works](occupancy.md).
 
 A room's **Presence sensor** adds a plain occupancy sensor to the last of
 those: one that says someone is there without saying where, such as the

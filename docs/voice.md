@@ -2,6 +2,9 @@
 
 # Occupancy and voice
 
+For how a room turns on and off, with worked examples, see
+[How occupancy works](occupancy.md).
+
 ## What Sextant publishes
 
 | Entity | Meaning |
@@ -13,7 +16,7 @@
 | `switch.<room>_sextant_force_occupied` | while on, the room's sensor stays on whatever Sextant hears (a still reader, a sleeper); it survives a restart, and turns itself off after `room_force_max_secs` if that is set (default 0 = never) |
 | `sensor.sextant_people_home` | how many people are home; `home` and `away` list them |
 
-A restart forgets a hold in progress (the time since the last reading), but the room keeps its `since`, so a long stay is still "extended" afterwards.
+A restart forgets a hold in progress (the time since the last reading), but the room keeps its `since`, so a long stay is still "extended" afterwards; a door hold carries over.
 
 Two tuning settings (`sextant.set_tuning`): `room_hold_secs` (default 0) keeps a room on that long after the last reading that put someone there, and `room_extended_secs` (default 600) is how long a stay lasts before `state` reads `extended`. Use `state` in automations to treat a long stay differently from someone passing through.
 
@@ -31,7 +34,7 @@ Select a room on the Edit page and its **Occupancy sensor** block takes:
 - **Set up step by step**: the same fields one group at a time, each with what it is for and the matching sensors from the room's Home Assistant area to click (link the area first).
 - **Sensor repairs**: a Repair is raised for a room sensor (an input or a door) that does not exist, that has been unavailable for `sensor_gone_secs` (6 h), or a binary sensor that has read `on` for `sensor_stuck_secs` (24 h), because a stuck one holds its room occupied. Numbers, media players and trackers are not called stuck, and a media player that reads unavailable (a TV switched off) is not called gone, and a door left shut for days is normal. It clears itself when the sensor reads normally; a restart restarts the clocks.
 - **Has an outside door**: someone whose things all go quiet while they are in this room (or while their last position was in it, even if Sextant still showed the room before) has gone out through it. After `exit_quiet_secs` (default 120) unheard they read **Outside** instead of being held in the room, until they are heard again or `away_after_secs` makes them away. A phone that dies in the room reads Outside too.
-- **Door contact**: a binary sensor (`on` = open) or a cover. Someone who keeps reading in the room for `door_settle_secs` (default 90) after the door closed is taken to have shut themselves in; the room then stays on, however still they are, until the door opens (`door_hold` is true meanwhile) or `door_hold_max_secs` (default 8 h) passes. Someone who shuts the door on the way out stops reading in the room within the wait and is not held. If everyone the hold was for is placed in another room, it lets go. An unavailable contact sensor keeps the hold as it was, and a restart forgets it. The inputs are read once a cycle and on each radar reading; a Sextant occupancy sensor or the door itself is ignored if listed as an input. Habits are kept per floor and room name, so renaming a room starts its history again.
+- **Door contact**: a binary sensor (`on` = open) or a cover. Someone who keeps reading in the room for `door_settle_secs` (default 90) after the door closed is taken to have shut themselves in; the room then stays on, however still they are, until the door opens (`door_hold` is true meanwhile) or `door_hold_max_secs` (default 8 h) passes. Someone who shuts the door on the way out stops reading in the room within the wait and is not held. If everyone the hold was for is placed in another room, it lets go. An unavailable contact sensor keeps the hold as it was. A restart keeps it too, with its first start time, so the `door_hold_max_secs` limit is not reset. The inputs are read once a cycle and on each radar reading; a Sextant occupancy sensor or the door itself is ignored if listed as an input. Habits are kept per floor and room name, so renaming a room starts its history again.
 
 ## Voice (Assist)
 

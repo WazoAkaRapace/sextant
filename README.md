@@ -54,7 +54,7 @@ nothing to a thing on your floor plan and a first automation.
 
 | Install | Configure | Tune | Automate |
 |---|---|---|---|
-| [Getting started](docs/getting-started.md) · [Installing](docs/install.md) · [What you need](docs/install.md#what-you-need) · [Upgrading from BPS](docs/install.md#upgrading-from-bps-or-bps-improved) | [Edit](docs/edit.md) · [Things](docs/things.md) · [Bermuda](docs/bermuda.md) · [Proxies](docs/proxies.md) | [Live](docs/live.md) · [Calibration](docs/calibration.md) · [Tuning](docs/tuning.md) · [Advice](docs/advice.md) · [How positioning works](docs/positioning.md) | [Recipes](docs/recipes.md) · [Sensors, card, services and API](docs/automation.md) |
+| [Getting started](docs/getting-started.md) · [Installing](docs/install.md) · [What you need](docs/install.md#what-you-need) · [Upgrading from BPS](docs/install.md#upgrading-from-bps-or-bps-improved) | [Edit](docs/edit.md) · [Things](docs/things.md) · [Bermuda](docs/bermuda.md) · [Proxies](docs/proxies.md) | [Live](docs/live.md) · [Calibration](docs/calibration.md) · [Tuning](docs/tuning.md) · [Advice](docs/advice.md) · [How positioning works](docs/positioning.md) | [Recipes](docs/recipes.md) · [How occupancy works](docs/occupancy.md) · [Sensors, card, services and API](docs/automation.md) |
 
 Also [Hardware](docs/hardware.md) (turning outlets and switches into
 proxies, with the pin maps), [Where Sextant fits](docs/compared.md) (Bermuda, BPS, BPS-improved and
@@ -125,7 +125,8 @@ token, in Home Assistant's own theme and unit system. Eight pages:
   Tiles followed across address rotation (with the fork).
 - Rooms as sensors: an occupancy binary per room that names the people,
   pets and things in it, ready for an aggregator such as Area Occupancy
-  Detection, and a count of the people home.
+  Detection, and a count of the people home. See
+  [How occupancy works](docs/occupancy.md).
 - Five sensors per thing, a map card, services and a websocket push per
   cycle. Pure numpy, no SciPy.
 

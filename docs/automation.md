@@ -156,6 +156,9 @@ triggers:
 
 ## Rooms
 
+[How occupancy works](occupancy.md) explains how a room turns on and
+off, with examples; this section lists the sensors and their attributes.
+
 Each room also gets `binary_sensor.<room>_sextant_people_occupancy`, the same
 answer without the pets: a cat's or dog's tag alone leaves it `off`, so
 lights can switch off on it while the pets stay put. Radars, other sensors
