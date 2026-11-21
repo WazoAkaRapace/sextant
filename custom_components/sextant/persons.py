@@ -183,15 +183,17 @@ def on_charger(state) -> bool:
     return isinstance(state, str) and state.strip().lower() in CHARGER_STATES
 
 
-def still_on_charger(charging: bool, arrived, last_charging, now: float):
-    """(on the charger, when it was last seen charging).
+def still_on_charger(charging: bool, arrived, last_charging, since: float):
+    """(on the charger, when it last began charging).
 
     A watch that reaches its charge limit reads "NotCharging" while it still
     sits on the puck. So once seen charging, a thing stays on its charger
-    until it moves: until it arrived where it is after it last charged.
+    until it moves: until it arrived where it is after that charge began.
+    ``since`` is when the sensor's reading began, not now: a reading that
+    lags a watch already carried off must not hold it where it lands.
     """
     if charging:
-        return True, now
+        return True, since
     held = (isinstance(last_charging, (int, float)) and isinstance(arrived, (int, float))
             and arrived <= last_charging)
     return held, last_charging

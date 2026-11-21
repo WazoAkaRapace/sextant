@@ -165,6 +165,9 @@ def test_a_full_watch_stays_on_its_charger_until_it_moves():
     assert persons.still_on_charger(False, 100, 200, 5000) == (True, 200)
     # It arrived somewhere after it last charged: on a wrist again.
     assert persons.still_on_charger(False, 300, 200, 5000) == (False, 200)
+    # A reading that lags a watch carried off at 250 (charging since 200) does not hold it where it lands.
+    assert persons.still_on_charger(True, 250, 200, 200) == (True, 200)
+    assert persons.still_on_charger(False, 250, 200, 5000) == (False, 200)
     # Never seen charging, or no arrival to go by: not on a charger.
     assert persons.still_on_charger(False, 100, None, 5000) == (False, None)
     assert persons.still_on_charger(False, None, 200, 5000) == (False, 200)

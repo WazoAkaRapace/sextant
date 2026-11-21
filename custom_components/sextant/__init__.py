@@ -4767,7 +4767,7 @@ def _history_arrival(hass, ent, floor, x, y, now):
 ARRIVAL_RETRY_SECS = 600.0
 
 
-_last_charging: dict = {}   # ent -> when its on-charger sensor last said charging
+_last_charging: dict = {}   # ent -> when its on-charger sensor last began to say charging
 
 
 def _arrived_at(hass, layout, ent, row, now):
@@ -5286,10 +5286,16 @@ def _update_person_sensors(hass):
             if not row:
                 continue
             arrived = _arrived_at(hass, layout, ent, row, now)
-            charging = bool(chargers.get(ent)) and persons_mod.on_charger(
-                getattr(hass.states.get(chargers[ent]), "state", None))
-            # shortcut: the last-charging time is lost on a restart, so a full watch on its puck speaks again until it next charges; persist it if that bites.
-            charging, _last_charging[ent] = persons_mod.still_on_charger(charging, arrived, _last_charging.get(ent), now)
+            charging = False
+            if chargers.get(ent):
+                cst = hass.states.get(chargers[ent])
+                changed = getattr(cst, "last_changed", None)
+                # shortcut: the charge time is lost on a restart, so a full watch on its puck speaks again until it next charges; persist it if that bites.
+                charging, _last_charging[ent] = persons_mod.still_on_charger(
+                    persons_mod.on_charger(getattr(cst, "state", None)), arrived, _last_charging.get(ent),
+                    changed.timestamp() if changed else now)
+            else:
+                _last_charging.pop(ent, None)   # no sensor named any more: nothing holds it
             candidates.append({
                 "ent": ent, "cls": classes.get(ent), "updated": _graced(row.get("updated"), now),
                 "arrived": arrived,
