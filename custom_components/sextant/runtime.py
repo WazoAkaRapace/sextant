@@ -93,7 +93,7 @@ def _vector(value, size):
     return out if len(out) == size else None
 
 
-def snapshot(now, kf=None, zones=None, spots=None, arrivals=None, rows=None, floors=None, visits=None, wifi=None, asked=None, sensors=None, sleep=None, charging=None):
+def snapshot(now, kf=None, zones=None, spots=None, arrivals=None, rows=None, floors=None, visits=None, wifi=None, asked=None, sensors=None, sleep=None, charging=None, anchors=None):
     """The state worth keeping, as JSON.
 
     ``rows`` are the published positions (ent, zone, sub_zone, floor, updated,
@@ -121,6 +121,10 @@ def snapshot(now, kf=None, zones=None, spots=None, arrivals=None, rows=None, flo
         slot(entity)["arrived"] = _json(state)
     for entity, state in (floors or {}).items():
         slot(entity)["floor"] = _json(state)
+    for entity, state in (anchors or {}).items():
+        # Only an adopted near-field anchor: a pending one just dwells again.
+        if isinstance(state, dict) and state.get("slug"):
+            slot(entity)["anchor"] = {k: state.get(k) for k in ("floor", "slug", "since", "x", "y")}
     for row in rows or []:
         if not isinstance(row, dict) or not row.get("ent"):
             continue
@@ -228,7 +232,7 @@ def restore(data, now, max_age=DEFAULT_MAX_AGE_SECS):
     so the Live page can still say where a thing was and when. A snapshot
     from the future (the clock moved) is treated as a long gap.
     """
-    out = {"kf": {}, "zone": {}, "spot": {}, "arrivals": {}, "floors": {}, "last": {}, "visits": {}, "asked": {}, "charging": {}, "wifi": None, "sensors": {"bad": {}, "on": {}}, "sleep": {}, "age": None}
+    out = {"kf": {}, "zone": {}, "spot": {}, "arrivals": {}, "floors": {}, "anchors": {}, "last": {}, "visits": {}, "asked": {}, "charging": {}, "wifi": None, "sensors": {"bad": {}, "on": {}}, "sleep": {}, "age": None}
     if not isinstance(data, dict):
         return out
     asked = data.get("asked")
@@ -292,4 +296,9 @@ def restore(data, now, max_age=DEFAULT_MAX_AGE_SECS):
             value = state.get(key)
             if isinstance(value, dict) and value:
                 out[target][entity] = value
+        a = state.get("anchor")
+        if (isinstance(a, dict) and isinstance(a.get("floor"), str) and isinstance(a.get("slug"), str)
+                and _vector([a.get("x"), a.get("y")], 2) is not None):
+            out["anchors"][entity] = {"floor": a["floor"], "slug": a["slug"], "since": _epoch(a.get("since")),
+                                      "pending": None, "away_since": None, "x": float(a["x"]), "y": float(a["y"])}
     return out

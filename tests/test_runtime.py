@@ -1,4 +1,5 @@
 """Keeping a thing's state across a restart (runtime.py)."""
+import json
 import math
 
 import numpy as np
@@ -299,3 +300,12 @@ def test_the_wifi_store_rides_with_the_runtime_whatever_the_gap():
     assert kept["clients"] == {"device_tracker.iphone": {"mac": "3a:26"}}
     listed = {"saved_at": 1000.0, "things": {}, "wifi": {"aps": {}, "matches": {}, "clients": ["device_tracker.x"]}}
     assert runtime.restore(listed, 1001.0)["wifi"]["clients"] == {}
+
+
+def test_an_adopted_anchor_survives_a_short_restart_only():
+    anchors = {"watch": {"floor": "First", "slug": "bedside", "since": 900.0, "pending": None, "away_since": 990.0, "x": 1.5, "y": 2.0},
+               "tag": {"floor": "First", "slug": None, "since": None, "pending": ("hall", 995.0)}}
+    data = runtime.snapshot(1000.0, anchors=anchors)
+    back = runtime.restore(json.loads(json.dumps(data)), 1030.0)
+    assert back["anchors"] == {"watch": {"floor": "First", "slug": "bedside", "since": 900.0, "pending": None, "away_since": None, "x": 1.5, "y": 2.0}}
+    assert runtime.restore(data, 1000.0 + 86400)["anchors"] == {}
