@@ -855,6 +855,13 @@ TUNING_SPEC = {
     # "extended" once it has been occupied for room_extended_secs.
     "room_hold_secs": (0.0, float, 0.0, 3600.0),
     "room_extended_secs": (600.0, float, 30.0, 86400.0),
+    # The clear-after while someone sleeps in the room (its "sleep" entity is on) and once a stay
+    # is extended. -1 = the same as room_hold_secs.
+    "room_sleep_hold_secs": (-1.0, float, -1.0, 86400.0),
+    "room_extended_hold_secs": (-1.0, float, -1.0, 86400.0),
+    # A room's "force occupied" switch turns itself off after this long (0 = never).
+    # shortcut: one time for every room, give rooms their own when one needs a different one
+    "room_force_max_secs": (0.0, float, 0.0, 604800.0),
     # Time-of-day prior (habits.py): how far a thing's usual room at this hour moves the margin a
     # challenger room must lead by. 0 turns it off.
     "habit_margin_gain": (0.10, float, 0.0, 0.3),
@@ -5634,6 +5641,8 @@ def _publish_rooms(hass):
     layout = layout if isinstance(layout, dict) else {}
     hold, extended, now = _tuning(layout, "room_hold_secs"), _tuning(layout, "room_extended_secs"), time.time()
     door_settle, door_max = _tuning(layout, "door_settle_secs"), _tuning(layout, "door_hold_max_secs")
+    sleep_hold, long_hold = _tuning(layout, "room_sleep_hold_secs"), _tuning(layout, "room_extended_hold_secs")
+    force_max = _tuning(layout, "room_force_max_secs")
 
     def elsewhere(here):
         """The people the other rooms hold right now."""
@@ -5651,32 +5660,54 @@ def _publish_rooms(hass):
             attrs = {"room": key[1], "floor": key[0], "area_id": link.get("area_id"), "floor_id": link.get("floor_id"),
                      "count": 0, "people": [], "pets": [], "things": [], "ids": {}, "spots": [], "presence": None}
         seen = radar.get(key) or {"count": 0, "held": 0}
-        forced = bool(getattr(switches.get(key), "_attr_is_on", False))
+        switch = switches.get(key)
+        if force_max > 0 and getattr(switch, "_attr_is_on", False) and now - (getattr(switch, "on_since", None) or now) >= force_max:
+            switch.expire()
+        forced = bool(getattr(switch, "_attr_is_on", False))
         link = links.get(key) or {}
         inputs = rooms_mod.inputs_on(link.get("inputs"), state_of)
+        keep = rooms_mod.inputs_on(link.get("keep"), state_of)
+        asleep = bool(link.get("sleep_entity")) and bool(rooms_mod.inputs_on([link["sleep_entity"]], state_of))
         sensed = bool(is_on) or seen["count"] > 0 or bool(inputs)
         grace = _restoring(sensor, sensed, now)
         door = rooms_mod.door_closed(state_of(link["door"])) if link.get("door") else None
         own_hold, own_ext = link.get("hold_secs"), link.get("extended_secs")
-        sensor.memory = rooms_mod.settle(_restored_memory(sensor, now), sensed or forced, now,
-                                         hold if own_hold is None else own_hold, extended if own_ext is None else own_ext,
-                                         door, door_settle, door_max)
+        own_sleep, own_long = link.get("sleep_hold_secs"), link.get("extended_hold_secs")
+
+        def settled(prev, raw, grace=False):
+            """(settle()'s answer, kept): a keep-only sensor holds a room that is already on, and the
+            clear-after is the sleep or extended one when that applies."""
+            prev = prev or {}
+            kept = bool(keep) and not raw and bool(prev.get("on") or grace)
+            hold_s = rooms_mod.hold_for(asleep, prev.get("state") == "extended", hold if own_hold is None else own_hold,
+                                        sleep_hold if own_sleep is None else own_sleep, long_hold if own_long is None else own_long)
+            # A keep-only sensor is not a person: it never starts the door's shut-in wait.
+            return rooms_mod.settle(prev, raw or kept, now, hold_s, extended if own_ext is None else own_ext,
+                                    None if kept else door, door_settle, door_max), kept
+        sensor.memory, kept = settled(_restored_memory(sensor, now), sensed or forced, grace)
         if sensed and attrs.get("people"):
             sensor.door_people = list(attrs["people"])   # a lingering radar track has none: keep who was there
         if not sensed and rooms_mod.release_if_elsewhere(sensor.memory, getattr(sensor, "door_people", None), elsewhere(key)):
-            sensor.memory = rooms_mod.settle(sensor.memory, forced, now, hold if own_hold is None else own_hold,
-                                             extended if own_ext is None else own_ext, door, door_settle, door_max)
+            sensor.memory, kept = settled(sensor.memory, forced)
         m = sensor.memory
         _carry_since(sensor, m, grace, now, extended if own_ext is None else own_ext)
         since = datetime.fromtimestamp(m["since"], timezone.utc).isoformat(timespec="seconds")
         attrs = {**attrs, "radar": seen["count"], "held": not is_on and seen["count"] > 0 and seen["held"] == seen["count"],
                  "state": m["state"], "since": since, "forced": forced, "inputs": inputs, "door_hold": m["door_hold"],
                  "door_at": m["door_at"], "door_people": list(getattr(sensor, "door_people", None) or []),
-                 "hold_over": m["on"] and not sensed and not forced and not m["door_hold"]}
+                 "hold_over": m["on"] and not sensed and not forced and not kept and not m["door_hold"],
+                 "keep": keep, "asleep": asleep, "dark": rooms_mod.is_dark(link.get("dark"), state_of),
+                 "mode": rooms_mod.mode_of(state_of(link["mode_entity"]), link.get("mode_label")) if link.get("mode_entity") else None}
         attrs["sources"] = rooms_mod.sources(bool(is_on), seen["count"] > 0, inputs, forced, m["door_hold"],
-                                             grace and not m["on"], attrs["hold_over"])
+                                             grace and not m["on"], attrs["hold_over"], kept)
         on = m["on"] or grace          # a restart's carried-over state shows, but never feeds the hold or the door latch
         sensor.set_occupancy(on, attrs)
+        was, sensor.event_state = getattr(sensor, "event_state", None), m["state"]
+        if was is not None and was != m["state"] and now >= _events_from:     # never the first answer after a start
+            hass.bus.async_fire("sextant_room_occupancy_changed", {
+                "entity_id": getattr(sensor, "entity_id", None), "room": key[1], "floor": key[0], "area_id": attrs.get("area_id"),
+                "state": m["state"], "previous": was, "people": attrs.get("people") or [], "pets": attrs.get("pets") or [],
+                "sources": attrs["sources"], "mode": attrs["mode"], "dark": attrs["dark"], "asleep": asleep})
         published[key] = (on, attrs)
         who = people_sensors.get(key)
         if who is not None:
@@ -5685,19 +5716,16 @@ def _publish_rooms(hass):
             if humans and attrs.get("people"):
                 who.door_people = list(attrs["people"])
             who_grace = _restoring(who, humans, now)
-            who.memory = rooms_mod.settle(_restored_memory(who, now), humans or forced, now,
-                                          hold if own_hold is None else own_hold, extended if own_ext is None else own_ext,
-                                          door, door_settle, door_max)
+            who.memory, who_kept = settled(_restored_memory(who, now), humans or forced, who_grace)
             if not humans and rooms_mod.release_if_elsewhere(who.memory, getattr(who, "door_people", None), elsewhere(key)):
-                who.memory = rooms_mod.settle(who.memory, forced, now, hold if own_hold is None else own_hold,
-                                              extended if own_ext is None else own_ext, door, door_settle, door_max)
+                who.memory, who_kept = settled(who.memory, forced)
             wm = who.memory
             _carry_since(who, wm, who_grace, now, extended if own_ext is None else own_ext)
-            hold_over = wm["on"] and not humans and not forced and not wm["door_hold"]
+            hold_over = wm["on"] and not humans and not forced and not who_kept and not wm["door_hold"]
             people_on = wm["on"] or who_grace
             who.set_occupancy(people_on, {**attrs, "state": wm["state"],
                                          "sources": rooms_mod.sources(bool(attrs.get("humans") or attrs.get("people")), seen["count"] > 0, inputs, forced,
-                                                                      wm["door_hold"], who_grace and not wm["on"], hold_over),
+                                                                      wm["door_hold"], who_grace and not wm["on"], hold_over, who_kept),
                                          "since": datetime.fromtimestamp(wm["since"], timezone.utc).isoformat(timespec="seconds"), "people_only": True,
                                          "door_hold": wm["door_hold"],
                                          "door_at": wm["door_at"], "door_people": list(getattr(who, "door_people", None) or []),
