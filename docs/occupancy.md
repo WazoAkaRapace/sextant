@@ -61,7 +61,7 @@ The `sources` attribute says why the room is on: `bluetooth`, `radar`,
 | **A pet's tag** (class cat, dog or paw) | On the room sensor, listed under `pets`. Not on the people sensor. | The same as a person's thing. | Anything about people. |
 | **Other tracked things** (keys, a wallet, a suitcase) | Listed under `things`, but they do not turn the room on. | n/a | n/a |
 | **A thing nobody owns** (a guest's phone) | Counts by its class: a phone, watch, person, child or pet class turns the room on. A thing's own **Gives the owner's location** setting on the [Things page](things.md) wins over its class. | The same as a person's thing. | Who it belongs to. |
-| **mmWave radar that tracks** (LD2450 type, such as an Everything Presence or an Apollo R PRO-1), placed on the plan | On while a track is in the room, whether or not the person carries anything. A new target must be seen for 2 seconds (`mmwave_verify_s`) before it counts, so a reflection does not. Counts as a person on the people sensor. | `mmwave_hold_s` (10 s) after the radar loses everyone, or the room's own **Stays occupied for**. | A person from a pet. Someone lying very still can drop out of view. It sees through drywall, so by default targets outside the radar's own room are dropped. |
+| **mmWave radar that tracks** (LD2450 type, such as an Everything Presence or an Apollo R PRO-1), placed on the plan | On while a track is in the room, whether or not the person carries anything. A new target must be seen for 2 seconds (`mmwave_verify_s`) before it counts, so a reflection does not. Counts as a person on the people sensor. | `mmwave_hold_s` (10 s) after the radar loses everyone, or the room's own **Stays occupied for**. | A person from a pet. Someone lying very still can drop out of view. It sees through drywall, so targets outside the radar's own room are dropped. |
 | **Presence sensor** (an LD2412, or any occupancy, presence or motion binary sensor), set as the room's **Presence sensor** | On while it reads `on`. Counts as one person (`radar: 1`) whoever is there. | The same hold as the tracking radar. | Where in the room, or how many. It is read on the radar's clock, so it only counts while at least one mmWave radar is placed on the plan. |
 | **Motion sensor**, listed under **Other sensors** | On while it reads `on`. Counts as a person on the people sensor. | Only as long as the sensor itself stays `on`, plus the room's clear-after hold. | Someone sitting still. A pet. |
 | **Media player**, listed under **Other sensors** | On while it reads `playing`. | While it plays. | Whether anyone is watching. |
@@ -89,8 +89,8 @@ A stuck sensor holds its room on forever, and a dead one never turns it on.
 Sextant raises a Repair (Settings → System → Repairs) for a room's sensor
 (an input or a door) when:
 
-- it does not exist, or has been unavailable or unknown for
-  `sensor_gone_secs` (6 hours). A media player that reads unavailable (a TV
+- it has been missing, unavailable or unknown for `sensor_gone_secs`
+  (6 hours). A media player that reads unavailable (a TV
   switched off) is not called gone;
 - it is a binary sensor that has read `on` for `sensor_stuck_secs`
   (24 hours). Numbers, media players and trackers are never called stuck,
@@ -151,8 +151,8 @@ All of these are on the Tuning page, or set with `sextant.set_tuning`. See
 | `away_after_secs` | 900 s (60 to 86400) | A thing not heard for this long is `away`, and no longer counts for any room. |
 | `exit_quiet_secs` | 120 s (0 to 3600) | Someone who goes quiet in a room with an outside door reads Outside after this long. |
 | `wifi_confirm_secs` | 300 s (0 to 3600) | How long Wi-Fi must say "home" before it starts a visit for someone Bluetooth has lost. |
-| `sensor_gone_secs` | 21600 s, 6 hours | When an unavailable room sensor gets a Repair. |
-| `sensor_stuck_secs` | 86400 s, 24 hours | When a binary sensor stuck `on` gets a Repair. |
+| `sensor_gone_secs` | 21600 s, 6 hours (600 to 2592000) | When an unavailable room sensor gets a Repair. |
+| `sensor_stuck_secs` | 86400 s, 24 hours (3600 to 2592000) | When a binary sensor stuck `on` gets a Repair. |
 
 Each room can also have its own settings on the [Edit page](edit.md):
 select the room, and its **Occupancy sensor** block takes:
@@ -184,11 +184,14 @@ Sam's phone is in their pocket.
   nothing changes.
 - At 10 the room has been on for `room_extended_secs`, and `state` reads
   `extended`.
-- At 18 Sam leaves. The presence sensor goes off and the phone is placed in
-  the Hall. With no hold set, the room clears at once.
+- At 18 Sam leaves. The motion sensor blips as they pass it, the presence
+  sensor goes off (its 10-second radar hold runs out a moment later) and the
+  phone is placed in the Hall. With no hold set, the room clears as soon as
+  none of them says someone is there.
 
 Without the phone and the presence sensor, the room would have cleared 10
-seconds after the radar lost Sam. A longer **Stays occupied for** on a
+seconds after the radar lost Sam, and come back on only for the motion
+sensor's blips. A longer **Stays occupied for** on a
 reading room, or a presence sensor, covers that.
 
 ### 2. Someone leaves and shuts the door
@@ -204,6 +207,11 @@ them. Their watch is placed on the Landing 20 seconds later.
 The evidence stopped inside the 90-second wait (`door_settle_secs`), so
 Sextant knows the door was shut from outside. There is no hold, and the
 room clears. It will not take hold again until the door is opened.
+
+This only works if every sensor in the room stops within the wait. A motion
+sensor that stays `on` for two minutes after the last movement still reads
+as someone inside when the 90 seconds are up, and the room is held. Give
+such a room a longer `door_settle_secs`, or a sensor that clears sooner.
 
 **Going to bed.** Robin goes into the Bedroom, shuts the door at minute 1,
 and gets into bed. Their phone is charging in the Kitchen, so only the
@@ -258,7 +266,14 @@ every room would go off and back on. Instead:
 - A door hold carries over the restart, and keeps its first start time, so
   the 8-hour limit is not reset.
 - A clear-after hold that was running is forgotten, and the `extended`
-  timer starts again from the first reading after the restart.
+  timer starts again after the restart.
+- How soon things are placed again depends on how long Home Assistant was
+  down. Within `restore_state_secs` (5 minutes) Sextant picks up its room
+  choices where it left them, and a thing heard in the 10 minutes before
+  Sextant came back counts as just heard for the first 5 minutes, so most rooms
+  are confirmed within a cycle or two. After a longer gap every thing starts
+  cold and has to earn its room again, which can take a few minutes; the
+  600-second grace covers that.
 - The force switch keeps its state.
 
 ## See also

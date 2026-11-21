@@ -37,14 +37,14 @@
 <text x="635.0" y="227" font-size="12" fill="#1f2328" text-anchor="middle" font-weight="normal" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">extended timer</text>
 <line x1="720" y1="190" x2="768" y2="190" stroke="#59636e" stroke-width="2" marker-end="url(#a)"/>
 <rect x="770" y="100" width="150" height="50" rx="8" fill="#2da44e" stroke="#d0d7de"/>
-<text x="845.0" y="122" font-size="13" fill="#ffffff" text-anchor="middle" font-weight="bold" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">occupied</text>
-<text x="845.0" y="139" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="normal" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif"></text>
+<text x="845.0" y="130.0" font-size="13" fill="#ffffff" text-anchor="middle" font-weight="bold" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">occupied</text>
+<text x="845.0" y="130.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="normal" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif"></text>
 <rect x="770" y="165" width="150" height="50" rx="8" fill="#116329" stroke="#d0d7de"/>
-<text x="845.0" y="187" font-size="13" fill="#ffffff" text-anchor="middle" font-weight="bold" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">extended</text>
-<text x="845.0" y="204" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="normal" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif"></text>
+<text x="845.0" y="195.0" font-size="13" fill="#ffffff" text-anchor="middle" font-weight="bold" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">extended</text>
+<text x="845.0" y="195.0" font-size="12" fill="#ffffff" text-anchor="middle" font-weight="normal" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif"></text>
 <rect x="770" y="230" width="150" height="50" rx="8" fill="#d8dee4" stroke="#d0d7de"/>
-<text x="845.0" y="252" font-size="13" fill="#1f2328" text-anchor="middle" font-weight="bold" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">clear</text>
-<text x="845.0" y="269" font-size="12" fill="#1f2328" text-anchor="middle" font-weight="normal" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif"></text>
+<text x="845.0" y="260.0" font-size="13" fill="#1f2328" text-anchor="middle" font-weight="bold" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">clear</text>
+<text x="845.0" y="260.0" font-size="12" fill="#1f2328" text-anchor="middle" font-weight="normal" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif"></text>
 <rect x="550" y="290" width="370" height="62" rx="8" fill="#fff1e5" stroke="#d0d7de"/>
 <text x="735.0" y="312" font-size="13" fill="#1f2328" text-anchor="middle" font-weight="bold" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">After a restart</text>
 <text x="735.0" y="329" font-size="12" fill="#1f2328" text-anchor="middle" font-weight="normal" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">a room that was on stays on for up to 600 s,</text>
