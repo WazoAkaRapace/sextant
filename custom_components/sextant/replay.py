@@ -47,7 +47,7 @@ def load_rows(dirpath: str, hours: float, now: float | None = None) -> list:
         hour = election_log.hour_of(name)
         if hour is None or hour + 3600.0 < since:
             continue
-        with open(os.path.join(dirpath, name), encoding="utf-8") as fh:
+        with election_log.open_text(os.path.join(dirpath, name)) as fh:
             for line in fh:
                 try:
                     r = json.loads(line)

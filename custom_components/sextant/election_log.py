@@ -12,12 +12,15 @@ one JSON line per thing per cycle, in hourly files under
 ``config/sextant_election_log``, dropped once they are older than the window.
 tools/replay_floors.py reads the directory and replays the elections under
 other settings. Measured at about 6 MB an hour for twenty things at
-fifteen-second cycles (1.2 KB a row, most of it the per-floor candidates); a
-day is some 150 MB, a week a gigabyte, which is why it is off by default.
+fifteen-second cycles (1.2 KB a row, most of it the per-floor candidates),
+and several times that in a house with many proxies. An hour's file is
+gzipped once the hour is over (about a sixth of the size), so only the hour
+in progress is plain text; ``open_text`` reads either.
 
 This module imports nothing from the rest of the package.
 """
 import asyncio
+import gzip
 import logging
 import os
 import re
@@ -32,7 +35,7 @@ KEEP = (
     "ent", "floor", "floors", "floor_cands", "speed", "zone", "zone_raw", "zone_locked",
     "nearest_zone", "sub_zone", "anchor", "conf", "cords", "raw", "rms_m", "estimator", "updated",
 )
-_NAME = re.compile(r"^(\d{4})-(\d{2})-(\d{2})T(\d{2})Z\.jsonl$")
+_NAME = re.compile(r"^(\d{4})-(\d{2})-(\d{2})T(\d{2})Z\.jsonl(\.gz)?$")
 
 
 def file_for(stamp: float) -> str:
@@ -46,7 +49,7 @@ def hour_of(name: str):
     if not m:
         return None
     try:
-        return _timegm(*(int(g) for g in m.groups()))
+        return _timegm(*(int(g) for g in m.groups()[:4]))
     except (ValueError, OverflowError):
         return None
 
@@ -70,6 +73,30 @@ def expired(names, now: float, hours: float):
         if start is not None and start + 3600 < cutoff:
             out.append(name)
     return out
+
+
+def open_text(path: str):
+    """An hour's file for reading, gzipped or not."""
+    return gzip.open(path, "rt", encoding="utf-8") if path.endswith(".gz") else open(path, encoding="utf-8")
+
+
+def compress_closed(dirpath: str, now: float):
+    """Gzip every plain file whose hour is over. Safe to repeat: the plain
+    file goes only after its gzip is in place under the final name."""
+    import shutil
+    this_hour = now // 3600 * 3600
+    for name in os.listdir(dirpath):
+        start = hour_of(name)
+        if start is None or name.endswith(".gz") or start >= this_hour:
+            continue
+        path = os.path.join(dirpath, name)
+        try:
+            with open(path, "rb") as src, gzip.open(path + ".gz.tmp", "wb") as dst:
+                shutil.copyfileobj(src, dst)
+            os.replace(path + ".gz.tmp", path + ".gz")
+            os.remove(path)
+        except OSError as e:
+            _LOGGER.debug("Election log %s not compressed: %s", name, e)
 
 
 def slim(row: dict, stamp: float) -> dict:
@@ -136,6 +163,7 @@ class ElectionLog:
                 os.remove(os.path.join(self.dirpath, name))
             except OSError as e:
                 _LOGGER.debug("Election log %s not removed: %s", name, e)
+        compress_closed(self.dirpath, now)
 
 
 async def clear(dirpath: str):

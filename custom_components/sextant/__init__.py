@@ -5758,8 +5758,9 @@ def _cross_floor_points(layout, frames, targets, donors, thing_h):
 def _solve_cross_floor(jobs, results, borrowed):
     """The shadow fix per solved floor: its own points plus the borrowed ones.
 
-    Pure CPU, executor-safe. ``{floor: {"fix", "own", "rms_m", "own_rms_m", "heard"}}``
-    (``own`` is the same solve without the borrowed points):
+    Pure CPU, executor-safe. ``{floor: {"fix", "own", "rms_m", "own_rms_m", "n"}}``
+    (``own`` is the same solve without the borrowed points, ``n`` how many
+    were borrowed; which ones is in the other floors' own ``heard``):
     rms over every point, and over the floor's own points alone so it pairs
     with the floor's own ``rms_m``.
     """
@@ -5784,7 +5785,7 @@ def _solve_cross_floor(jobs, results, borrowed):
             "own": [round(float(own[0]), 1), round(float(own[1]), 1)],
             "rms_m": round(rms_m, 3),
             "own_rms_m": round(own_rms_m, 3),
-            "heard": heard,
+            "n": len(heard),   # not the list: it tripled the election log
         }
     return out
 

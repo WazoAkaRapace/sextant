@@ -44,6 +44,7 @@ from __future__ import annotations
 import argparse
 import collections
 import glob
+import gzip
 import json
 import os
 import sys
@@ -59,10 +60,10 @@ DEFAULTS = {
 
 def load_rows(path, hours=None):
     """Every record from a file or a directory of .jsonl files, oldest first."""
-    files = sorted(glob.glob(os.path.join(path, "*.jsonl"))) if os.path.isdir(path) else [path]
+    files = sorted(f for f in glob.glob(os.path.join(path, "*.jsonl*")) if not f.endswith(".tmp")) if os.path.isdir(path) else [path]
     rows = []
     for name in files:
-        with open(name, encoding="utf-8") as fh:
+        with (gzip.open(name, "rt", encoding="utf-8") if name.endswith(".gz") else open(name, encoding="utf-8")) as fh:
             for line in fh:
                 line = line.strip()
                 if line:

@@ -2614,5 +2614,5 @@ def test_cross_floor_shadow_borrows_the_floor_below():
     fused = sextant._solve_cross_floor([job], [((1.0, 2.0), 1, 1, {"geo": [5.0, 6.0]})], borrowed)["Ground"]
     assert fused["own"] == [5.0, 6.0]                    # fused floor: the geometric end of the blend
     assert sextant._solve_cross_floor([job], [((1.0, 2.0), 1, 1, {"geo": None})], borrowed) == {}   # fingerprint-only fix
-    assert shadow["heard"] == heard and len(shadow["fix"]) == 2 and shadow["rms_m"] >= 0 and shadow["own_rms_m"] >= 0
+    assert shadow["n"] == len(heard) and len(shadow["fix"]) == 2 and shadow["rms_m"] >= 0 and shadow["own_rms_m"] >= 0
     assert sextant._solve_cross_floor([job], [None], borrowed) == {}   # an unsolved floor gets no shadow

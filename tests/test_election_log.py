@@ -80,7 +80,11 @@ def test_expired_files_are_removed_on_the_first_flush_of_an_hour(tmp_path):
     log = el.ElectionLog(str(d))
     log.add(_row(), NOW)
     run(log.flush(24, now=NOW))
-    assert not old.exists() and kept.exists() and foreign.exists()
+    assert not old.exists() and foreign.exists()
+    # The hour that is over is gzipped (its rows intact); the one in progress stays plain.
+    assert not kept.exists() and el.open_text(str(kept) + ".gz").read() == "x\n"
+    assert (d / el.file_for(NOW)).exists() and el.hour_of(kept.name + ".gz") == el.hour_of(kept.name)
+    assert el.expired([kept.name + ".gz"], NOW + 40 * HOUR, 24) == [kept.name + ".gz"]
 
 
 def test_one_log_per_hass_under_the_config_directory(tmp_path):
