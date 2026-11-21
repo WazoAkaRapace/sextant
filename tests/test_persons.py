@@ -158,6 +158,18 @@ def test_a_thing_on_its_charger_does_not_speak_for_its_owner():
     assert why[0]["on_charger"] is True and "on_charger" not in why[1]
 
 
+def test_a_full_watch_stays_on_its_charger_until_it_moves():
+    # Charging: on, and the time is noted.
+    assert persons.still_on_charger(True, 100, None, 200) == (True, 200)
+    # The sensor reads NotCharging at the charge limit, the watch has not moved: still on.
+    assert persons.still_on_charger(False, 100, 200, 5000) == (True, 200)
+    # It arrived somewhere after it last charged: on a wrist again.
+    assert persons.still_on_charger(False, 300, 200, 5000) == (False, 200)
+    # Never seen charging, or no arrival to go by: not on a charger.
+    assert persons.still_on_charger(False, 100, None, 5000) == (False, None)
+    assert persons.still_on_charger(False, None, 200, 5000) == (False, 200)
+
+
 def test_what_counts_as_on_the_charger():
     for s in ("Charging", "charging", "Charged", "Full", "on", " Charging "):
         assert persons.on_charger(s), s

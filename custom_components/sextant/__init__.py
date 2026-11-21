@@ -4767,6 +4767,9 @@ def _history_arrival(hass, ent, floor, x, y, now):
 ARRIVAL_RETRY_SECS = 600.0
 
 
+_last_charging: dict = {}   # ent -> when its on-charger sensor last said charging
+
+
 def _arrived_at(hass, layout, ent, row, now):
     """When this thing arrived within a couple of metres of where it is now.
 
@@ -5282,14 +5285,18 @@ def _update_person_sensors(hass):
             row = rows.get(ent)
             if not row:
                 continue
+            arrived = _arrived_at(hass, layout, ent, row, now)
+            charging = bool(chargers.get(ent)) and persons_mod.on_charger(
+                getattr(hass.states.get(chargers[ent]), "state", None))
+            # shortcut: the last-charging time is lost on a restart, so a full watch on its puck speaks again until it next charges; persist it if that bites.
+            charging, _last_charging[ent] = persons_mod.still_on_charger(charging, arrived, _last_charging.get(ent), now)
             candidates.append({
                 "ent": ent, "cls": classes.get(ent), "updated": _graced(row.get("updated"), now),
-                "arrived": _arrived_at(hass, layout, ent, row, now),
+                "arrived": arrived,
                 "zone": row.get("zone"), "zone_raw": row.get("zone_raw"), "sub_zone": row.get("sub_zone"), "floor": row.get("floor"),
                 "outside": bool(row.get("outside")), **{k: row.get(k) for k in persons_mod.FIT_KEYS},
                 "area": room_area(layout, row.get("floor"), row.get("zone")),
-                "on_charger": bool(chargers.get(ent)) and persons_mod.on_charger(
-                    getattr(hass.states.get(chargers[ent]), "state", None)),
+                "on_charger": charging,
             })
         slug = person.split(".", 1)[1]
         gps, ignored = persons_mod.choose_gps(hass.states.get, layout, person, now, gps_stale)
