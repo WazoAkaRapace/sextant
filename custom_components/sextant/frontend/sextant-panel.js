@@ -456,6 +456,18 @@ class SextantPanel extends LitElement {
       /* Freeing the floor picker and stamp usually leaves enough room for
          all 8 tabs; this is only a safety net on a very narrow phone. */
       .modes { overflow-x: auto; scrollbar-width: none; }
+      /* Nine tabs share the row evenly, so none is off the right edge. */
+      .modes { flex: 1 1 auto; min-width: 0; }
+      .modes button { flex: 1 1 0; min-width: 0; padding: 0; justify-content: center; }
+      .spacer { display: none; }
+      /* The floor picker scrolls inside the bar: wider than the bar, it ran
+         off the left edge and took the first floors out of reach. */
+      .bottombar .floor-tabs { flex: 0 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+      .bottombar .floor-tabs button { flex: none; padding: 8px 12px; }
+      .bottombar .stampbtn { padding: 8px 6px; }
+    }
+    /* The mark is a second way to Live; a phone needs the width for the tabs. */
+    @media (max-width: 480px) { .brand { display: none; }
     }
   `];
 }
@@ -2222,6 +2234,8 @@ class SextantLive extends LitElement {
       .side h3 { position: sticky; top: 0; z-index: 2; margin: 0; padding: 8px 0; background: var(--card-background-color); }
       .stage { order: 2; flex: 0 0 48vh; }
       .stage.collapsed { display: none; }
+      /* Room to scroll the last rows clear of the Pin button. */
+      .side .list:last-of-type { padding-bottom: 72px; }
       .wide-only { display: none; }
       .narrow-only { display: flex; }
     }

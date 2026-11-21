@@ -1609,6 +1609,8 @@ class SextantEdit extends LitElement {
     .side { border-left: 1px solid var(--divider-color); overflow: auto; padding: 12px; }
     ul.plain { list-style: none; padding: 0; margin: 4px 0; }
     @media (max-width: 720px) { :host { grid-template-columns: 1fr; grid-template-rows: 1fr auto; } .side { border-left: 0; border-top: 1px solid var(--divider-color); max-height: 45vh; } .toolbar { flex-wrap: wrap; max-width: calc(100% - 20px); gap: 3px; padding: 4px; } .toolbar button.tool { width: 34px; height: 34px; } }
+    /* On a phone the tools sit above the map, not over a third of it. */
+    @media (max-width: 720px) { .stage { display: flex; flex-direction: column; min-height: 0; } .stage canvas { flex: 1 1 0; min-height: 0; height: auto; } .toolbar { position: static; order: -1; max-width: none; border-radius: 0; box-shadow: none; border-bottom: 1px solid var(--divider-color); } }
   `];
 }
 

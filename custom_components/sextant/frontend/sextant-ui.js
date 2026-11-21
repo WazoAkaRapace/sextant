@@ -93,6 +93,12 @@ export const sharedStyles = css`
     .wrap { position: relative; background: linear-gradient(to right, var(--card-background-color) 30%, rgba(0,0,0,0)), linear-gradient(to right, rgba(0,0,0,0), var(--card-background-color) 70%) 100% 0; background-repeat: no-repeat; background-size: 20px 100%, 20px 100%; background-attachment: local, scroll; }
     .wrap table { border-collapse: separate; border-spacing: 0; }
     .wrap th:first-child, .wrap td:first-child { position: sticky; left: 0; background: var(--card-background-color); box-shadow: 2px 0 4px -2px rgba(0,0,0,0.2); }
+    /* A grid item is as wide as its widest table unless told otherwise. */
+    .cols > * { min-width: 0; }
+  }
+  @media (pointer: coarse) {
+    details:not(.menu) > summary { padding: 8px 0; }
+    input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
   }
 `;
 

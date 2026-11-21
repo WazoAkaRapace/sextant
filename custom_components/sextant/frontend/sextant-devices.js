@@ -1154,6 +1154,11 @@ class SextantDevices extends LitElement {
     button.iconpick:hover { border-color: var(--primary-color); }
     a.name { font-weight: 600; color: var(--primary-text-color); text-decoration: none; border-bottom: 1px dotted var(--secondary-text-color); }
     a.name:hover { color: var(--primary-color); border-bottom-color: var(--primary-color); }
+    td.who > div { min-width: 0; }
+    /* The pinned column held a long id on one line and took the whole screen,
+       leaving a letter's width of the next column: here it wraps instead. */
+    @media (max-width: 720px) { .wrap td:first-child { min-width: 150px; max-width: 46vw; overflow-wrap: anywhere; } }
+    @media (pointer: coarse) { a.name { display: inline-block; padding: 6px 0; } }
     td.actions { white-space: nowrap; }
     button.iconbtn.danger { color: var(--error-color, #b00020); border-color: transparent; }
     button.iconbtn.danger:hover { border-color: var(--error-color, #b00020); }

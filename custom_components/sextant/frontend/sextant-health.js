@@ -921,6 +921,7 @@ class SextantHealth extends LitElement {
     .tfield .thelp { font-size: 11px; color: var(--secondary-text-color); padding-left: 2px; overflow-wrap: anywhere; }
     .tfield .chg { color: var(--warning-color, #f59e0b); font-weight: 600; }
     .tfield .treset { color: var(--primary-color); }
+    @media (pointer: coarse) { .tfield .treset { display: inline-block; padding: 8px 6px; } }
     @media (max-width: 720px) { .tfield { max-width: none; } .cols { grid-template-columns: 1fr; } .tfield, .tfield > * { width: 100%; } }
   `];
 }
