@@ -874,7 +874,7 @@ class SextantEdit extends LitElement {
     const go = (step) => { this._wizard = step == null ? null : { zone: item, step }; };
     return html`<div class="row" style="margin-top: 8px; align-items: center">
         <span class="muted small">Occupancy sensor${wizard ? html` · step ${wizard.step + 1} of ${ROOM_STEPS.length}: <b>${steps[0].title}</b>` : nothing}</span><span class="grow"></span>
-        ${wizard ? nothing : uiButton({ label: "Set up step by step", icon: "mdi:wizard-hat", onClick: () => go(0) })}
+        ${wizard ? nothing : uiButton({ label: "Wizard", icon: "mdi:wizard-hat", onClick: () => go(0) })}
       </div>
       ${steps.map((step) => this._renderRoomStep(item, step, !!wizard))}
       ${wizard ? html`<div class="row">
@@ -884,7 +884,7 @@ class SextantEdit extends LitElement {
             : uiButton({ label: "Done", kind: "primary", onClick: () => { go(null); toast(this, "Room set up. Save to keep it"); } })}
         </div>` : html`
         ${uiSwitch({ label: "Has an outside door (someone whose phone goes quiet here has gone out)", checked: !!item.exit, onChange: (v) => this._edit("exit", v || undefined) })}
-        <div class="muted small">Blank timings use the Tuning page's. "Set up step by step" explains each setting and offers the sensors in the room's area.</div>`}`;
+        <div class="muted small">Blank timings use the Tuning page's. The wizard explains each setting and offers the sensors in the room's area.</div>`}`;
   }
 
   /** One group of a room's occupancy fields (ROOM_STEPS); in the wizard, with what it is for and the area's sensors to click. */
