@@ -24,6 +24,7 @@ import gzip
 import logging
 import os
 import re
+import threading
 import time
 
 _LOGGER = logging.getLogger(__name__)
@@ -35,6 +36,8 @@ KEEP = (
     "ent", "floor", "floors", "floor_cands", "speed", "zone", "zone_raw", "zone_locked",
     "nearest_zone", "sub_zone", "anchor", "conf", "cords", "raw", "rms_m", "estimator", "updated",
 )
+# One writer, compressor or clear at a time: a clear must not race a gzip in flight.
+_FILES = threading.Lock()
 _NAME = re.compile(r"^(\d{4})-(\d{2})-(\d{2})T(\d{2})Z\.jsonl(\.gz)?$")
 
 
@@ -81,8 +84,8 @@ def open_text(path: str):
 
 
 def compress_closed(dirpath: str, now: float):
-    """Gzip every plain file whose hour is over. Safe to repeat: the plain
-    file goes only after its gzip is in place under the final name."""
+    """Gzip every plain file whose hour is over. The plain file goes only
+    after its gzip is in place under the final name. Caller holds ``_FILES``."""
     import shutil
     this_hour = now // 3600 * 3600
     for name in os.listdir(dirpath):
@@ -91,9 +94,15 @@ def compress_closed(dirpath: str, now: float):
             continue
         path = os.path.join(dirpath, name)
         try:
-            with open(path, "rb") as src, gzip.open(path + ".gz.tmp", "wb") as dst:
-                shutil.copyfileobj(src, dst)
-            os.replace(path + ".gz.tmp", path + ".gz")
+            if os.path.exists(path + ".gz"):
+                # The clock stepped back into an archived hour: add the late
+                # rows as a second gzip member instead of replacing the archive.
+                with open(path, "rb") as src, gzip.open(path + ".gz", "ab") as dst:
+                    shutil.copyfileobj(src, dst)
+            else:
+                with open(path, "rb") as src, gzip.open(path + ".gz.tmp", "wb") as dst:
+                    shutil.copyfileobj(src, dst)
+                os.replace(path + ".gz.tmp", path + ".gz")
             os.remove(path)
         except OSError as e:
             _LOGGER.debug("Election log %s not compressed: %s", name, e)
@@ -150,20 +159,21 @@ class ElectionLog:
 
     def _write(self, rows, now, hours):
         import json
-        os.makedirs(self.dirpath, exist_ok=True)
-        with open(os.path.join(self.dirpath, file_for(now)), "a", encoding="utf-8") as fh:
-            for rec in rows:
-                fh.write(json.dumps(rec, separators=(",", ":"), default=str) + "\n")
-        hour = int(now // 3600)
-        if self._pruned_hour == hour:
-            return
-        self._pruned_hour = hour
-        for name in expired(os.listdir(self.dirpath), now, hours):
-            try:
-                os.remove(os.path.join(self.dirpath, name))
-            except OSError as e:
-                _LOGGER.debug("Election log %s not removed: %s", name, e)
-        compress_closed(self.dirpath, now)
+        with _FILES:
+            os.makedirs(self.dirpath, exist_ok=True)
+            with open(os.path.join(self.dirpath, file_for(now)), "a", encoding="utf-8") as fh:
+                for rec in rows:
+                    fh.write(json.dumps(rec, separators=(",", ":"), default=str) + "\n")
+            hour = int(now // 3600)
+            if self._pruned_hour == hour:
+                return
+            self._pruned_hour = hour
+            for name in expired(os.listdir(self.dirpath), now, hours):
+                try:
+                    os.remove(os.path.join(self.dirpath, name))
+                except OSError as e:
+                    _LOGGER.debug("Election log %s not removed: %s", name, e)
+            compress_closed(self.dirpath, now)
 
 
 async def clear(dirpath: str):
@@ -172,6 +182,10 @@ async def clear(dirpath: str):
     Turning the log off calls this once; the ``sextant/election_log/clear``
     command calls it too.
     """
+    def _locked():
+        with _FILES:
+            return _clear()
+
     def _clear():
         files = size = 0
         try:
@@ -189,7 +203,7 @@ async def clear(dirpath: str):
             except OSError as e:
                 _LOGGER.debug("Election log %s not removed: %s", name, e)
         return files, size
-    return await asyncio.to_thread(_clear)
+    return await asyncio.to_thread(_locked)
 
 
 def get(hass) -> ElectionLog:

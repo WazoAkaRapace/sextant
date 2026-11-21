@@ -95,3 +95,8 @@ def test_receiver_report_ranks_the_receiver_that_reads_long(tmp_path):
     rows = rr.load_rows(str(tmp_path))
     assert [r["t"] for r in rows] == [1, 2]
     assert rr.report(rows, layout) == [("G", "long", 2, 1.5, 1.5), ("G", "good", 2, 0.0, 0.0)]
+    # Heights as the live solve: a robot runs at 0.1 m, so a receiver 4 m above it reads 5 m at 3 m along.
+    robot = {**layout, "thing_classes": {"cat": "robot"}}
+    robot["floor"] = [{**layout["floor"][0], "receivers": [{"entity_id": "good", "height": 4.1, "cords": {"x": 300, "y": 0}}]}]
+    assert rr.report([{**row(1), "floor_cands": {"G": {"fix": [0, 0], "heard": [["good", 5.0]]}}}], robot) == [("G", "good", 1, 0.0, 0.0)]
+    assert rr.thing_height({"thing_heights": {"cat": 0}, "thing_height": 2}, "cat") == 0.0 and rr.thing_height({"thing_height": 2}, "cat") == 2.0

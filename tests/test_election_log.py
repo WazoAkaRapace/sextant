@@ -85,6 +85,11 @@ def test_expired_files_are_removed_on_the_first_flush_of_an_hour(tmp_path):
     assert not kept.exists() and el.open_text(str(kept) + ".gz").read() == "x\n"
     assert (d / el.file_for(NOW)).exists() and el.hour_of(kept.name + ".gz") == el.hour_of(kept.name)
     assert el.expired([kept.name + ".gz"], NOW + 40 * HOUR, 24) == [kept.name + ".gz"]
+    # The clock steps back into the archived hour: its late rows join the archive, they do not replace it.
+    kept.write_text("late\n")
+    log.add(_row(), NOW + HOUR)
+    run(log.flush(24, now=NOW + HOUR))
+    assert not kept.exists() and el.open_text(str(kept) + ".gz").read() == "x\nlate\n"
 
 
 def test_one_log_per_hass_under_the_config_directory(tmp_path):
