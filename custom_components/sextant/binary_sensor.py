@@ -7,6 +7,7 @@ room's linked Home Assistant area when the device is first created (and
 left alone after that, so moving it in HA sticks).
 """
 import logging
+from datetime import datetime
 import time
 
 from homeassistant.components.binary_sensor import (
@@ -61,6 +62,12 @@ class SextantRoomOccupancy(BinarySensorEntity, RestoreEntity):
         last = await self.async_get_last_state()
         # One deadline per Home Assistant process: a reload or rename must not grant a fresh grace.
         until = self.hass.data.setdefault("sextant_restore_deadline", time.time() + RESTORE_GRACE_S)
+        if last is not None and last.state in ("on", "off"):
+            # "Occupied since 07:40" must not become "since the restart" (__init__._carry_since).
+            try:
+                self.restored_since = (datetime.fromisoformat(last.attributes.get("since")).timestamp(), last.state == "on")
+            except (TypeError, ValueError, OverflowError):
+                pass
         if last is not None and last.state == "on" and time.time() < until:
             self._attr_is_on = True
             self._attr_extra_state_attributes = {**self._attr_extra_state_attributes, "sources": ["restored"]}

@@ -655,3 +655,42 @@ def test_sensor_clocks_outlive_a_restart():
     rooms.sensor_problems(keys, {"binary_sensor.mm": _st("off", 0)}.get, now, 24 * 3600, 6 * 3600, back["bad"], back["on"])
     assert back["on"] == {}
     assert runtime.restore(saved, now + 2 * 3600)["sensors"] == {"bad": {}, "on": {}}
+
+
+def test_a_room_keeps_its_since_over_a_restart(hass):
+    import asyncio
+    import time
+    import types
+    from datetime import datetime, timezone
+    layout = {"floor": [{"name": "Ground Floor", "floor_id": "ground", "zones": [
+        {"entity_id": n, "cords": [{"x": 0, "y": 0}] * 3} for n in ("Kitchen", "Office", "Hall")]}]}
+    _added(hass)
+    hass.data["sextant_room_keys"] = rooms.room_keys(layout)
+    hass.data["sextant_aggregate_sensors"] = {}
+    platform.ensure_room_sensors(hass, layout)
+    hass.data["sextant_room_switches"] = {}
+    then = time.time() - 3600
+    iso = datetime.fromtimestamp(then, timezone.utc).isoformat(timespec="seconds")
+    was = {"Kitchen": "on", "Office": "on", "Hall": "off"}
+    sensors = {n: hass.data["sextant_room_sensors"][("Ground Floor", n)] for n in was}
+    for n, s in sensors.items():
+        s.hass = hass
+        s.async_write_ha_state = lambda: None
+        s._test_last_state = types.SimpleNamespace(state=was[n], attributes={"since": iso})
+        asyncio.run(s.async_added_to_hass())
+    hass.states = type("S", (), {"get": staticmethod(lambda e: None)})()
+
+    def shown(n):
+        a = sensors[n]._attr_extra_state_attributes
+        return sensors[n]._attr_is_on, a["state"], datetime.fromisoformat(a["since"]).timestamp()
+    hass.data["sextant_room_answers"] = {}
+    sextant._publish_rooms(hass)                      # nothing placed yet: the restored states show, with their since
+    assert shown("Kitchen") == (True, "extended", int(then)) and shown("Hall") == (False, "clear", int(then))
+    hass.data["sextant_room_answers"] = {("Ground Floor", "Kitchen"): (True, None)}
+    sextant._publish_rooms(hass)                      # the kitchen is confirmed: still the long stay it was
+    sextant._publish_rooms(hass)
+    assert shown("Kitchen") == (True, "extended", int(then))
+    sensors["Office"].restore_until = 1.0             # the office never was: it cleared now, not an hour ago
+    sextant._publish_rooms(hass)
+    assert shown("Office")[:2] == (False, "clear") and shown("Office")[2] > then + 3000
+    assert shown("Hall") == (False, "clear", int(then))

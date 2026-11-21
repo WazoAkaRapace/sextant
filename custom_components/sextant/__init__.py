@@ -4600,6 +4600,8 @@ async def _restore_runtime(hass):
             state = {**state, "pending": (tuple(pending[0]), pending[1])}
         _subzone_state[entity] = {**_new_subzone_state(state.get("floor"), state.get("zone"), now), **state}
     _arrivals.update(back["arrivals"])
+    # Near-field anchors: without them every anchored thing drops from 0.9 confidence until it has dwelt again.
+    _anchor_state.update(back.get("anchors") or {})
     _person_visits.update(back.get("visits") or {})
     _person_sleep.update(back.get("sleep") or {})
     _gps_asked.update(back.get("asked") or {})
@@ -4739,7 +4741,7 @@ async def _save_runtime(hass, final=False):
         # a dying tag, was gone entirely after the 15:34 restart.
         rows = _rows_with_last_seen(rows, _last_seen)
         data = runtime_mod.snapshot(time.time(), kf=_kf_position_state, zones=_zone_state,
-                                    spots=_subzone_state, arrivals=_arrivals, rows=rows, visits=_person_visits, sleep=_person_sleep, asked=_gps_asked, wifi=_wifi_store, charging=_last_charging,
+                                    spots=_subzone_state, arrivals=_arrivals, rows=rows, visits=_person_visits, sleep=_person_sleep, asked=_gps_asked, wifi=_wifi_store, charging=_last_charging, anchors=_anchor_state,
                                     floors=_floor_elections(), sensors={"bad": _sensor_bad_since, "on": {e: v[0] for e, v in _sensor_on_since.items()}})
         await save_runtime(hass, data)
     except Exception as e:  # noqa: BLE001
@@ -5570,6 +5572,21 @@ def _restored_memory(sensor, now):
     return getattr(sensor, "memory", None)
 
 
+def _carry_since(sensor, m, grace, now, extended_s):
+    """Keep the room's ``since`` (and so occupied/extended) over a restart: while
+    the restored state still shows, and after it if the first real answer agrees
+    with it. Edits ``m`` (a settle() result)."""
+    keep = getattr(sensor, "restored_since", None)
+    if keep is None:
+        return
+    since, was_on = keep
+    shown = m["on"] or grace
+    if not grace:
+        sensor.restored_since = None     # the first real answer: carried once, then the memory holds it
+    m["since"] = min(since, now) if shown == was_on else now
+    m["state"] = "clear" if not shown else ("extended" if now - m["since"] >= extended_s else "occupied")
+
+
 def _publish_rooms(hass):
     """Each room's sensor from two answers: the things' (rooms.occupancy, once
     a cycle) and the radars' (the tracks in each room, every reading). A
@@ -5620,6 +5637,7 @@ def _publish_rooms(hass):
             sensor.memory = rooms_mod.settle(sensor.memory, forced, now, hold if own_hold is None else own_hold,
                                              extended if own_ext is None else own_ext, door, door_settle, door_max)
         m = sensor.memory
+        _carry_since(sensor, m, grace, now, extended if own_ext is None else own_ext)
         since = datetime.fromtimestamp(m["since"], timezone.utc).isoformat(timespec="seconds")
         attrs = {**attrs, "radar": seen["count"], "held": not is_on and seen["count"] > 0 and seen["held"] == seen["count"],
                  "state": m["state"], "since": since, "forced": forced, "inputs": inputs, "door_hold": m["door_hold"],
@@ -5644,6 +5662,7 @@ def _publish_rooms(hass):
                 who.memory = rooms_mod.settle(who.memory, forced, now, hold if own_hold is None else own_hold,
                                               extended if own_ext is None else own_ext, door, door_settle, door_max)
             wm = who.memory
+            _carry_since(who, wm, who_grace, now, extended if own_ext is None else own_ext)
             hold_over = wm["on"] and not humans and not forced and not wm["door_hold"]
             people_on = wm["on"] or who_grace
             who.set_occupancy(people_on, {**attrs, "state": wm["state"],
