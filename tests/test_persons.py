@@ -331,4 +331,6 @@ def test_the_last_charge_is_read_from_the_sensors_history():
     assert began == at(4).timestamp()
     # the watch sat down at 03:59, charged at 04:00 and stopped at its limit: still on the puck
     assert persons.still_on_charger(False, at(4).timestamp() - 60, began, 0)[0] is True
+    full = rows[:2] + [S(state="Full", last_changed=at(6)), S(state="NotCharging", last_changed=at(7))]
+    assert persons.last_charge_began(full) == at(4).timestamp()     # Charging then Full is one charge
     assert persons.last_charge_began(rows[:1]) is None and persons.last_charge_began(None) is None
