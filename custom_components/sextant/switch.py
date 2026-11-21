@@ -3,6 +3,7 @@ occupancy sensor stays on whatever Sextant hears, for a still reader, a
 sleeper, or "keep the office on". Voice-controllable like any switch."""
 import logging
 import time
+from datetime import datetime, timezone
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.core import callback
@@ -37,7 +38,11 @@ class SextantForceOccupied(SwitchEntity, RestoreEntity):
         await super().async_added_to_hass()
         last = await self.async_get_last_state()
         self._attr_is_on = last is not None and last.state == "on"
-        self.on_since = last.last_changed.timestamp() if self._attr_is_on else None   # a restart does not renew the time
+        if self._attr_is_on:      # a restart does not renew the time: the attribute first, last_changed for a switch from before it
+            try:
+                self.on_since = datetime.fromisoformat(last.attributes["on_since"]).timestamp()
+            except (KeyError, TypeError, ValueError):
+                self.on_since = last.last_changed.timestamp()
         expose(self.hass, self.entity_id)
         self._changed()
 
@@ -49,6 +54,11 @@ class SextantForceOccupied(SwitchEntity, RestoreEntity):
     async def async_turn_off(self, **kwargs):
         self._attr_is_on = False
         self._changed()
+
+    @property
+    def extra_state_attributes(self):
+        on = self._attr_is_on and self.on_since is not None
+        return {"on_since": datetime.fromtimestamp(self.on_since, timezone.utc).isoformat(timespec="seconds") if on else None}
 
     def expire(self):
         """The auto-off: called from inside _publish_rooms, so it writes without publishing again."""

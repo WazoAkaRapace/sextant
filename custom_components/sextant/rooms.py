@@ -113,10 +113,13 @@ def room_options(zone) -> dict:
 _NO_MODE = {"", "off", "idle", "standby", "paused", "none", "unknown", "unavailable", "not_home", "false"}
 
 
-def mode_of(state, label=None):
+def mode_of(state, label=None, option=False):
     """The room's mode from its mode entity's state: a dropdown's option as it is
-    ("movie"), ``label`` (or "on") while an on/off entity is on, None otherwise."""
+    (``option``: "Movie", and "Idle" or "Home" too), ``label`` (or "on") while an
+    on/off entity is on, None otherwise."""
     text = str(state if state is not None else "").strip()
+    if option:
+        return None if text.lower() in ("", "unknown", "unavailable") else text[:40]
     if text.lower() in _NO_MODE:
         return None
     return (label or "on") if text.lower() in ACTIVE_STATES else text[:40]

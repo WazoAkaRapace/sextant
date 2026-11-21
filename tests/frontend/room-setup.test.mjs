@@ -46,6 +46,7 @@ test("clicking a suggestion adds it, and again takes it out", () => {
   assert.equal(toggled("binary_sensor.a", "media_player.b", true), "binary_sensor.a, media_player.b");
   assert.equal(toggled(["binary_sensor.a", "media_player.b"], "binary_sensor.a", true), "media_player.b");
   assert.equal(toggled("binary_sensor.a", "binary_sensor.a", true), undefined);
+  assert.equal(toggled("sensor.desk_power > 50", "media_player.b", true), "sensor.desk_power>50, media_player.b");   // a spaced test stays whole
   assert.equal(toggled("sensor.lux<5", "sensor.lux<20", false), undefined);   // the same sensor, whatever its threshold
   assert.equal(toggled("binary_sensor.old", "binary_sensor.new", false), "binary_sensor.new");
   assert.ok(picked("sensor.lux<5", "sensor.lux<20") && !picked("", "sensor.lux<20"));

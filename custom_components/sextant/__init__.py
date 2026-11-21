@@ -5624,6 +5624,9 @@ def _carry_since(sensor, m, grace, now, extended_s):
     m["state"] = "clear" if not shown else ("extended" if now - m["since"] >= extended_s else "occupied")
 
 
+_rooms_from = 0.0     # when the rooms first published this run
+
+
 def _publish_rooms(hass):
     """Each room's sensor from two answers: the things' (rooms.occupancy, once
     a cycle) and the radars' (the tracks in each room, every reading). A
@@ -5643,6 +5646,8 @@ def _publish_rooms(hass):
     door_settle, door_max = _tuning(layout, "door_settle_secs"), _tuning(layout, "door_hold_max_secs")
     sleep_hold, long_hold = _tuning(layout, "room_sleep_hold_secs"), _tuning(layout, "room_extended_hold_secs")
     force_max = _tuning(layout, "room_force_max_secs")
+    global _rooms_from
+    _rooms_from = _rooms_from or now
 
     def elsewhere(here):
         """The people the other rooms hold right now."""
@@ -5674,17 +5679,21 @@ def _publish_rooms(hass):
         own_hold, own_ext = link.get("hold_secs"), link.get("extended_secs")
         own_sleep, own_long = link.get("sleep_hold_secs"), link.get("extended_hold_secs")
 
-        def settled(prev, raw, grace=False):
+        def settled(prev, raw):
             """(settle()'s answer, kept): a keep-only sensor holds a room that is already on, and the
             clear-after is the sleep or extended one when that applies."""
             prev = prev or {}
-            kept = bool(keep) and not raw and bool(prev.get("on") or grace)
-            hold_s = rooms_mod.hold_for(asleep, prev.get("state") == "extended", hold if own_hold is None else own_hold,
+            # Only a stay confirmed since the start is kept: a restored "on" proves nobody is here now.
+            kept = bool(keep) and not raw and bool(prev.get("on"))
+            ext_s = extended if own_ext is None else own_ext
+            # By the clock, not the last published state: a publish may come after the stay passed the threshold.
+            long = bool(prev.get("on")) and prev.get("since") is not None and now - prev["since"] >= ext_s
+            hold_s = rooms_mod.hold_for(asleep, long, hold if own_hold is None else own_hold,
                                         sleep_hold if own_sleep is None else own_sleep, long_hold if own_long is None else own_long)
-            # A keep-only sensor is not a person: it never starts the door's shut-in wait.
-            return rooms_mod.settle(prev, raw or kept, now, hold_s, extended if own_ext is None else own_ext,
-                                    None if kept else door, door_settle, door_max), kept
-        sensor.memory, kept = settled(_restored_memory(sensor, now), sensed or forced, grace)
+            # A keep-only sensor is not a person: it never starts the door's shut-in wait (an open door still ends one).
+            return rooms_mod.settle(prev, raw or kept, now, hold_s, ext_s,
+                                    None if kept and door else door, door_settle, door_max), kept
+        sensor.memory, kept = settled(_restored_memory(sensor, now), sensed or forced)
         if sensed and attrs.get("people"):
             sensor.door_people = list(attrs["people"])   # a lingering radar track has none: keep who was there
         if not sensed and rooms_mod.release_if_elsewhere(sensor.memory, getattr(sensor, "door_people", None), elsewhere(key)):
@@ -5697,13 +5706,14 @@ def _publish_rooms(hass):
                  "door_at": m["door_at"], "door_people": list(getattr(sensor, "door_people", None) or []),
                  "hold_over": m["on"] and not sensed and not forced and not kept and not m["door_hold"],
                  "keep": keep, "asleep": asleep, "dark": rooms_mod.is_dark(link.get("dark"), state_of),
-                 "mode": rooms_mod.mode_of(state_of(link["mode_entity"]), link.get("mode_label")) if link.get("mode_entity") else None}
+                 "mode": rooms_mod.mode_of(state_of(link["mode_entity"]), link.get("mode_label"), link["mode_entity"].split(".")[0] in ("input_select", "select")) if link.get("mode_entity") else None}
         attrs["sources"] = rooms_mod.sources(bool(is_on), seen["count"] > 0, inputs, forced, m["door_hold"],
                                              grace and not m["on"], attrs["hold_over"], kept)
         on = m["on"] or grace          # a restart's carried-over state shows, but never feeds the hold or the door latch
         sensor.set_occupancy(on, attrs)
         was, sensor.event_state = getattr(sensor, "event_state", None), m["state"]
-        if was is not None and was != m["state"] and now >= _events_from:     # never the first answer after a start
+        # Never the first answer after a start, nor while the house settles (radar-only houses never set _events_from).
+        if was is not None and was != m["state"] and now >= max(_events_from, _rooms_from + EVENTS_SETTLE_S):
             hass.bus.async_fire("sextant_room_occupancy_changed", {
                 "entity_id": getattr(sensor, "entity_id", None), "room": key[1], "floor": key[0], "area_id": attrs.get("area_id"),
                 "state": m["state"], "previous": was, "people": attrs.get("people") or [], "pets": attrs.get("pets") or [],
@@ -5716,7 +5726,7 @@ def _publish_rooms(hass):
             if humans and attrs.get("people"):
                 who.door_people = list(attrs["people"])
             who_grace = _restoring(who, humans, now)
-            who.memory, who_kept = settled(_restored_memory(who, now), humans or forced, who_grace)
+            who.memory, who_kept = settled(_restored_memory(who, now), humans or forced)
             if not humans and rooms_mod.release_if_elsewhere(who.memory, getattr(who, "door_people", None), elsewhere(key)):
                 who.memory, who_kept = settled(who.memory, forced)
             wm = who.memory

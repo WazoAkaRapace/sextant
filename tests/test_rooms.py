@@ -333,6 +333,7 @@ def test_room_options_are_read_safely():
 
 def test_mode_dark_and_the_hold_that_applies():
     assert rooms.mode_of("Movie") == "Movie" and rooms.mode_of("on", "Guests") == "Guests" and rooms.mode_of("playing") == "on"
+    assert rooms.mode_of("Idle", option=True) == "Idle" and rooms.mode_of("Home", "x", True) == "Home" and rooms.mode_of("unknown", option=True) is None
     assert rooms.mode_of("off") is None and rooms.mode_of("unavailable") is None and rooms.mode_of(None) is None
     states = {"sensor.lux": "12", "sun.sun": "above_horizon"}
     assert rooms.is_dark("sensor.lux<20", states.get) is True and rooms.is_dark(None, states.get) is False
@@ -360,6 +361,7 @@ def test_publish_rooms_keep_sleep_mode_event_and_force_auto_off(hass, monkeypatc
     hass.data["sextant_room_answers"] = {key: (False, None)}
     clock = [1000.0]
     monkeypatch.setattr(sextant.time, "time", lambda: clock[0])
+    monkeypatch.setattr(sextant, "_rooms_from", 1.0)      # long past the settle after a start, when no room event fires
     sensor = hass.data["sextant_room_sensors"][key]
     sextant._publish_rooms(hass)
     assert sensor._attr_is_on is False and not fired                 # the TV alone never starts a stay

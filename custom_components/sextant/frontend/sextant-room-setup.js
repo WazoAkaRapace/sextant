@@ -37,7 +37,7 @@ export function areaEntities(hass, areaId) {
   if (!areaId) return [];
   const devices = hass?.devices || {};
   return Object.values(hass?.entities || {})
-    .filter((e) => (e.area_id || devices[e.device_id]?.area_id) === areaId && !e.hidden && !/_sextant_/.test(e.entity_id))
+    .filter((e) => (e.area_id || devices[e.device_id]?.area_id) === areaId && !e.hidden && e.platform !== "sextant" && !/_sextant_/.test(e.entity_id))
     .map((e) => hass.states?.[e.entity_id]).filter(Boolean);
 }
 
@@ -63,7 +63,7 @@ export function suggestions(stepKey, states) {
   })).sort((a, b) => a.label.localeCompare(b.label));
 }
 
-const listOf = (current) => (Array.isArray(current) ? current : String(current ?? "").split(/[,\s]+/)).map((v) => String(v).trim()).filter(Boolean);
+const listOf = (current) => (Array.isArray(current) ? current : String(current ?? "").replace(/\s*(>=|<=|>|<)\s*/g, "$1").split(/[,\s]+/)).map((v) => String(v).trim()).filter(Boolean);
 const entityOf = (v) => v.replace(/[<>]=?.*$/, "");
 
 /** Whether a suggestion is already in the field (whatever threshold it was given). */
