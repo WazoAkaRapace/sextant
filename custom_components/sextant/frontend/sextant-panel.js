@@ -535,9 +535,12 @@ class SextantLive extends LitElement {
     this._truth = null;     // the last mark's evaluation {mark, rows, current_weight}
     this._marks = [];       // the selected thing's marks
     this._blend = null;     // slider value while it is being dragged (0..100)
-    this._options = { circles: false, fingerprint: false, trails: true, grid: "off", labels: true, subzones: true, receivers: true, access_points: true, links: true, all_links: false, image: true,
+    this._options = { circles: false, fingerprint: false, trails: true, grid: "off", labels: true, subzones: true, receivers: false, access_points: true, links: false, all_links: false, image: true,
                       view: "2d", walls: true, all_floors: false, spread: "apart" };
     try { Object.assign(this._options, JSON.parse(localStorage.getItem("sextant.live.options") || "{}")); } catch { /* ignore */ }
+    // Proxies and signal lines used to be on by default, so a saved "on" from
+    // before then is the old default rather than a choice: switch them off once.
+    if (!this._options.quiet) Object.assign(this._options, { receivers: false, links: false, quiet: 1 });
     this._history = null; // {ent, from, to, points:[{t,x,y,f}] }
     this._timeline = null; // {ent, at, stays:[{start,end,floor,room,spot,unheard?,partial?}], last_heard}
     this._timelineAll = false;
@@ -1028,7 +1031,7 @@ class SextantLive extends LitElement {
   }
 
   _pushMarks() {
-    const mine = this._selected ? this._marks.filter((m) => m.floor === this.floor) : [];
+    const mine = this._selected && this._options.links ? this._marks.filter((m) => m.floor === this.floor) : [];
     this._map?.setMarks(mine.map((m) => ({ x: m.x, y: m.y, label: `mark ${m.id}` })));
   }
 
@@ -1130,7 +1133,7 @@ class SextantLive extends LitElement {
     if (changed.has("data") || changed.has("floor")) this._pushFloor();
     if (changed.has("positions") || changed.has("floor") || changed.has("data") || changed.has("_scrub") || changed.has("_history")) this._pushThings();
     if (changed.has("hass") && changed.get("hass")?.areas !== this.hass?.areas) this._map.setAreas(this.hass?.areas);
-    if (changed.has("floor") || changed.has("_marks")) this._pushMarks();
+    if (changed.has("floor") || changed.has("_marks") || changed.has("_options")) this._pushMarks();
     if (changed.has("floor") || changed.has("_heat") || changed.has("data")) this._pushHeat();
     if (changed.has("_options")) this._map.setOptions(this._options);
     if (changed.has("data")) this._map.setOptions({ staleAfter: this._staleAfter() });
@@ -1665,7 +1668,7 @@ class SextantLive extends LitElement {
       ["access_points", "Wi-Fi", "Draw the Wi-Fi access points placed on the plan. Point at one (or tap it) for its name and how many clients it has", "mdi:wifi"],
       ...(deep ? [] : [
         ...(this._isAdmin() ? [["wifi_heat", "Signal", "The Wi-Fi signal map: how strong the signal is in each square metre, or which access point clients are on there, measured from the proxies and the people's phones and watches", "mdi:wifi-strength-3"]] : []),
-        ["links", "Signal lines", "With a thing selected: a line to each proxy that heard it, green when close and red by ten metres, thicker for the ones that count most - and for a phone or watch, a dashed line to its Wi-Fi access point", "mdi:transit-connection-variant"],
+        ["links", "Signal lines", "With a thing selected: a line to each proxy that heard it, green when close and red by ten metres, thicker for the ones that count most - and for a phone or watch, a dashed line to its Wi-Fi access point. Also the pins where you said it really was", "mdi:transit-connection-variant"],
         ["all_links", "All lines", "A line from every thing on the floor to the proxy that heard it best, without selecting one: which proxy is carrying what, at a glance", "mdi:vector-polyline"],
         ["circles", "Range circles", "The distance each proxy measured, as a circle: the fix is where they meet", "mdi:radar"],
         ["fingerprint", "Fingerprint fix", "Where the fingerprint estimator alone would put each thing (dashed), next to the published fix", "mdi:fingerprint"],

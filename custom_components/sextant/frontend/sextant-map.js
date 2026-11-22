@@ -2265,7 +2265,8 @@ export class SextantMap {
     const clusters = this.options.cluster === false ? [] : clusterThings(this.things, (THING_RADIUS * 1.8) / k, picked);
     const clustered = new Map();
     for (const c of clusters) for (const m of c.members) clustered.set(m.ent, c);
-    for (const t of this.things) {
+    // The focused thing is drawn last, on top of whatever shares its spot.
+    for (const t of focus ? [...this.things].sort((a, b) => (a.ent === focus) - (b.ent === focus)) : this.things) {
       if (!t.cords) continue;
       const custom = t.color || null;
       const color = thingColor(t.ent, custom);
@@ -2346,7 +2347,8 @@ export class SextantMap {
         ctx.fillText((t.label || t.ent).slice(0, 2).toUpperCase(), t.cords[0], t.cords[1]);
       }
       const label = ghost ? `${t.label || t.ent} · ${shortAge(age)} ago` : (t.label || t.ent);
-      if (this.options.labels || focused || ghost) {
+      // With one thing picked out, the others keep their faded dots and lose their names.
+      if (focused || (!focus && (this.options.labels || ghost))) {
         this._label(ctx, label, t.cords[0], t.cords[1] + r + 9 / k, focused ? 13 : 11, 0.9, null,
                     focused ? LABEL_PRIO.focus : LABEL_PRIO.thing);
       }
@@ -2380,7 +2382,7 @@ export class SextantMap {
     ctx.fillText(String(c.members.length), c.x, c.y);
     const names = c.members.map((t) => t.label || t.ent);
     const label = names.length > 2 ? `${names[0]}, ${names[1]} +${names.length - 2}` : names.join(", ");
-    if (this.options.labels) this._label(ctx, label, c.x, c.y + r + 9 / k, 11, 0.9, null, LABEL_PRIO.thing);
+    if (this.options.labels && !focus) this._label(ctx, label, c.x, c.y + r + 9 / k, 11, 0.9, null, LABEL_PRIO.thing);
     this._thingMarks.push({ x: c.x, y: c.y, r });
     ctx.restore();
   }
