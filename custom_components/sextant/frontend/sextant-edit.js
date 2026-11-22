@@ -1384,7 +1384,7 @@ class SextantEdit extends LitElement {
               .map(([addr, s]) => html`<option value=${addr} ?selected=${addr === this._placing} ?disabled=${placedAddr.has(addr)}>${s.name || s.slug}${placedAddr.has(addr) ? " (placed)" : ""}${s.area ? ` · ${s.area}` : ""}</option>`)}
           </select></div>` : nothing}
         ${this._tool === "ap" ? this._renderApPicker() : nothing}
-        ${this._tool === "select" && !sel ? html`<div class="hint">Click a proxy, room or spot to edit it; drag it to move it.${locked.length ? ` Locked: ${locked.join(", ")} (the padlock in the toolbar).` : ""}</div>` : nothing}
+        ${this._tool === "select" && !sel ? html`<div class="hint passive">Click a proxy, room or spot to edit it; drag it to move it.${locked.length ? ` Locked: ${locked.join(", ")} (the padlock in the toolbar).` : ""}</div>` : nothing}
         ${this._tool === "radar" ? html`<div class="hint">Click where the mmWave sensor is mounted, then pick the device and the way it faces in the side panel.</div>` : nothing}
         ${this._tool === "remark" ? html`<div class="hint">Click where the note goes, then type it in the side panel.</div>` : nothing}
         ${this._tool === "measure" ? html`<div class="hint">
@@ -1428,7 +1428,7 @@ class SextantEdit extends LitElement {
           <ul class="plain small">${(this._proposal.report || this._proposal.changes || []).slice(0, 12).map((c) => html`<li>${typeof c === "string" ? c : `${c.name || c.zone || ""}: ${c.change || c.note || JSON.stringify(c)}`}</li>`)}</ul>
           <div class="row">${uiButton({ label: "Accept", kind: "primary", onClick: () => this._acceptProposal() })}${uiButton({ label: "Reject", kind: "text", onClick: () => { this._proposal = null; } })}</div>
         </div>` : nothing}
-        <details class="more setup" ?open=${!f || this._tool === "pin"}><summary>Floor setup: alignment, add a floor, history</summary>
+        <details class="more setup" ?open=${!f || this._tool === "pin" || sel?.kind === "pin" || !!this._biasView?.on}><summary>Floor setup: alignment, add a floor, history</summary>
         ${f ? this._renderBiasView(f) : nothing}
         ${f ? this._renderAlignment(f) : nothing}
         <div class="card">
@@ -1703,6 +1703,9 @@ class SextantEdit extends LitElement {
     .hint input[type="search"] { width: 200px; max-width: 100%; padding: 4px 6px; font: inherit; }
     details.more { margin-top: 6px; }
     details.more.setup > summary { padding: 6px 12px; }
+    .hint.passive { pointer-events: none; }   /* nothing to click in it, and what is under it must stay reachable */
+    /* On a phone a toolbar menu opens from the toolbar's left edge: from its own button it ran off the screen. */
+    @media (max-width: 720px) { .toolbar { position: relative !important; } .toolbar details.menu { position: static; } }
     details.more > summary { cursor: pointer; padding: 6px 0; font-size: 13px; color: var(--secondary-text-color); }
     .toolbar details.menu .menu-items { left: 0; right: auto; }
     .toolbar details.menu > summary { width: 36px; height: 36px; color: var(--primary-text-color); }
