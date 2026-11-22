@@ -226,7 +226,34 @@ def test_elect_hysteresis_and_dwell():
     assert floor == "b" and ch["since"] == 61.0
     # A wider margin (incumbent tenure bonus) can hold off the same lead.
     floor, ch = sextant._elect_floor({"a": 0.56, "b": 0.44}, "b", {"a", "b"}, None, now=0.0, margin=0.15)
-    assert floor == "b" and ch is None
+    assert floor == "b" and "since" not in ch
+
+
+def test_a_small_lead_that_lasts_wins_the_floor():
+    probs, ch, seen = {"a": 0.46, "b": 0.40}, None, []
+    for t in (0.0, 100.0, 239.0, 240.0):
+        floor, ch = sextant._elect_floor(probs, "b", {"a", "b"}, ch, now=t, switch_secs=60.0, margin=0.15)
+        seen.append(floor)
+    assert seen == ["b", "b", "b", "a"]   # 4 x switch_secs of unbroken lead
+    # Any lapse restarts the clock.
+    _, ch = sextant._elect_floor(probs, "b", {"a", "b"}, None, now=0.0, switch_secs=60.0, margin=0.15)
+    _, ch = sextant._elect_floor({"a": 0.4, "b": 0.46}, "b", {"a", "b"}, ch, now=200.0, switch_secs=60.0, margin=0.15)
+    floor, ch = sextant._elect_floor(probs, "b", {"a", "b"}, ch, now=250.0, switch_secs=60.0, margin=0.15)
+    assert floor == "b" and ch["led"] == 250.0
+    # A short switch_secs still waits FLOOR_LASTING_LEAD_MIN_S; the scores must agree.
+    _, ch = sextant._elect_floor(probs, "b", {"a", "b"}, None, now=0.0, switch_secs=0.0, margin=0.15)
+    assert sextant._elect_floor(probs, "b", {"a", "b"}, ch, now=60.0, switch_secs=0.0, margin=0.15)[0] == "b"
+    floor, vetoed = sextant._elect_floor(probs, "b", {"a", "b"}, ch, now=120.0, switch_secs=0.0, margin=0.15,
+                                         scores={"a": 0.5, "b": 0.6})
+    assert floor == "b" and "since" not in vetoed   # a vetoed small lead must not hold the room
+    assert sextant._elect_floor(probs, "b", {"a", "b"}, ch, now=120.0, switch_secs=0.0, margin=0.15)[0] == "a"
+    # Two challengers trading first place: the incumbent has still been behind all along.
+    ch, three = None, {"a", "b", "c"}
+    for t, p in ((0.0, {"a": 0.40, "b": 0.34, "c": 0.26}), (100.0, {"a": 0.33, "b": 0.30, "c": 0.37}),
+                 (239.0, {"a": 0.40, "b": 0.34, "c": 0.26})):
+        floor, ch = sextant._elect_floor(p, "b", three, ch, now=t, switch_secs=60.0, margin=0.15)
+        assert floor == "b"
+    assert sextant._elect_floor({"a": 0.40, "b": 0.34, "c": 0.26}, "b", three, ch, now=240.0, switch_secs=60.0, margin=0.15)[0] == "a"
 
 
 # --------------------------------------------------------------------------- #
