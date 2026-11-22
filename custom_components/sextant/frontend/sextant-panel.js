@@ -43,6 +43,8 @@ const MODES = [
   ["tuning", "Tuning", "mdi:chart-timeline-variant"],
   ["advice", "Advice", "mdi:lightbulb-on-outline"],
 ];
+// Pages for setting up and tuning, behind the one Setup tab.
+const SETUP_MODES = ["proxies", "bermuda", "calibration", "tuning", "advice"];
 const FLOOR_MODES = new Set(["live", "edit", "proxies", "calibration"]);
 // Pages that change the layout, the things or Bermuda, or expose every
 // address the house hears: administrators only (the backend refuses the
@@ -172,6 +174,9 @@ class SextantPanel extends LitElement {
 
   render() {
     const floors = this._data?.layout?.floor || [];
+    const setup = this._modes().filter(([id]) => SETUP_MODES.includes(id));
+    const inSetup = setup.some(([id]) => id === this._mode);
+    if (inSetup) this._lastSetup = this._mode;
     return html`
       <div class="topbar">
         <ha-menu-button .hass=${this.hass} .narrow=${this.narrow}></ha-menu-button>
@@ -180,16 +185,19 @@ class SextantPanel extends LitElement {
           <span class="brand-text"><span class="brand-name">Sextant</span><span class="brand-sub">Powered by Bermuda</span></span>
         </a>
         <nav class="modes" role="tablist">
-          ${this._modes().map(([id, label, icon]) => html`
-            <button role="tab" class=${this._mode === id ? "active" : ""} aria-selected=${this._mode === id}
-                    @click=${() => this._setMode(id)} title=${label}>
+          ${[...this._modes().filter(([id]) => !SETUP_MODES.includes(id)), ...(setup.length ? [["setup", "Setup", "mdi:cog-outline"]] : [])].map(([id, label, icon]) => {
+            const on = id === "setup" ? inSetup : this._mode === id;
+            return html`<button role="tab" class=${on ? "active" : ""} aria-selected=${on}
+                    @click=${() => this._setMode(id === "setup" ? (inSetup ? this._mode : this._lastSetup || setup[0][0]) : id)} title=${label}>
               <ha-icon icon=${icon}></ha-icon><span class="mode-label">${label}</span>
-            </button>`)}
+            </button>`; })}
         </nav>
         <div class="spacer"></div>
         <div class="wide-only floorstamp">${this._renderFloorAndStamp(floors)}</div>
         <a class="repo" href=${REPO_URL} target="_blank" rel="noopener" title="Sextant on GitHub"><ha-icon icon="mdi:github"></ha-icon></a>
       </div>
+      ${inSetup ? html`<nav class="subbar" aria-label="Setup pages">${uiSegmented({ value: this._mode, options: setup.map(([id, label]) => ({ value: id, label })),
+        onChange: (v) => this._setMode(v) })}</nav>` : nothing}
       ${this._error ? html`<div class="banner error">${this._error} <button @click=${() => this._load()}>Retry</button></div>` : nothing}
       ${this._renderVersionBanner()}
       <div class="body">${this._renderMode()}</div>
@@ -379,6 +387,7 @@ class SextantPanel extends LitElement {
     .brand-name { font-weight: 600; font-size: 18px; }
     .brand-sub { font-size: 9px; letter-spacing: 0.04em; opacity: 0.75; text-transform: uppercase; }
     .modes { display: flex; gap: 2px; }
+    .subbar { display: flex; flex: none; padding: 6px 12px; overflow-x: auto; background: var(--card-background-color); border-bottom: 1px solid var(--divider-color); }
     .modes button { display: flex; align-items: center; gap: 6px; background: transparent; color: inherit; border: 0; border-bottom: 3px solid transparent; padding: 0 10px; height: 56px; cursor: pointer; font: inherit; opacity: 0.8; }
     .modes button.active { opacity: 1; border-bottom-color: currentColor; }
     .modes button:hover { opacity: 1; }

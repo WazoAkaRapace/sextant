@@ -31,6 +31,8 @@ const TOOLS = [
   ["ap", "Wi-Fi", "mdi:wifi", "Place a Wi-Fi access point: pick one UniFi knows, then click the map. Nothing positions by it - it shows where the access points are, and tells the Wi-Fi floor hint exactly which floor and room each is on"],
   ["remark", "Note", "mdi:note-text-outline", "Leave a note on the plan - where a proxy is going, what to check, what a room is really called. Notes are for people; nothing about positioning reads them"],
 ];
+// The tools always in the toolbar; the rest sit under More: Scale is set once, the others are for now and then.
+const BASIC_TOOLS = ["select", "zone", "receiver", "subzone"];
 // Layers that can be locked against selection and dragging, so a finished
 // room layout is not nudged while proxies are being moved (and vice versa).
 const LOCKS = [
@@ -885,33 +887,42 @@ class SextantEdit extends LitElement {
 
   /** Link a room to a Home Assistant area: its sensors then carry the area's id, and its label the area's icon. */
   _renderAreaLink(item) {
-    const areas = this._areas();
+    const here = this._floorObj()?.floor_id;
+    const areas = this._areas().sort((a, b) => (a.floor_id !== here) - (b.floor_id !== here));   // this floor's areas first; stable, so still by name
     if (!areas.length) return nothing;
     const floors = this.hass?.floors || {};
     const area = this.hass?.areas?.[item.area_id];
     return html`<div class="row" style="align-items: center">
       ${uiSelect({ label: "Home Assistant area", value: item.area_id || "", options: [{ value: "", label: "not linked" },
         ...areas.map((a) => ({ value: a.area_id, label: a.floor_id && floors[a.floor_id] ? `${a.name} (${floors[a.floor_id].name})` : a.name }))],
-        onChange: (v) => { this._edit("area_id", v || undefined); this._map.invalidate(); }, style: "flex: 1" })}
+        onChange: (v) => {
+          const first = !item.area_id;
+          this._edit("area_id", v || undefined);
+          const picked = this.hass?.areas?.[v];
+          if (picked && first && /^Room \d+$/.test(item.entity_id || "")) this._edit("entity_id", picked.name);   // a room not named yet takes the area's name
+          this._map.invalidate();
+        }, style: "flex: 1" })}
       ${area?.icon ? html`<ha-icon icon=${area.icon} title="The area's icon, shown in this room's label"></ha-icon>` : nothing}
       ${area?.name && area.name !== item.entity_id ? html`<button class="chip" title=${`Rename this room ${area.name}, after the area`} @click=${() => this._edit("entity_id", area.name)}>Use area name</button>` : nothing}
-    </div>
-    <div class="muted small">A thing in this room reports the area's id (<code>area_id</code> on its room and location sensors), so an automation can act on the area itself.</div>`;
+    </div>`;
   }
 
   /** This room's occupancy sensor: its own timing, other sensors that say someone is here, and a door that holds it. */
-  _renderOccupancyOptions(item) {
+  _renderOccupancyOptions(item, part) {
     const wizard = this._wizard?.zone === item ? this._wizard : null;
+    // Outside the wizard the card shows the heading with the Wizard button; every field waits under More options.
+    if (!wizard && part === "head") return html`<div class="row" style="margin-top: 8px; align-items: center">
+        <span class="muted small">Occupancy sensor</span><span class="grow"></span>${uiButton({ label: "Wizard", icon: "mdi:wizard-hat", onClick: () => { this._wizard = { zone: item, step: 0 }; } })}</div>`;
+    if (!!wizard !== (part === "head")) return nothing;
     const steps = wizard ? [ROOM_STEPS[wizard.step]] : ROOM_STEPS;
     const go = (step) => { this._wizard = step == null ? null : { zone: item, step }; };
-    return html`<div class="row" style="margin-top: 8px; align-items: center">
-        <span class="muted small">Occupancy sensor${wizard ? html` · step ${wizard.step + 1} of ${ROOM_STEPS.length}: <b>${steps[0].title}</b>` : nothing}</span><span class="grow"></span>
-        ${wizard ? nothing : uiButton({ label: "Wizard", icon: "mdi:wizard-hat", onClick: () => go(0) })}
-      </div>
+    return html`${wizard ? html`<div class="row" style="margin-top: 8px; align-items: center">
+        <span class="muted small">Occupancy sensor · step ${wizard.step + 1} of ${ROOM_STEPS.length}: <b>${steps[0].title}</b></span><span class="grow"></span>
+      </div>` : nothing}
       ${steps.map((step) => this._renderRoomStep(item, step, !!wizard))}
       ${wizard ? html`<div class="row">
           ${uiButton({ label: "Back", disabled: wizard.step === 0, onClick: () => go(wizard.step - 1) })}<span class="grow"></span>
-          ${uiButton({ label: "Show all", kind: "text", onClick: () => go(null) })}
+          ${uiButton({ label: "Show all", kind: "text", onClick: () => { go(null); this.updateComplete.then(() => { const d = this.renderRoot.querySelector("details.more.room"); if (d) d.open = true; }); } })}
           ${wizard.step < ROOM_STEPS.length - 1 ? uiButton({ label: "Next", kind: "primary", onClick: () => go(wizard.step + 1) })
             : uiButton({ label: "Done", kind: "primary", onClick: () => { go(null); toast(this, "Room set up. Save to keep it"); } })}
         </div>` : html`
@@ -1144,7 +1155,10 @@ class SextantEdit extends LitElement {
     const draft = this._cleanDraft();
     const ext = file.name.includes(".") ? file.name.slice(file.name.lastIndexOf(".")) : ".png";
     const filename = `${name}${ext}`;
-    draft.floor.push({ name, scale: null, receivers: [], zones: [], subzones: [] });
+    // Named like a Home Assistant floor: linked to it, at its level.
+    const ha = Object.values(this.hass?.floors || {}).find((x) => !draft.floor.some((f) => f.floor_id === x.floor_id) && String(x.name).trim().toLowerCase() === String(name).trim().toLowerCase());
+    draft.floor.push({ name, scale: null, receivers: [], zones: [], subzones: [],
+      ...(ha ? { floor_id: ha.floor_id, ...(Number.isFinite(ha.level) ? { level: ha.level } : {}) } : {}) });
     const form = new FormData();
     form.append("coordinates", JSON.stringify(draft));
     form.append("new_floor", "true");
@@ -1336,7 +1350,10 @@ class SextantEdit extends LitElement {
           <button title="Zoom out" aria-label="Zoom out" @click=${() => this._map.zoomBy(1 / 1.3)}><ha-icon icon="mdi:minus"></ha-icon></button>
         </div>
         <div class="toolbar">
-          ${TOOLS.map(([id, label, icon, tip]) => html`<button class="tool ${this._tool === id ? "active" : ""}" title=${`${label}: ${tip}`} aria-label=${label} aria-pressed=${this._tool === id} @click=${() => this._setTool(id)}><ha-icon icon=${icon}></ha-icon><span>${label}</span></button>`)}
+          ${[...BASIC_TOOLS.map((id) => TOOLS.find((t) => t[0] === id)), ...TOOLS.filter(([id]) => id === this._tool && !BASIC_TOOLS.includes(id))]
+            .map(([id, label, icon, tip]) => html`<button class="tool ${this._tool === id ? "active" : ""}" title=${`${label}: ${tip.split(". ")[0]}`} aria-label=${label} aria-pressed=${this._tool === id} @click=${() => this._setTool(id)}><ha-icon icon=${icon}></ha-icon><span>${label}</span></button>`)}
+          ${uiMenu({ label: "More tools", icon: "mdi:dots-horizontal", items: TOOLS.filter(([id]) => !BASIC_TOOLS.includes(id))
+            .map(([id, label, icon, tip]) => ({ label, icon, title: tip, onClick: () => this._setTool(id) })) })}
           <span class="sep"></span>
           ${LOCKS.map(([kind, label, icon]) => html`<button class="tool lock ${this._locks[kind] ? "locked" : ""}" aria-label=${`${label} ${this._locks[kind] ? "locked" : "unlocked"}`} aria-pressed=${!!this._locks[kind]} title=${this._locks[kind] ? `${label} are locked: click to allow selecting and moving them` : `${label} can be moved: click to lock them`} @click=${() => this._setLock(kind, !this._locks[kind])}>
             <span class="lockicons"><ha-icon icon=${icon}></ha-icon><ha-icon class="badge" icon=${this._locks[kind] ? "mdi:lock" : "mdi:lock-open-variant-outline"}></ha-icon></span><span>${label}</span></button>`)}
@@ -1365,12 +1382,14 @@ class SextantEdit extends LitElement {
               .map(([addr, s]) => html`<option value=${addr} ?selected=${addr === this._placing} ?disabled=${placedAddr.has(addr)}>${s.name || s.slug}${placedAddr.has(addr) ? " (placed)" : ""}${s.area ? ` · ${s.area}` : ""}</option>`)}
           </select></div>` : nothing}
         ${this._tool === "ap" ? this._renderApPicker() : nothing}
+        ${this._tool === "radar" ? html`<div class="hint">Click where the mmWave sensor is mounted, then pick the device and the way it faces in the side panel.</div>` : nothing}
+        ${this._tool === "remark" ? html`<div class="hint">Click where the note goes, then type it in the side panel.</div>` : nothing}
         ${this._tool === "measure" ? html`<div class="hint">
           ${this._measure?.b ? html`${uiField({ label: `Distance between the two points (${lenUnit(this.hass)})`, type: "number", step: 0.01, min: 0.1, onChange: (v) => { this._metres = v; }, style: "width: 240px" })} ${uiButton({ label: "Set scale", kind: "primary", onClick: () => this._applyMeasure(this._metres) })}`
             : this._measure ? "Click the second point." : `Click two points a known distance apart. Current scale: ${fmtScale(f?.scale, this.hass)}`}
         </div>` : nothing}
         ${this._tool === "pin" ? html`<div class="hint">Click a point you can find on every floor: an outside corner, a stair post, a chimney. It lands on a room corner when one is near (Alt places it freely). Then switch floor and anchor the same points - the names carry over in order.${this._renderNextPin()}</div>` : nothing}
-        ${["zone", "subzone", "nogo"].includes(this._tool) ? html`<div class="hint">Click to add corners; click the first corner or double-click to close. An edge close to horizontal, vertical or 45° snaps exact (orange); hold Alt to place a corner freely. ${uiButton({ label: "Cancel", kind: "text", onClick: () => { this._map.cancelDraft(); } })}</div>` : nothing}
+        ${["zone", "subzone", "nogo"].includes(this._tool) ? html`<div class="hint">Click each corner, then the first corner again to close. Alt places a corner freely. ${uiButton({ label: "Cancel", kind: "text", onClick: () => { this._map.cancelDraft(); } })}</div>` : nothing}
       </div>
       <aside class="side">
         ${listing ? this._renderRoomList(f, sel?.kind === "zone" ? sel : null) : nothing}
@@ -1386,6 +1405,7 @@ class SextantEdit extends LitElement {
                 { label: "Delete floor", icon: "mdi:delete-outline", danger: true, disabled: this._busy, onClick: () => this._removeFloor() },
               ] })}</h4>
             <div class="row small muted">${(f.receivers || []).length} proxies · ${(f.zones || []).filter((z) => !z.no_go).length} rooms · ${(f.zones || []).filter((z) => z.no_go).length} no-go · ${(f.subzones || []).length} spots${(f.access_points || []).length ? ` · ${f.access_points.length} access point${f.access_points.length === 1 ? "" : "s"}` : ""}</div>
+            <details class="more"><summary>More options</summary>
             <div class="row small muted">Level: storey number, 0 = ground, -1 = basement; orders the floor picker top-down. Elevation: this floor's finished floor above the ground floor's, so ceiling height plus the floor structure; blank assumes 3 m a storey. Bias: election prior, 1.2 = a 20 % head start every cycle.</div>
             <div class="row">
               ${/* Measuring two points gives a float with a dozen decimals; a
@@ -1397,6 +1417,7 @@ class SextantEdit extends LitElement {
               ${uiField({ label: "Election bias", type: "number", step: 0.05, min: 0.25, max: 4, value: f.bias ?? "", placeholder: "1", onChange: (v) => { this._snapshot(); if (v === "" || v == null) delete f.bias; else f.bias = Number(v); this._dirty = true; this.requestUpdate(); }, style: "width: 120px" })}
               ${Object.keys(this.hass?.floors || {}).length ? uiSelect({ label: "Home Assistant floor", value: f.floor_id || "", options: [{ value: "", label: "not linked" }, ...Object.values(this.hass.floors).map((x) => ({ value: x.floor_id, label: x.name }))], onChange: (v) => { this._snapshot(); if (v) f.floor_id = v; else delete f.floor_id; this._dirty = true; this.requestUpdate(); }, style: "width: 170px" }) : nothing}
             </div>
+            </details>
           </div>` : html`<div class="card muted">No floor yet. Add one below.</div>`}
         ${f ? this._renderBiasView(f) : nothing}
         ${f ? this._renderAlignment(f) : nothing}
@@ -1409,8 +1430,9 @@ class SextantEdit extends LitElement {
         <div class="card">
           <h4>Add a floor</h4>
           <form @submit=${(e) => { e.preventDefault(); const fd = new FormData(e.target); this._addFloor(fd.get("name"), fd.get("file")); }}>
-            <div class="row"><input class="grow" type="text" name="name" placeholder="Floor name" required><input type="file" name="file" accept="image/*" required></div>
-            <div class="row">${uiButton({ label: "Add floor", kind: "primary", disabled: this._busy, onClick: (e) => e.target.closest("form").requestSubmit() })}<span class="muted small">The image is stored as the floor's map.</span></div>
+            <div class="row"><input class="grow" type="text" name="name" list="hafloors" placeholder="Floor name" required>
+              <datalist id="hafloors">${Object.values(this.hass?.floors || {}).filter((x) => !(this._draft?.floor || []).some((fl) => fl.floor_id === x.floor_id)).map((x) => html`<option value=${x.name}></option>`)}</datalist><input type="file" name="file" accept="image/*" required></div>
+            <div class="row">${uiButton({ label: "Add floor", kind: "primary", disabled: this._busy, onClick: (e) => e.target.closest("form").requestSubmit() })}<span class="muted small">Pick one of your Home Assistant floors, or type a name. The image is stored as the floor's map.</span></div>
           </form>
         </div>
         ${this._renderHistory()}
@@ -1504,6 +1526,7 @@ class SextantEdit extends LitElement {
     const zones = (f.zones || []).filter((z) => !z.no_go);
     return html`<div class="card">
       <h4>${sel.kind === "receiver" ? "Proxy" : sel.kind === "zone" ? (item.no_go ? "No-go area" : "Room") : "Spot"}</h4>
+      ${sel.kind === "zone" && !item.no_go ? this._renderAreaLink(item) : nothing}
       <div class="row">
         ${uiField({ label: "Name", value: item.entity_id || "", onChange: (v) => this._edit("entity_id", v), style: "flex: 1" })}
       </div>
@@ -1513,6 +1536,9 @@ class SextantEdit extends LitElement {
         </div>
         <div class="row">
           ${uiField({ label: `Mount height (${lenUnit(this.hass)})`, type: "number", step: 0.05, min: 0, max: isImperial(this.hass) ? 33 : 10, value: toDisplayLen(item.height, this.hass), onChange: (v) => this._edit("height", v === "" ? "" : fromDisplayLen(v, this.hass)), style: "width: 150px" })}
+        </div>
+        <details class="more"><summary>More options</summary>
+        <div class="row">
           ${uiField({ label: "Correction ×", type: "number", step: 0.001, min: 0.5, max: 2, value: item.correction ?? "", onChange: (v) => this._edit("correction", v), style: "width: 150px" })}
         </div>
         ${uiSwitch({ label: "Use in positioning", checked: item.solve !== false,
@@ -1524,11 +1550,14 @@ class SextantEdit extends LitElement {
         ${uiSwitch({ label: "Leave this proxy's correction alone", checked: item.calibrate === false,
           onChange: (v) => this._edit("calibrate", v ? false : undefined) })}
         <div class="muted small">Calibration skips it: it is left out of the fit and its correction is never overwritten. For a radio whose distances are the wrong shape rather than the wrong scale - a tablet or a phone, which read long up close and far too short across a room - where no single multiplier fits.</div>
+        </details>
         <div class="muted small">${item.unmatched ? "Bermuda does not report this proxy right now." : "Linked."} x ${fmtNum(item.cords?.x, 0)}, y ${fmtNum(item.cords?.y, 0)}</div>` : nothing}
+      ${sel.kind === "zone" && !item.no_go ? this._renderOccupancyOptions(item, "head") : nothing}
+      ${sel.kind === "zone" ? html`<details class="more room"><summary>More options</summary>
       ${sel.kind === "zone" && !this._listing ? uiSwitch({ label: "No-go area (things can never be here)", checked: !!item.no_go, onChange: (v) => this._edit("no_go", v) }) : nothing}
       ${sel.kind === "zone" && !item.no_go ? html`<div class="row">${uiColour({ host: this, value: item.color || null, auto: "Automatic (from the name)", autoSwatch: `hsl(${thingHue(item.entity_id || "")}, 60%, 55%)`, custom: this._customColourFor === item, onCustom: (on) => { this._customColourFor = on ? item : null; this.requestUpdate(); }, onChange: (v) => this._edit("color", v || undefined) })}</div>` : nothing}
-      ${sel.kind === "zone" && !item.no_go ? this._renderAreaLink(item) : nothing}
-      ${sel.kind === "zone" && !item.no_go ? this._renderOccupancyOptions(item) : nothing}
+      ${item.no_go ? nothing : html`<div class="muted small">A thing in a room linked to an area reports the area's id (<code>area_id</code> on its room and location sensors), so an automation can act on the area itself.</div>`}
+      ${sel.kind === "zone" && !item.no_go ? this._renderOccupancyOptions(item, "rest") : nothing}
       ${sel.kind === "zone" && !item.no_go && (this._floorObj()?.radars || []).length ? html`
         <div class="row">
           ${uiField({ label: "Stays occupied for (s)", type: "number", step: 1, min: 0, max: 3600, value: item.hold_s ?? "", placeholder: String(this.data?.layout?.tuning?.mmwave_hold_s ?? this.data?.tuning_spec?.mmwave_hold_s?.default ?? 10), onChange: (v) => this._edit("hold_s", v), style: "width: 200px" })}
@@ -1541,6 +1570,7 @@ class SextantEdit extends LitElement {
         </div>
         <div class="muted small">An occupancy sensor that says someone is here without saying where (the LD2412 half of an Apollo R PRO-1): the room is occupied while it is on, and for the time above after it goes off. It sees someone sitting still, which a tracking sensor loses.</div>
         <div class="muted small">After an mmWave sensor loses everyone in this room, how long the room stays occupied and the last person stays on the map. Blank follows <code>mmwave_hold_s</code> on the Tuning page. Give a bedroom or a reading corner minutes: someone lying still drops out of a radar's view.</div>` : nothing}
+      </details>` : nothing}
       ${sel.kind === "subzone" ? html`
         <div class="row">
           ${uiSelect({ label: "Parent room", value: item.parent || "", options: [{ value: "", label: "none" }, ...zones.map((z) => ({ value: z.zone_id, label: z.entity_id }))], onChange: (v) => this._edit("parent", v || null), style: "flex: 1" })}
@@ -1552,7 +1582,7 @@ class SextantEdit extends LitElement {
           <div class="muted small">A ringed group goes together: pick Person or Pet and its kinds count too, shown without the grey background.</div>
         </div>
         ${this._renderSpotSize(item, f)}
-        ${this._renderSpotEvidence(item, f)}` : nothing}
+        <details class="more"><summary>More options</summary>${this._renderSpotEvidence(item, f)}</details>` : nothing}
       <div class="row" ?hidden=${this._listing}><span class="muted small">${(item.cords?.length ?? 1)} point(s)</span><span class="grow"></span>${sel.kind === "zone" || sel.kind === "subzone" ? uiButton({ label: "Square up", icon: "mdi:vector-square", onClick: () => this._squareUp(), title: "Make every edge that is nearly horizontal, vertical or 45° exactly that. Other angles stay as drawn" }) : nothing}${uiButton({ label: "Delete", kind: "danger", onClick: () => this._deleteSelection() })}</div>
     </div>`;
   }
@@ -1666,6 +1696,10 @@ class SextantEdit extends LitElement {
     .hint { position: absolute; left: 10px; bottom: 10px; right: 128px; padding: 8px 10px; border-radius: 8px; background: var(--card-background-color); box-shadow: var(--ha-card-box-shadow, 0 1px 4px rgba(0,0,0,0.2)); font-size: 13px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .hint select { max-width: 100%; }
     .hint input[type="search"] { width: 200px; max-width: 100%; padding: 4px 6px; font: inherit; }
+    details.more { margin-top: 6px; }
+    details.more > summary { cursor: pointer; padding: 6px 0; font-size: 13px; color: var(--secondary-text-color); }
+    .toolbar details.menu .menu-items { left: 0; right: auto; }
+    .toolbar details.menu > summary { width: 36px; height: 36px; color: var(--primary-text-color); }
     .chip { padding: 2px 9px; border-radius: 999px; border: 1px solid var(--divider-color); background: var(--secondary-background-color); color: var(--primary-text-color); font: inherit; font-size: 12px; cursor: pointer; }
     .chip.on { background: var(--primary-color); border-color: var(--primary-color); color: var(--text-primary-color, #fff); }
     .chip:hover { border-color: var(--primary-color); }

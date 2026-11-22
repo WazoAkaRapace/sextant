@@ -96,6 +96,8 @@ token, in Home Assistant's own theme and unit system. Eight pages:
 | [Tuning](docs/tuning.md) | the stability KPI, accuracy from location pins, every knob live |
 | [Advice](docs/advice.md) | which rooms the proxies serve worst and where one more would help |
 
+In the panel, Bermuda, Proxies, Calibration, Tuning and Advice are the pages of the **Setup** tab.
+
 ## What Sextant adds to Bermuda
 
 - A position on the floor plan: trilateration fused with fingerprints the
