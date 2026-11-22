@@ -157,6 +157,12 @@ def best_place(store: dict, ap, fallback=(None, None)) -> tuple:
     return tuple(fallback) if fallback else (None, None)
 
 
+def is_watch(entity, name=None) -> bool:
+    """A Wi-Fi tracker that is a watch, by its entity id or name.
+    shortcut: a name match, so a watch named without "watch" still counts; upgrade to the device model if one slips through."""
+    return "watch" in f"{entity or ''} {name or ''}".lower()
+
+
 def floor_factor(odds: dict | None, floor, weight: float) -> float:
     """The multiplier a floor's election score gets from the Wi-Fi hint:
     1 for the floor the access point most means, down to 1 - weight for a
