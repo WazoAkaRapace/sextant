@@ -29,6 +29,7 @@ const FINDMY_GUIDE = "https://github.com/davidcoulson/bermuda/blob/fork-testing/
 
 class SextantDevices extends LitElement {
   static properties = {
+    expert: { type: Boolean },
     hass: { attribute: false },
     data: { attribute: false },
     positions: { attribute: false },
@@ -578,7 +579,7 @@ class SextantDevices extends LitElement {
             onChange: (v) => { w.classHome = v; this.requestUpdate(); } }) : nothing}
           <span class="small muted">A thing that is always home raises a Home Assistant repair once it has not been heard for a day. A pet's tag is by default; a phone or a bag, away for days, is not. A battery at 10% or less on a thing that has gone quiet raises one either way.</span>
         </div>
-        ${w.thing_class ? html`<div class="row">
+        ${w.thing_class && this.expert ? html`<div class="row">
           ${uiField({ label: `Routine pull for every ${THING_CLASSES.find((c) => c[0] === w.thing_class)?.[1] || w.thing_class} (0 to 0.3)`, type: "number", step: 0.01, min: 0, max: 0.3,
             value: (w.classHabitFor === w.thing_class ? w.classHabit : undefined) ?? this.data?.layout?.class_habit_gain?.[w.thing_class] ?? "", placeholder: PET_CLASSES.includes(w.thing_class) ? "0 (pets)" : String(this.data?.layout?.tuning?.habit_margin_gain ?? 0.1),
             onChange: (v) => { w.classHabit = v; w.classHabitFor = w.thing_class; this.requestUpdate(); }, style: "width: 260px" })}
@@ -586,13 +587,13 @@ class SextantDevices extends LitElement {
         </div>` : nothing}
         <div class="row">
           ${uiField({ label: `Height (${unit})`, type: "number", step: 0.05, min: 0, max: unit === "ft" ? 16 : 5, value: w.height, placeholder: String(toDisplayLen(this._defaultHeight(), this.hass)), onChange: (v) => { w.height = v; this.requestUpdate(); }, style: "width: 150px" })}
-          ${uiField({ label: "Ref trim (dB)", type: "number", step: 0.5, min: -20, max: 20, value: w.ref, placeholder: "0", onChange: (v) => { w.ref = v; this.requestUpdate(); }, style: "width: 150px" })}
+          ${!this.expert ? nothing : uiField({ label: "Ref trim (dB)", type: "number", step: 0.5, min: -20, max: 20, value: w.ref, placeholder: "0", onChange: (v) => { w.ref = v; this.requestUpdate(); }, style: "width: 150px" })}
         </div>
         <p class="small muted">Height: how high this is usually carried or placed (a phone in a pocket about 1 m, a dog's collar 0.3 m). Ref trim: a few dB either way if this thing always reads too near or too far.</p>
         <div class="row">
-          ${uiSelect({ label: "Positioning", value: w.estimator || "default", options: [{ value: "default", label: `Default (${this.data?.layout?.tuning?.position_estimator || "geometric"})` }, { value: "geometric", label: "Geometric only, no fingerprint" }, { value: "fused", label: "Fused" }, { value: "fingerprint", label: "Fingerprint only" }], onChange: (v) => { w.estimator = v === "default" ? "" : v; this.requestUpdate(); }, style: "min-width: 280px" })}
+          ${!this.expert ? nothing : uiSelect({ label: "Positioning", value: w.estimator || "default", options: [{ value: "default", label: `Default (${this.data?.layout?.tuning?.position_estimator || "geometric"})` }, { value: "geometric", label: "Geometric only, no fingerprint" }, { value: "fused", label: "Fused" }, { value: "fingerprint", label: "Fingerprint only" }], onChange: (v) => { w.estimator = v === "default" ? "" : v; this.requestUpdate(); }, style: "min-width: 280px" })}
         </div>
-        <p class="small muted">Positioning: the estimator for this thing alone. If the fingerprint makes placement worse (a Tile or a tag whose radio reads unlike the phones), pick geometric only.</p>
+        <p class="small muted" ?hidden=${!this.expert}>Positioning: the estimator for this thing alone. If the fingerprint makes placement worse (a Tile or a tag whose radio reads unlike the phones), pick geometric only.</p>
         </details>
         <div class="row end">
           ${uiButton({ label: "Cancel", kind: "text", onClick: () => { this._wizard = null; } })}

@@ -70,6 +70,7 @@ function layoutKey(layout) {
 
 class SextantEdit extends LitElement {
   static properties = {
+    expert: { type: Boolean },
     hass: { attribute: false },
     data: { attribute: false },
     floor: { type: String },
@@ -1081,7 +1082,7 @@ class SextantEdit extends LitElement {
       <div class="proxypick">${near.map((n) => html`<button class="chip ${linked.includes(n.id) ? "on" : ""}" aria-pressed=${linked.includes(n.id)} @click=${() => toggle(n.id)}
         title=${linked.includes(n.id) ? "On this spot: click to unlink" : "Click if this proxy sits on the furniture"}>${n.name}${n.d != null && f.scale ? html` <span class="muted">${fmtLen(n.d / f.scale, this.hass)}</span>` : nothing}</button>`)}</div></div>
     <div class="row">
-      ${uiField({ label: "Entry share", type: "number", step: 0.05, min: 0.05, max: 0.95, value: item.enter_prob ?? "", placeholder: `${global} (default)`, onChange: (v) => this._edit("enter_prob", v === "" || v == null ? undefined : Number(v)), style: "width: 150px" })}
+      ${!this.expert ? nothing : uiField({ label: "Entry share", type: "number", step: 0.05, min: 0.05, max: 0.95, value: item.enter_prob ?? "", placeholder: `${global} (default)`, onChange: (v) => this._edit("enter_prob", v === "" || v == null ? undefined : Number(v)), style: "width: 150px" })}
     </div>
     <div class="muted small">Proxies sitting on or against the furniture (a nightstand, both ends of a couch): a thing one of them hears close by, and clearly closer than any proxy not on the spot, counts as here. Entry share: how much of a thing's likely position must fall in the spot to enter it; blank uses the Tuning page's value.</div>`;
   }
@@ -1418,7 +1419,7 @@ class SextantEdit extends LitElement {
               ${uiField({ label: "Scale (px per m)", type: "number", step: 0.01, value: f.scale == null ? "" : Math.round(f.scale * 100) / 100, onChange: (v) => { this._snapshot(); f.scale = Number(v) || null; this._dirty = true; this.requestUpdate(); }, style: "width: 150px" })}
               ${uiField({ label: "Level", type: "number", step: 1, value: f.level ?? "", placeholder: "0", onChange: (v) => { this._snapshot(); if (v === "" || v == null) delete f.level; else f.level = Math.round(Number(v)); this._dirty = true; this.requestUpdate(); }, style: "width: 90px" })}
               ${uiField({ label: `Elevation (${lenUnit(this.hass)})`, type: "number", step: 0.05, value: toDisplayLen(f.elevation, this.hass), placeholder: String(toDisplayLen((f.level || 0) * 3, this.hass)), onChange: (v) => { this._snapshot(); const m = fromDisplayLen(v, this.hass); if (m == null || isNaN(m)) delete f.elevation; else f.elevation = m; this._dirty = true; this._refreshAlignment(); this.requestUpdate(); }, style: "width: 130px" })}
-              ${uiField({ label: "Election bias", type: "number", step: 0.05, min: 0.25, max: 4, value: f.bias ?? "", placeholder: "1", onChange: (v) => { this._snapshot(); if (v === "" || v == null) delete f.bias; else f.bias = Number(v); this._dirty = true; this.requestUpdate(); }, style: "width: 120px" })}
+              ${!this.expert ? nothing : uiField({ label: "Election bias", type: "number", step: 0.05, min: 0.25, max: 4, value: f.bias ?? "", placeholder: "1", onChange: (v) => { this._snapshot(); if (v === "" || v == null) delete f.bias; else f.bias = Number(v); this._dirty = true; this.requestUpdate(); }, style: "width: 120px" })}
               ${Object.keys(this.hass?.floors || {}).length ? uiSelect({ label: "Home Assistant floor", value: f.floor_id || "", options: [{ value: "", label: "not linked" }, ...Object.values(this.hass.floors).map((x) => ({ value: x.floor_id, label: x.name }))], onChange: (v) => { this._snapshot(); if (v) f.floor_id = v; else delete f.floor_id; this._dirty = true; this.requestUpdate(); }, style: "width: 170px" }) : nothing}
             </div>
             </details>
@@ -1428,8 +1429,8 @@ class SextantEdit extends LitElement {
           <ul class="plain small">${(this._proposal.report || this._proposal.changes || []).slice(0, 12).map((c) => html`<li>${typeof c === "string" ? c : `${c.name || c.zone || ""}: ${c.change || c.note || JSON.stringify(c)}`}</li>`)}</ul>
           <div class="row">${uiButton({ label: "Accept", kind: "primary", onClick: () => this._acceptProposal() })}${uiButton({ label: "Reject", kind: "text", onClick: () => { this._proposal = null; } })}</div>
         </div>` : nothing}
-        <details class="more setup" ?open=${!f || this._tool === "pin" || sel?.kind === "pin" || !!this._biasView?.on}><summary>Floor setup: alignment, add a floor, history</summary>
-        ${f ? this._renderBiasView(f) : nothing}
+        <details class="more setup" ?open=${!f || this._tool === "pin" || sel?.kind === "pin" || (this.expert && !!this._biasView?.on)}><summary>Floor setup: alignment, add a floor, history</summary>
+        ${f && this.expert ? this._renderBiasView(f) : nothing}
         ${f ? this._renderAlignment(f) : nothing}
         <div class="card">
           <h4>Add a floor</h4>
@@ -1544,7 +1545,7 @@ class SextantEdit extends LitElement {
         </div>
         <details class="more"><summary>More options</summary>
         <div class="row">
-          ${uiField({ label: "Correction ×", type: "number", step: 0.001, min: 0.5, max: 2, value: item.correction ?? "", onChange: (v) => this._edit("correction", v), style: "width: 150px" })}
+          ${!this.expert ? nothing : uiField({ label: "Correction ×", type: "number", step: 0.001, min: 0.5, max: 2, value: item.correction ?? "", onChange: (v) => this._edit("correction", v), style: "width: 150px" })}
         </div>
         ${uiSwitch({ label: "Use in positioning", checked: item.solve !== false,
           onChange: (v) => this._edit("solve", v ? undefined : false) })}

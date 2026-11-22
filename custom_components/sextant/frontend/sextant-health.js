@@ -141,6 +141,7 @@ function stale(result) {
 
 class SextantHealth extends LitElement {
   static properties = {
+    expert: { type: Boolean },
     hass: { attribute: false },
     data: { attribute: false },
     positions: { attribute: false },
@@ -391,7 +392,7 @@ class SextantHealth extends LitElement {
         return html`<div class="page"><div class="cols">${this._renderAdvice()}</div></div>`;
       default:
         return html`<div class="page"><div class="cols">${this._renderReceivers()}
-          <details class="fold"><summary>Diagnostics: proxy self-test, proxies against real fixes, Wi-Fi signal by room</summary><div class="cols">${this._renderSelftest()}${this._renderReport()}${this._renderWifiRooms()}</div></details></div></div>`;
+          <details class="fold" ?hidden=${!this.expert}><summary>Diagnostics: proxy self-test, proxies against real fixes, Wi-Fi signal by room</summary><div class="cols">${this._renderSelftest()}${this._renderReport()}${this._renderWifiRooms()}</div></details></div></div>`;
     }
   }
 

@@ -296,6 +296,10 @@ export function uiSwitch({ label, checked, onChange, disabled = false }) {
  * permanent button each. `items` are {label, onClick, icon?, title?, danger?,
  * disabled?} or {divider: true}. Built on <details> so it opens, closes and
  * takes focus without a click-outside listener. */
+/** Expert mode: the solver's own knobs and read-outs, which most installs never need. Kept per browser. */
+export function expertMode() { try { return localStorage.getItem("sextant.expert") === "1"; } catch { return false; } }
+export function setExpertMode(on) { try { localStorage.setItem("sextant.expert", on ? "1" : "0"); } catch { /* private mode */ } }
+
 export function uiMenu({ items, label = "More actions", icon = "mdi:dots-vertical" }) {
   return html`<details class="menu">
     <summary title=${label} aria-label=${label} role="button"><ha-icon icon=${icon}></ha-icon></summary>

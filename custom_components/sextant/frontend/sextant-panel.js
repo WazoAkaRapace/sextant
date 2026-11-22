@@ -14,7 +14,7 @@
  */
 import { LitElement, html, css, nothing } from "./lit.js";
 import { signalColour, distanceColour, SextantMap, thingColor, thingHue, staleness, shortAge, heatCells, pointInPolygon, polygonCentroid } from "./sextant-map.js";
-import { sharedStyles, widgetStyles, fmtAge, fmtNum, toast, confirmAsync, ensureHaComponents, uiSelect, uiButton, callWS, sortFloors, thingName, proxyName, fmtLen, fmtSpeed, classIcon, pronounsFor, uiIconButton, uiSegmented, uiMenu, isImperial, mapOverlayStyles, renderScaleBar, signalLegend, mapUrlFor, retryWait, loadLayout, subscribePositions } from "./sextant-ui.js";
+import { sharedStyles, widgetStyles, fmtAge, fmtNum, toast, confirmAsync, ensureHaComponents, uiSelect, uiButton, callWS, sortFloors, thingName, proxyName, fmtLen, fmtSpeed, classIcon, pronounsFor, uiIconButton, uiSegmented, uiMenu, expertMode, setExpertMode, isImperial, mapOverlayStyles, renderScaleBar, signalLegend, mapUrlFor, retryWait, loadLayout, subscribePositions } from "./sextant-ui.js";
 import { personGroups } from "./sextant-groups.js";
 import { spotInRoom, askStrimmer } from "./sextant-occupancy-data.js";
 
@@ -45,6 +45,7 @@ const MODES = [
 ];
 // Pages for setting up and tuning, behind the one Setup tab.
 const SETUP_MODES = ["proxies", "bermuda", "calibration", "tuning", "advice"];
+const EXPERT_MODES = ["tuning"];   // pages shown only in expert mode
 const FLOOR_MODES = new Set(["live", "edit", "proxies", "calibration"]);
 // Pages that change the layout, the things or Bermuda, or expose every
 // address the house hears: administrators only (the backend refuses the
@@ -67,6 +68,7 @@ const BATTERY_CRITICAL = 10;
 
 class SextantPanel extends LitElement {
   static properties = {
+    _expert: { state: true },
     _spots: { state: true },
     hass: { attribute: false },
     narrow: { type: Boolean },
@@ -85,7 +87,8 @@ class SextantPanel extends LitElement {
   constructor() {
     super();
     this._mode = (() => { try { const m = localStorage.getItem("sextant.mode") || "live"; return MODE_ALIASES[m] || m; } catch { return "live"; } })();
-    if (!MODES.some(([id]) => id === this._mode)) this._mode = "live";
+    this._expert = expertMode();
+    if (!this._modes().some(([id]) => id === this._mode)) this._mode = "live";
     this._data = null;
     this._positions = { positions: [], offline_receivers: [], stamp: 0 };
     this._now = Date.now() / 1000;
@@ -147,7 +150,7 @@ class SextantPanel extends LitElement {
 
   _isAdmin() { return this.hass?.user?.is_admin !== false; }
 
-  _modes() { return this._isAdmin() ? MODES : MODES.filter(([id]) => !ADMIN_MODES.has(id)); }
+  _modes() { return (this._isAdmin() ? MODES : MODES.filter(([id]) => !ADMIN_MODES.has(id))).filter(([id]) => this._expert || !EXPERT_MODES.includes(id)); }
 
   /** Switch pages. `target` is a mode id, or {mode, thing} to open that
    * thing's dialog once the destination page has loaded - which is how the
@@ -197,7 +200,9 @@ class SextantPanel extends LitElement {
         <a class="repo" href=${REPO_URL} target="_blank" rel="noopener" title="Sextant on GitHub"><ha-icon icon="mdi:github"></ha-icon></a>
       </div>
       ${inSetup ? html`<nav class="subbar" aria-label="Setup pages">${uiSegmented({ value: this._mode, options: setup.map(([id, label]) => ({ value: id, label })),
-        onChange: (v) => this._setMode(v) })}</nav>` : nothing}
+        onChange: (v) => this._setMode(v) })}<span class="grow"></span>
+        <label class="expert" title="Show the solver's own knobs and read-outs: the Tuning page, diagnostics, and the per-item corrections most homes never touch"><input type="checkbox" .checked=${this._expert}
+          @change=${(e) => { this._expert = e.target.checked; setExpertMode(this._expert); if (!this._modes().some(([id]) => id === this._mode)) this._setMode(setup[0][0]); }}> Expert mode</label></nav>` : nothing}
       ${this._error ? html`<div class="banner error">${this._error} <button @click=${() => this._load()}>Retry</button></div>` : nothing}
       ${this._renderVersionBanner()}
       <div class="body">${this._renderMode()}</div>
@@ -348,13 +353,13 @@ class SextantPanel extends LitElement {
     if (!this._data && !this._error) return html`<div class="empty">Loading…</div>`;
     switch (this._mode) {
       case "edit":
-        return html`<sextant-edit .hass=${this.hass} .data=${this._data} .floor=${this._floor} .narrow=${this.narrow} .spots=${this._spots || NO_SPOTS}
+        return html`<sextant-edit .expert=${this._expert} .hass=${this.hass} .data=${this._data} .floor=${this._floor} .narrow=${this.narrow} .spots=${this._spots || NO_SPOTS}
                                   @layout-changed=${() => this._onLayoutChanged()} @floor-changed=${(e) => { this._floor = e.detail; }}></sextant-edit>`;
       case "occupancy":
         return html`<sextant-occupancy .hass=${this.hass} .data=${this._data}></sextant-occupancy>`;
       case "things":
       case "bermuda":
-        return html`<sextant-devices .hass=${this.hass} .data=${this._data} .positions=${this._positions} .section=${this._mode}
+        return html`<sextant-devices .expert=${this._expert} .hass=${this.hass} .data=${this._data} .positions=${this._positions} .section=${this._mode}
                                      .openThing=${this._openThing}
                                      @layout-changed=${() => this._onLayoutChanged()}
                                      @thing-opened=${() => { this._openThing = null; }}
@@ -363,7 +368,7 @@ class SextantPanel extends LitElement {
       case "calibration":
       case "tuning":
       case "advice":
-        return html`<sextant-health .hass=${this.hass} .data=${this._data} .positions=${this._positions} .floor=${this._floor} .section=${this._mode}
+        return html`<sextant-health .expert=${this._expert} .hass=${this.hass} .data=${this._data} .positions=${this._positions} .floor=${this._floor} .section=${this._mode}
                                     @layout-changed=${() => this._onLayoutChanged()}
                                     @show-spots=${(e) => { this._spots = e.detail.spots; this._floor = e.detail.floor; this._setMode("edit"); this._spots = e.detail.spots; }}></sextant-health>`;
       default:
@@ -387,6 +392,7 @@ class SextantPanel extends LitElement {
     .brand-name { font-weight: 600; font-size: 18px; }
     .brand-sub { font-size: 9px; letter-spacing: 0.04em; opacity: 0.75; text-transform: uppercase; }
     .modes { display: flex; gap: 2px; }
+    .subbar label.expert { flex: none; display: flex; align-items: center; gap: 6px; padding-left: 12px; font-size: 13px; color: var(--secondary-text-color); white-space: nowrap; cursor: pointer; }
     .subbar { display: flex; flex: none; padding: 6px 12px; overflow-x: auto; background: var(--card-background-color); border-bottom: 1px solid var(--divider-color); }
     .modes button { display: flex; align-items: center; gap: 6px; background: transparent; color: inherit; border: 0; border-bottom: 3px solid transparent; padding: 0 10px; height: 56px; cursor: pointer; font: inherit; opacity: 0.8; }
     .modes button.active { opacity: 1; border-bottom-color: currentColor; }
@@ -1570,6 +1576,7 @@ class SextantLive extends LitElement {
                share: total > 0 ? (Number(r[3]) || 0) / total : null,
                colour: distanceColour(metres) };
     }).sort((a, b) => (b.share ?? 0) - (a.share ?? 0) || a.metres - b.metres);
+    if (!this._expert) return nothing;
     return html`<details class="telemetry heardby">
       <summary>In the solve <span class="muted small">${rows.length} ${rows.length === 1 ? "proxy" : "proxies"} the position comes from, the ones that count most first</span></summary>
       <ul class="plain heard">${rows.map((r) => html`<li><i class="dot" style=${`background:${r.colour}`}></i><span class="grow">${r.name}</span>
@@ -1667,6 +1674,7 @@ class SextantLive extends LitElement {
     // thing's quick actions use: an icon with its word under it.
     // The switches used daily stay as buttons; the rest are one menu away.
     const MAIN_LAYERS = ["labels", "receivers", "trails"];
+    const EXPERT_LAYERS = ["links", "all_links", "circles", "fingerprint"];
     const optBtn = ([k, label, tip, icon]) => html`<button class="qa opt ${this._options[k] ? "on" : ""}" title=${`${label}: ${tip}`}
       aria-label=${label} aria-pressed=${!!this._options[k]} @click=${() => this._setOption(k, !this._options[k])}>
       <ha-icon icon=${icon}></ha-icon><span>${label}</span></button>`;
@@ -1716,7 +1724,7 @@ class SextantLive extends LitElement {
           <span class="wide-only">${deepBtn}</span>
           <span class="sep wide-only"></span>
           <div class="chips wide-only">${switches.filter(([k]) => MAIN_LAYERS.includes(k)).map(optBtn)}${uiMenu({ label: "More layers", icon: "mdi:layers-outline",
-            items: switches.filter(([k]) => !MAIN_LAYERS.includes(k)).map(([k, label, tip]) => ({ label, title: tip, icon: this._options[k] ? "mdi:checkbox-marked-outline" : "mdi:checkbox-blank-outline", onClick: () => this._setOption(k, !this._options[k]) })) })}</div>
+            items: switches.filter(([k]) => !MAIN_LAYERS.includes(k) && (this._expert || !EXPERT_LAYERS.includes(k))).map(([k, label, tip]) => ({ label, title: tip, icon: this._options[k] ? "mdi:checkbox-marked-outline" : "mdi:checkbox-blank-outline", onClick: () => this._setOption(k, !this._options[k]) })) })}</div>
           ${deep ? spreadBtn : html`<span class="sep wide-only"></span><span class="wide-only">${gridBtn}</span>`}
           <button class="iconbtn narrow-only" title="Map options" aria-label="Map options" @click=${() => { this._optionsOpen = !this._optionsOpen; }}><ha-icon icon="mdi:tune-variant"></ha-icon></button>
           <button class="iconbtn narrow-only" title="Hide the map" aria-label="Hide the map" @click=${() => { this._mapOpen = false; }}><ha-icon icon="mdi:map-minus"></ha-icon></button>
@@ -1795,7 +1803,7 @@ class SextantLive extends LitElement {
             </dl>
             ${this._renderTimeline(sel)}
             ${sel.robot ? nothing : this._renderHeardBy(sel)}
-            ${sel.robot ? nothing : html`<details class="telemetry">
+            ${sel.robot || !this._expert ? nothing : html`<details class="telemetry">
               <summary>Confidence <span class="muted small">how sure Sextant is, and why</span></summary>
               <dl>
                 <dt>Floor odds</dt><dd>${sel.floors ? Object.entries(sel.floors).sort((a, b) => b[1] - a[1]).map(([f, p]) => `${f} ${(p * 100).toFixed(0)}%`).join(" · ") : "—"}</dd>
