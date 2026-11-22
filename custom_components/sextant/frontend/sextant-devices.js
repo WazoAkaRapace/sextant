@@ -94,6 +94,7 @@ class SextantDevices extends LitElement {
    * 3 s, so a device held against that proxy rises to the top. */
   _setFindAt(address) {
     this._findAt = address;
+    if (address) this._heardOpen = true;
     clearInterval(this._findTimer);
     this._findTimer = null;
     if (!address) return;
@@ -189,6 +190,8 @@ class SextantDevices extends LitElement {
     ]);
     this._loadRobots();
     this._tracked = tracked?.tracked ?? null;
+    // The heard list is folded; it opens while nothing is tracked yet (and on Find near or Add a thing).
+    if (this._tracked && !Object.keys(this._tracked).length) this._heardOpen = true;
     this._candidates = candidates?.candidates ?? null;
     this._tiles = tiles?.tiles ?? null;
     this._identities = identities?.identities ?? null;
@@ -555,7 +558,7 @@ class SextantDevices extends LitElement {
             { value: "", label: "None" },
             ...this._batterySensors(w.charging).map((e) => ({ value: e, label: `${this.hass?.states?.[e]?.attributes?.friendly_name || e} (${this.hass?.states?.[e]?.state ?? "?"})` })),
           ], onChange: (v) => { w.charging = v; this.requestUpdate(); }, style: "width: 320px" })}
-          <span class="small muted">While it says Charging, Charged or Full, ${w.name || w.placeholder || "this thing"} is not with its owner.</span>
+          <span class="small muted">While it says Charging, Charged or Full (or on), ${w.name || w.placeholder || "this thing"} does not place its owner until it moves again.</span>
         </div>` : nothing}
         <div class="row">
           ${uiSelect({ label: "Battery sensor", value: w.battery || "", options: [
@@ -578,7 +581,7 @@ class SextantDevices extends LitElement {
           ], onChange: (v) => { w.alwaysHome = v; this.requestUpdate(); }, style: "width: 220px" })}
           ${w.thing_class ? uiSwitch({ label: `Every ${THING_CLASSES.find((c) => c[0] === w.thing_class)?.[1] || w.thing_class} is always home`, checked: this._classHome(w),
             onChange: (v) => { w.classHome = v; this.requestUpdate(); } }) : nothing}
-          <span class="small muted">You get a repair in Home Assistant if it is not heard for a day. Pet tags are always home by default. A quiet thing with a battery at 10% or less gets one either way.</span>
+          <span class="small muted">When on, you get a repair in Home Assistant if it is not heard for a day. Pet tags are always home by default. A quiet thing with a battery at 10% or less gets one either way.</span>
         </div>
         ${w.thing_class && this.expert ? html`<div class="row">
           ${uiField({ label: `Routine pull for every ${THING_CLASSES.find((c) => c[0] === w.thing_class)?.[1] || w.thing_class} (0 to 0.3)`, type: "number", step: 0.01, min: 0, max: 0.3,
@@ -823,8 +826,6 @@ class SextantDevices extends LitElement {
       .filter((c) => (this._kind === "all" || c.kind === this._kind) && (!filter || haystack(c).includes(filter)))
       .sort(finding ? (a, b) => rssiAt(b) - rssiAt(a) : (a, b) => (a.last_seen_age ?? 1e9) - (b.last_seen_age ?? 1e9));
     const findName = finding ? index.get(this._findAt)?.name || this._findAt : null;
-    // Folded unless Find near is on or nothing is tracked yet; a tap keeps it open.
-    const autoOpen = finding || (this._tracked != null && !tracked.length);
     return html`
       <section class="card">
         <h3>Tracked <span class="muted">${tracked.length}</span>
@@ -847,7 +848,7 @@ class SextantDevices extends LitElement {
                 : html`<span class="muted">not heard yet</span>`}</td>
               <td class="actions">
                 <button class="iconbtn" title="Edit ${name}" aria-label="Edit ${name}" @click=${() => this._openWizard(slug, address)}><ha-icon icon="mdi:pencil-outline"></ha-icon></button>
-                <button class="iconbtn danger" title="Stop tracking ${name}" aria-label="Stop tracking ${name}" ?disabled=${this._busy} @click=${async () => { if (await confirmAsync(`Stop tracking ${name}?`, { ok: "Stop tracking", danger: true })) this._track([], [address]); }}><ha-icon icon="mdi:trash-can-outline"></ha-icon></button>
+                <button class="iconbtn danger" title="Stop tracking ${name}" aria-label="Stop tracking ${name}" ?disabled=${this._busy} @click=${async () => { if (await confirmAsync(`Stop tracking ${name} (${address})?`, { ok: "Stop tracking", danger: true })) this._track([], [address]); }}><ha-icon icon="mdi:trash-can-outline"></ha-icon></button>
               </td>
             </tr>`;
           })}
@@ -856,7 +857,7 @@ class SextantDevices extends LitElement {
         <p class="small muted">Tap a name to change it.</p>
       </section>
 
-      <section class="card"><details class="heard" ?open=${autoOpen || this._heardOpen} @toggle=${(e) => { if (!autoOpen) this._heardOpen = e.target.open; }}>
+      <section class="card"><details class="heard" ?open=${this._heardOpen} @toggle=${(e) => { this._heardOpen = e.target.open; }}>
         <summary><h3>Heard, not tracked <span class="muted">${candidates.length}${finding ? ` near ${findName}` : ""}</span></h3></summary>
         <div class="row">
           <input class="grow" type="search" placeholder="Filter by name, address, maker, room, floor, proxy or kind" .value=${this._filter} @input=${(e) => { this._filter = e.target.value; }}>
@@ -883,9 +884,9 @@ class SextantDevices extends LitElement {
             <td class="small">${fmtAge(c.last_seen_age)} ago<br><span class="muted">first ${fmtAge(c.first_seen_age)}</span><span class="ponly"><br>${finding ? rssiAt(c) : w ? w.rssi : c.best_rssi ?? "—"} dBm</span></td>
             <td>${uiButton({ label: "Track…", kind: "primary", disabled: this._busy, onClick: () => this._startTrack(c), title: "Choose its name, class and height first; Bermuda tracks it when you confirm" })}</td>
           </tr>`; })}
-          ${candidates.length ? nothing : html`<tr><td colspan="7" class="muted">${this._candidates ? (this._showAll ? "No matching devices." : `Nothing heard in the last ${RECENT_SECS} s. Turn on "Show all" to see everything Bermuda remembers.`) : "Loading…"}</td></tr>`}
+          ${candidates.length ? nothing : html`<tr><td colspan="7" class="muted">${this._candidates ? (this._showAll ? "No matching devices." : finding ? `Nothing heard near ${findName}.` : filter || this._kind !== "all" ? "No matching devices." : `Nothing heard in the last ${RECENT_SECS} s. Turn on "Show all" to see everything Bermuda remembers.`) : "Loading…"}</td></tr>`}
         </table></div>
-        <p class="small muted">Lists devices at least two placed proxies heard in the last ${RECENT_SECS} s${!finding && !this._showAll && lonely.size ? `, so ${lonely.size} heard by one proxy are left out` : ""}. Show all lists everything. AirTags are added on the Bermuda page.</p>
+        <p class="small muted">${finding || this._showAll ? "" : html`Lists devices at least two placed proxies heard in the last ${RECENT_SECS} s${lonely.size ? `; ${lonely.size} heard by one proxy are left out` : ""}. Show all lifts that. `}AirTags are added on the Bermuda page.</p>
       </details></section>
       ${this._renderPeople()}
       ${this._renderRobots()}`;
@@ -962,7 +963,7 @@ class SextantDevices extends LitElement {
     return html`<section class="card wide">
       <h3>Robot vacuums <span class="muted small">placed from their own maps</span></h3>
       ${this._robots?.action_available ? nothing : html`<p class="small warn">The Roborock integration here has no <code>get_vacuum_map_rooms</code> action: install the roborock override 2026.9.3.2 or later.</p>`}
-      <p class="small muted">Line up matches rooms with the same name on both maps and lays the robot's map over the floor. Then select the robot on Live and press <b>Mark dock</b> (<ha-icon icon="mdi:home-import-outline" style="--mdc-icon-size: 16px"></ha-icon>), which is needed if only two rooms match.</p>
+      <p class="small muted">Line up matches rooms with the same name (or linked area) on both maps and lays the robot's map over the floor. Then select the robot on Live and press <b>Mark dock</b> (<ha-icon icon="mdi:home-import-outline" style="--mdc-icon-size: 16px"></ha-icon>), which is needed if only two rooms match.</p>
       ${list.map((r) => {
         const f = r.fit, busy = this._busy === `robot:${r.vacuum}`;
         const floor = this._robotFloor?.[r.vacuum] || r.floor || floors[0];
@@ -974,7 +975,7 @@ class SextantDevices extends LitElement {
           </div>
           ${r.floor && !f ? html`<div class="small warn">Fewer than two of its rooms match a room on ${r.floor}. Give them the same names, then line up again.</div>` : nothing}
           ${f ? html`<div class="small">
-              <b>${f.pairs.length}</b> point${f.pairs.length === 1 ? "" : "s"} line up within <b>${fmtNum(f.rms_m, 1)} m</b>
+              <b>${f.pairs.length}</b> point${f.pairs.length === 1 ? "" : "s"} line up, off by <b>${fmtNum(f.rms_m, 1)} m</b> on average
               ${r.dock_marked ? html` · <span class="pill ok">dock marked</span>` : html` · <span class="pill warn" title="On Live, select ${r.name} and use Mark dock">dock not marked</span>`}
               ${f.pairs.length <= 2 && !r.dock_marked ? html`<div class="warn">With two points the map could be mirrored: mark the dock to settle it.</div>` : nothing}
             </div>` : nothing}

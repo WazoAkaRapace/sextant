@@ -23,7 +23,7 @@ refers to it; left unset, a man is he, a woman she, a device it, and a
 person, child or pet they), who it belongs to (a Home Assistant person),
 a colour used everywhere it is drawn, a
 photo framed in a circle that replaces the icon, the height it is carried
-at, a reference-power trim, and its own position estimator. **Untrack** removes it from Bermuda and
+at, a reference-power trim (with Expert on), and its own position estimator. **Untrack** removes it from Bermuda and
 removes its five Sextant sensors and its device with it; a device untracked
 while Home Assistant was down is cleaned up on the next cycle.
 
@@ -47,7 +47,7 @@ FindMy accessory set up in Bermuda has not been heard since Bermuda started:
 Bermuda does not count it as tracked until then, and an AirTag that is only
 away must not lose its settings.
 
-Below, folded until you tap it (it opens by itself while nothing is tracked, after **Add a thing…**, or while Find near is on), is everything Bermuda hears but does not track, with the kind of
+Below, folded until you tap it (it opens by itself while nothing is tracked, after **Add a thing…** for a phone or a plain device, or with Find near on), is everything Bermuda hears but does not track, with the kind of
 device (iBeacon, Tile, Apple, IRK, plain address), what it appears to be
 (the Bermuda fork names families the Bluetooth SIG's lists cannot — a Govee
 sensor, a Samsung SmartTag — and says when that kind rotates its address,
@@ -163,7 +163,8 @@ Things page lines that map up with one of your floors:
    because the robot's millimetres are real ones. The card shows how well
    the rooms agree (a few tenths of a metre is good) and any room left out
    because the two maps disagree about it; a Foyer that is the front hall on
-   one map and the whole open ground floor on the other is typical.
+   one map and the whole open ground floor on the other is typical. The
+   fit's numbers, read counts and unmatched rooms are under **Details**.
 2. On Live, select the robot and use **Mark dock**
    (<ha-icon icon="mdi:home-import-outline"></ha-icon>), then tap where
    its dock is. The robot reports its dock itself, so it need not be on it.
