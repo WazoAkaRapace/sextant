@@ -48,7 +48,7 @@ export const sharedStyles = css`
   details.menu > summary { list-style: none; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 0; border-radius: 8px; background: transparent; color: var(--secondary-text-color); cursor: pointer; }
   details.menu > summary::-webkit-details-marker, details.menu > summary::marker { display: none; content: ""; }
   details.menu > summary:hover { background: var(--secondary-background-color, rgba(0,0,0,0.06)); color: var(--primary-text-color); }
-  details.menu .menu-items { position: absolute; right: 0; top: 36px; z-index: 5; min-width: 210px; padding: 4px; border-radius: 10px; background: var(--card-background-color); box-shadow: var(--ha-card-box-shadow, 0 4px 14px rgba(0,0,0,0.3)); display: flex; flex-direction: column; }
+  details.menu .menu-items { max-height: 60vh; overflow-y: auto; position: absolute; right: 0; top: 36px; z-index: 5; min-width: 210px; padding: 4px; border-radius: 10px; background: var(--card-background-color); box-shadow: var(--ha-card-box-shadow, 0 4px 14px rgba(0,0,0,0.3)); display: flex; flex-direction: column; }
   details.menu .menu-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 0; border-radius: 6px; background: transparent; text-align: left; font: inherit; color: var(--primary-text-color); cursor: pointer; }
   details.menu .menu-item:hover:not([disabled]) { background: var(--secondary-background-color, rgba(0,0,0,0.06)); }
   details.menu .menu-item[disabled] { opacity: 0.45; cursor: default; }
@@ -301,7 +301,8 @@ export function expertMode() { try { return localStorage.getItem("sextant.expert
 export function setExpertMode(on) { try { localStorage.setItem("sextant.expert", on ? "1" : "0"); } catch { /* private mode */ } }
 
 export function uiMenu({ items, label = "More actions", icon = "mdi:dots-vertical" }) {
-  return html`<details class="menu">
+  // Opening one menu closes the others beside it, so two never overlap.
+  return html`<details class="menu" @toggle=${(e) => { const d = e.currentTarget; if (d.open) d.getRootNode().querySelectorAll("details.menu[open]").forEach((o) => { if (o !== d) o.open = false; }); }}>
     <summary title=${label} aria-label=${label} role="button"><ha-icon icon=${icon}></ha-icon></summary>
     <div class="menu-items" @click=${(e) => { const d = e.currentTarget.parentElement; if (d) d.open = false; }}>
       ${(items || []).map((it) => it.divider

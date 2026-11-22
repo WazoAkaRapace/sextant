@@ -172,7 +172,7 @@ are in [Sensors, card, services and API](automation.md).
 
 | Symptom | Look at |
 |---|---|
-| A thing reads the floor above or below | Its floor odds under **Details** on Live. An open landing or double-height room is the usual cause. **Show floor bias** on Edit shows where each floor's prior leans; raising `floor_proximity_weight` (Tuning) trusts the nearest proxies more, and [bias fields](positioning.md) shape it place by place. |
+| A thing reads the floor above or below | Its floor odds under **Confidence** on Live (switch on **Expert mode** in Setup to see it). An open landing or double-height room is the usual cause. **Show floor bias** under **Floor setup** on Edit (also Expert mode) shows where each floor's prior leans; raising `floor_proximity_weight` (Tuning) trusts the nearest proxies more, and [bias fields](positioning.md) shape it place by place. |
 | A thing sits a metre off the table it is on | A proxy near it may carry a calibration stretch; see [close range](calibration.md#close-range). If the proxy is on the furniture, link it to the spot. |
 | A thing flips between two rooms | It is on the boundary. The room holds against small challenges by design; if it still flips, see [Tuning](tuning.md). A spot drawn over the boundary (a sofa against a wall) often fixes it. |
 | Nothing is placed at all | Fewer than three proxies hear it, or Bermuda is not tracking it. Check the proxy list on Live and the Things page. |

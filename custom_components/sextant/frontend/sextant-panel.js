@@ -377,7 +377,7 @@ class SextantPanel extends LitElement {
                                         @layout-changed=${() => this._onLayoutChanged()}></sextant-property>`;
         }
         if (!(this._data?.layout?.floor || []).length) return this._renderFirstRun();
-        return html`<sextant-live .expert=${this._expert} .hass=${this.hass} .data=${this._data} .positions=${this._positions} .floor=${this._floor}
+        return html`<sextant-live .expert=${this._expert || !this._isAdmin()} .hass=${this.hass} .data=${this._data} .positions=${this._positions} .floor=${this._floor}
                                   @layout-changed=${() => this._onLayoutChanged()} @floor-changed=${(e) => { this._floor = e.detail; }}
                                   @quick-nav=${(e) => this._setMode(e.detail)}></sextant-live>`;
     }
@@ -758,7 +758,7 @@ class SextantLive extends LitElement {
     const host = this.getBoundingClientRect().height || window.innerHeight;
     const h = (sel) => this.renderRoot.querySelector(sel)?.getBoundingClientRect().height || 0;
     const stage = this._mapOpen ? h(".stage") : 0;
-    return Math.max(80, Math.floor(host - h(".quick-actions") - stage - SextantLive.LIST_MIN));
+    return Math.max(80, Math.floor(host - stage - SextantLive.LIST_MIN));
   }
 
   _clampDetail(px) { return Math.round(Math.min(Math.max(px, SextantLive.DETAIL_MIN), Math.max(this._detailMax(), 80))); }
@@ -1713,12 +1713,6 @@ class SextantLive extends LitElement {
       <button title="Zoom out" aria-label="Zoom out" @click=${() => this._map.zoomBy(1 / 1.3)}><ha-icon icon="mdi:minus"></ha-icon></button>
     </div>`;
     return html`
-      <div class="quick-actions">
-        ${this.expert ? uiButton({ label: "Self-test", kind: "outline", icon: "mdi:clipboard-check-outline", onClick: () => this._goto("proxies") }) : nothing}
-        ${this._isAdmin() ? html`
-          ${uiButton({ label: "New thing", kind: "outline", icon: "mdi:plus-circle-outline", onClick: () => this._goto("things") })}
-          ${uiButton({ label: "Calibrate", kind: "outline", icon: "mdi:tune-vertical", onClick: () => this._goto("calibration") })}` : nothing}
-      </div>
       <div class="stage ${this._mapOpen || pinning ? "" : "collapsed"}"><canvas class=${deep ? "hidden" : ""}></canvas>
         ${deep ? html`<sextant-stack .hass=${this.hass} .data=${this.data} .positions=${this.positions} .floor=${this.floor} .options=${this._options} .focus=${this._selected} .staleAfter=${this._staleAfter()}
                                      @thing-selected=${(e) => { this._proxy = null; this._select(e.detail); }}></sextant-stack>` : nothing}
@@ -1824,7 +1818,9 @@ class SextantLive extends LitElement {
           </div>` : nothing}
         ${this._isAdmin() && !this._pin && !sel ? html`
           <button class="pinfab narrow-only" title="Quick pin: say where a thing really is" aria-label="Pin where a thing really is" @click=${() => this._startPin()}>
-            <ha-icon icon="mdi:map-marker-check"></ha-icon></button>` : nothing}
+            <ha-icon icon="mdi:map-marker-check"></ha-icon></button>
+          <button class="pinfab addfab narrow-only" title="Add a thing" aria-label="Add a thing" @click=${() => this._goto("things")}>
+            <ha-icon icon="mdi:plus"></ha-icon></button>` : nothing}
         ${this._pin?.step === "who" ? this._renderPinWho() : this._pin?.step === "done" ? this._renderPinDone() : nothing}
     `;
   }
@@ -2001,7 +1997,6 @@ class SextantLive extends LitElement {
        thing's detail floats in the opposite corner, out of the toolbar's way.
        Under 720px both go back to being stacked blocks (see the end). */
     :host { display: grid; grid-template-columns: 1fr; min-height: 0; position: relative; }
-    .quick-actions { display: none; }
     .narrow-only { display: none; }
     .stage { position: relative; min-width: 0; }
     canvas { width: 100%; height: 100%; display: block; --sextant-map-bg: var(--card-background-color, #fff); }
@@ -2174,7 +2169,6 @@ class SextantLive extends LitElement {
        the page that does the thing, instead of hunting through the mode
        tabs. Calibration and adding a thing are admin actions - offered
        only when this user could reach those pages at all. */
-    .quick-actions button { display: flex; align-items: center; gap: 6px; }
     .side h3 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .maptoggle { margin-left: auto; }
     /* Quick pin (phones; see _startPin). The list and done steps are sheets
@@ -2182,6 +2176,8 @@ class SextantLive extends LitElement {
        full-screen, with the chips, the ring and one button laid over it. */
     .pinfab { position: fixed; right: 16px; bottom: calc(64px + env(safe-area-inset-bottom, 0px)); z-index: 6; height: 52px; width: 52px; padding: 0; justify-content: center; border: 0; border-radius: 999px; background: var(--primary-color, #03a9f4); color: var(--text-primary-color, #fff); font: inherit; font-weight: 600; font-size: 15px; align-items: center; gap: 6px; box-shadow: 0 6px 20px rgba(0,0,0,0.35); cursor: pointer; }
     .pinfab ha-icon { --mdc-icon-size: 22px; }
+    .pinfab:not(.addfab) { bottom: calc(126px + env(safe-area-inset-bottom, 0px)); }
+    .pinfab.addfab { height: 44px; width: 44px; right: 20px; background: var(--card-background-color); color: var(--primary-color, #03a9f4); border: 1px solid var(--divider-color); }
     .pinsheet { position: fixed; inset: 0; z-index: 8; display: flex; flex-direction: column; background: var(--primary-background-color, #fafafa); color: var(--primary-text-color); }
     .pinhead { display: flex; align-items: center; gap: 12px; padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 8px; }
     .pinhead h3, .pinbar h3 { margin: 0; font-size: 18px; font-weight: 600; line-height: 1.2; text-transform: none; letter-spacing: 0; color: var(--primary-text-color); }
@@ -2245,7 +2241,6 @@ class SextantLive extends LitElement {
          about half the screen so it is worth looking at once open - sits
          below it, above the selected thing's own detail card. */
       :host { display: flex; flex-direction: column; }
-      .quick-actions { order: 0; display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px; background: var(--card-background-color); border-bottom: 1px solid var(--divider-color); }
       .side { position: static; order: 1; flex: 1 1 auto; width: auto; min-height: 0; overflow: auto; border-left: 0; border-top: 1px solid var(--divider-color); max-height: none; border-radius: 0; box-shadow: none; padding: 12px; }
       /* The card takes what it needs unless the grip has set a height; then
          it is that tall and scrolls inside, and the list gets the rest. */

@@ -236,7 +236,8 @@ class SextantEdit extends LitElement {
   /** A phone opens on the room list: its settings can be edited by touch, its shapes cannot. */
   get _phone() { return typeof matchMedia === "function" && matchMedia("(max-width: 720px)").matches; }
   /** The list shows only on a phone-width screen (the Rooms/Map switch is hidden on a wide one), and is where a phone starts. */
-  get _listing() { return this._phone && this._list !== false; }
+  // A floor with no rooms has nothing to list: the map view holds Floor setup and the drawing tools.
+  get _listing() { return this._phone && this._list !== false && (this._floorObj()?.zones || []).some((z) => !z.no_go); }
 
   _pick(sel) { this._selection = sel; this._map?.setSelection(sel); }
   _setFocus(zoneId) { this._focus = zoneId || null; this._map?.setFocusZone(this._focus); }
@@ -346,6 +347,8 @@ class SextantEdit extends LitElement {
 
   updated(changed) {
     if (!this._map) return;
+    // The focused room was deleted or made a no-go: back to the whole floor.
+    if (this._focus && !(this._floorObj()?.zones || []).some((z) => z.zone_id === this._focus && !z.no_go)) this._setFocus(null);
     if (changed.has("data")) this._syncDraft(!this._dirty);
     if (changed.has("floor")) { this._pushFloor(); this._proposal = null; }
     if (changed.has("hass")) this._map.setAreas(this.hass?.areas);
@@ -1353,7 +1356,7 @@ class SextantEdit extends LitElement {
         <div class="mapcorner">${renderScaleBar(this._floorObj()?.scale, this._map?.view?.k, isImperial(this.hass),
           () => this._setTool("measure"), "This floor has no scale yet: click to measure a known distance with the Scale tool")}</div>
         <div class="zoom" role="group" aria-label="Zoom">
-          <button title="Fit the whole floor into view" aria-label="Fit the whole floor" ?disabled=${!!this._map?.isFit()} @click=${() => this._map.fit()}><ha-icon icon="mdi:fit-to-screen-outline"></ha-icon></button>
+          <button title="Fit the whole floor into view" aria-label="Fit the whole floor" ?disabled=${!!this._map?.isFit()} @click=${() => (this._focus ? this._setFocus(null) : this._map.fit())}><ha-icon icon="mdi:fit-to-screen-outline"></ha-icon></button>
           <button title="Zoom in" aria-label="Zoom in" @click=${() => this._map.zoomBy(1.3)}><ha-icon icon="mdi:plus"></ha-icon></button>
           <button title="Zoom out" aria-label="Zoom out" @click=${() => this._map.zoomBy(1 / 1.3)}><ha-icon icon="mdi:minus"></ha-icon></button>
         </div>
@@ -1366,7 +1369,7 @@ class SextantEdit extends LitElement {
           ${rooms.length ? uiMenu({ label: "Show one room: zoom to it and fade the rest", icon: "mdi:image-filter-center-focus",
             items: [{ label: "Whole floor", icon: "mdi:floor-plan", onClick: () => this._setFocus(null) }, { divider: true },
               ...rooms.map((z) => ({ label: z.entity_id, icon: z.zone_id === this._focus ? "mdi:radiobox-marked" : "mdi:radiobox-blank", onClick: () => this._setFocus(z.zone_id) }))] }) : nothing}
-          ${focused ? html`<button class="tool active" title="Back to the whole floor" @click=${() => this._setFocus(null)}><ha-icon icon="mdi:close"></ha-icon><span>${focused.entity_id}</span></button>` : nothing}
+          ${focused ? html`<button class="tool active chip" title="Back to the whole floor" @click=${() => this._setFocus(null)}><ha-icon icon="mdi:close"></ha-icon><span>${focused.entity_id}</span></button>` : nothing}
           ${uiMenu({ label: `Layers: lock one to select what is under it${locked.length ? `. Locked: ${locked.join(", ")}` : ""}`, icon: locked.length ? "mdi:lock" : "mdi:lock-open-variant-outline",
             items: LOCKS.map(([kind, label]) => ({ label: `${label}: ${this._locks[kind] ? "locked" : "can be edited"}`, icon: this._locks[kind] ? "mdi:lock" : "mdi:lock-open-variant-outline",
               title: this._locks[kind] ? `${label} are locked: click to allow selecting and moving them` : `${label} can be moved: click to lock them`, onClick: () => this._setLock(kind, !this._locks[kind]) })) })}
@@ -1691,6 +1694,8 @@ class SextantEdit extends LitElement {
        active one filled - names in the tooltips and aria labels. Save and
        Discard keep their words: they are actions, not modes. */
     .toolbar { position: absolute; left: 10px; top: 10px; display: flex; gap: 2px; padding: 4px; border-radius: 12px; background: var(--card-background-color); box-shadow: var(--ha-card-box-shadow, 0 2px 6px rgba(0,0,0,0.25)); align-items: center; z-index: 2; }
+    .toolbar button.tool.chip { width: auto; padding: 0 10px; gap: 4px; }
+    .toolbar button.tool.chip > span:not(.lockicons) { display: inline; position: static; font-size: 13px; white-space: nowrap; }
     .toolbar button.tool { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; min-width: 0; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--primary-text-color); cursor: pointer; }
     .toolbar button.tool > span:not(.lockicons) { display: none; }
     .toolbar button.tool:hover:not([disabled]) { background: var(--secondary-background-color, rgba(0,0,0,0.06)); }
