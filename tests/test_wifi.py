@@ -291,3 +291,16 @@ def test_a_watch_gives_no_floor_hint_only_a_phone_does(monkeypatch):
                                              "candidates": {entity: {"name": name}}})
         assert s._wifi_floor_factor("w", layout, "Upstairs") == want
     assert wifi.is_watch("device_tracker.x", "Michelle's Apple Watch") and not wifi.is_watch("device_tracker.iphone")
+
+
+def test_a_watch_listed_first_falls_through_to_the_phone(monkeypatch):
+    import sextant as s
+    layout = {"tuning": {"wifi_floor_weight": 0.5}, "thing_owners": {"w": "person.m"}, "thing_classes": {"w": "watch"}}
+    view = {"assigned": {"person.m": [{"entity": "device_tracker.watch_2"}, {"entity": "device_tracker.iphone_3"}]},
+            "candidates": {"device_tracker.watch_2": {"name": "Watch", "home": True, "ap": "garage"},
+                           "device_tracker.iphone_3": {"name": "iPhone", "home": True, "ap": "hall"}},
+            "aps": {"garage": {"floor": "Ground"}, "hall": {"floor": "Upstairs"}},
+            "by_person": {"person.m": {"entity": "device_tracker.watch_2", "odds": {"Ground": 1.0}}}}
+    monkeypatch.setattr(s, "_wifi_now", view)
+    assert s._wifi_floor_factor("w", layout, "Upstairs") == 1.0   # the phone's hall access point
+    assert s._wifi_floor_factor("w", layout, "Ground") == 0.5

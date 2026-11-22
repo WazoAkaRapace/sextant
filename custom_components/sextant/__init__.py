@@ -5235,9 +5235,14 @@ def _wifi_floor_factor(entity, layout, floor_name):
         return 1.0
     # A watch keeps the access point it joined, however far away: Michelle's
     # stayed on the garage one with her upstairs. Only a phone's says the floor.
-    src = (_wifi_now.get("candidates") or {}).get(wifi.get("entity")) or {}
-    if wifi_mod.is_watch(wifi.get("entity"), src.get("name")):
-        return 1.0
+    names = {e: c.get("name") for e, c in (_wifi_now.get("candidates") or {}).items()}
+    if wifi_mod.is_watch(wifi.get("entity"), names.get(wifi.get("entity"))):
+        # The first home tracker was a watch: a phone further down the list still counts.
+        watches = {a["entity"] for a in (_wifi_now.get("assigned") or {}).get(owner) or []
+                   if wifi_mod.is_watch(a["entity"], names.get(a["entity"]))}
+        wifi = _wifi_for(owner, _wifi_now, skip=watches)
+        if not wifi or not wifi.get("odds"):
+            return 1.0
     return wifi_mod.floor_factor(wifi["odds"], floor_name, weight)
 
 
@@ -6988,10 +6993,12 @@ def _no_go_factor(point, zone_polys, scale):
     NO_GO_FULL_M in, linear between. No scale: the full penalty when inside."""
     if not isinstance(point, Point):
         point = Point(float(point[0]), float(point[1]))
-    depth = max((polygon.exterior.distance(point) for _zid, polygon, _b, no_go in zone_polys
-                 if no_go and polygon.contains(point)), default=None)
-    if depth is None:
+    # The union, so a repaired MultiPolygon, a hole or two overlapping zones
+    # measure depth from the void's real edge, not each drawing's own.
+    void = unary_union([polygon for _zid, polygon, _b, no_go in zone_polys if no_go])
+    if void.is_empty or not void.contains(point):
         return 1.0
+    depth = void.boundary.distance(point)
     if not scale:
         return NO_GO_CONF_PENALTY
     t = (depth / scale - NO_GO_GRACE_M) / (NO_GO_FULL_M - NO_GO_GRACE_M)
