@@ -869,6 +869,19 @@ export class SextantMap {
     return !!f && Math.abs(v.k - f.k) <= f.k * 1e-3 && Math.abs(v.tx - f.tx) < 1 && Math.abs(v.ty - f.ty) < 1;
   }
 
+  /** Show one room: zoom to it and fade the rest. null shows the whole floor again. */
+  setFocusZone(zoneId) {
+    this.focusZone = zoneId || null;
+    const c = this._focusCords();
+    if (c) this.zoomTo(c, 0.15); else this.fit();
+  }
+
+  _focusCords() {
+    if (!this.focusZone) return null;
+    const c = (this.floor?.zones || []).find((z) => z.zone_id === this.focusZone)?.cords;
+    return c?.length >= 3 ? c : null;
+  }
+
   /** Zoom so these map points fill the view, with a margin: a spot fills a phone screen. */
   zoomTo(points, margin = 0.2) {
     const rect = this.canvas.getBoundingClientRect();
@@ -1338,7 +1351,7 @@ export class SextantMap {
   draw() {
     const ctx = this.ctx, dpr = window.devicePixelRatio || 1;
     const rect = this.canvas.getBoundingClientRect();
-    if (!this._fitted) this.fit();
+    if (!this._fitted) { if (this._focusCords()) this.zoomTo(this._focusCords(), 0.15); else this.fit(); }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, rect.width, rect.height);
     const f = this.floor;
@@ -1408,6 +1421,20 @@ export class SextantMap {
     if (this.mode !== "edit") { this._drawThings(ctx); this._drawMarks(ctx); }
     this._drawProxyPeeks(ctx);
     this._flushLabels(ctx);
+    const focus = this._focusCords();
+    if (focus) {
+      // One room at a time: a scrim over everything but the room, so the rest stays as a faint guide.
+      ctx.save();
+      ctx.globalAlpha = 0.7;
+      ctx.fillStyle = this._css("--sextant-map-bg", "#ffffff");
+      ctx.beginPath();
+      const far = 1e5;
+      ctx.rect(-far, -far, 2 * far, 2 * far);
+      focus.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
+      ctx.closePath();
+      ctx.fill("evenodd");
+      ctx.restore();
+    }
     ctx.restore();
     // Every frame is a chance the view moved: the host's own overlays (the
     // quick-pin ring's "Couch · Great Room") follow the plan under them.

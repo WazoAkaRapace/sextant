@@ -26,6 +26,18 @@ go back to Select. A selected item's card shows its main fields, and the
 rest are under **More options**. A new room offers this floor's Home
 Assistant areas first, and takes the name of the one you pick.
 
+What you select opens at the top of the side panel. The set-once parts -
+floor alignment, floor bias, adding a floor and the save history - are folded
+under **Floor setup**, which opens by itself while the Anchor tool is in
+use. The padlock in the toolbar is the **Layers** menu: lock rooms, spots,
+proxies or anchors to reach what is underneath them.
+
+**One room at a time:** the focus button next to it lists the floor's rooms.
+Pick one and the map zooms to that room and fades the rest of the floor, so
+you can place its proxies, spots and sensors without the whole plan in the
+way. The room's name then shows in the toolbar; click it, or pick **Whole
+floor**, to go back.
+
 **Keys:** **Esc** cancels whatever is in progress. In the middle of a drag
 it puts the item, and anything it carried, back where it was; while drawing
 it drops the shape; otherwise it returns the tool to Select, then clears the
@@ -333,7 +345,7 @@ the anchor to its ring's corner, or to whatever point really is straight above
 - or delete it, which is usually the better answer: an anchor does not have to
 exist on every floor, it only links the floors that carry it.
 Anchors sit on corners, where proxies and walls also are, so they have their
-own padlock in the toolbar: lock them to reach a proxy underneath one.
+own lock under the padlock menu in the toolbar: lock them to reach a proxy underneath one.
 With fewer than five shared anchors nothing can be set aside with any
 confidence, which is one more reason to place more than two.
 

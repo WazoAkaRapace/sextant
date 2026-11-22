@@ -70,6 +70,8 @@ function layoutKey(layout) {
 
 class SextantEdit extends LitElement {
   static properties = {
+    expert: { type: Boolean },
+    _focus: { state: true },
     hass: { attribute: false },
     data: { attribute: false },
     floor: { type: String },
@@ -234,9 +236,11 @@ class SextantEdit extends LitElement {
   /** A phone opens on the room list: its settings can be edited by touch, its shapes cannot. */
   get _phone() { return typeof matchMedia === "function" && matchMedia("(max-width: 720px)").matches; }
   /** The list shows only on a phone-width screen (the Rooms/Map switch is hidden on a wide one), and is where a phone starts. */
-  get _listing() { return this._phone && this._list !== false; }
+  // A floor with no rooms has nothing to list: the map view holds Floor setup and the drawing tools.
+  get _listing() { return this._phone && this._list !== false && (this._floorObj()?.zones || []).some((z) => !z.no_go); }
 
   _pick(sel) { this._selection = sel; this._map?.setSelection(sel); }
+  _setFocus(zoneId) { this._focus = zoneId || null; this._map?.setFocusZone(this._focus); }
   _setList(on) {
     if (on && this._drawing()) { toast(this, "Finish or cancel the shape first"); return; }
     if (on && this._selection && this._selection.kind !== "zone") this._pick(null);
@@ -288,6 +292,7 @@ class SextantEdit extends LitElement {
       onContextMenu: (hit) => this._context(hit),
     });
     this._map.setMode("edit");
+    this._map.focusZone = this._focus || null;   // a rebuilt map keeps the room it was showing
     this._map.setOptions({ labels: true, subzones: true, receivers: true, trails: false });
     this._applySnap();
     this._map.setLocks(this._locks);
@@ -342,6 +347,8 @@ class SextantEdit extends LitElement {
 
   updated(changed) {
     if (!this._map) return;
+    // The focused room was deleted or made a no-go: back to the whole floor.
+    if (this._focus && !(this._floorObj()?.zones || []).some((z) => z.zone_id === this._focus && !z.no_go)) this._setFocus(null);
     if (changed.has("data")) this._syncDraft(!this._dirty);
     if (changed.has("floor")) { this._pushFloor(); this._proposal = null; }
     if (changed.has("hass")) this._map.setAreas(this.hass?.areas);
@@ -383,6 +390,7 @@ class SextantEdit extends LitElement {
     this._map?.setOffline(this.data?.offline_receivers || []);
     this._map?.setSelection(null);
     this._selection = null;
+    if (this._focus && !(f?.zones || []).some((z) => z.zone_id === this._focus)) this._setFocus(null);
     // The last report already covers every floor: show THIS floor's rings now
     // rather than leaving the previous floor's drawn until the next reply.
     this._markPins();
@@ -1081,9 +1089,9 @@ class SextantEdit extends LitElement {
       <div class="proxypick">${near.map((n) => html`<button class="chip ${linked.includes(n.id) ? "on" : ""}" aria-pressed=${linked.includes(n.id)} @click=${() => toggle(n.id)}
         title=${linked.includes(n.id) ? "On this spot: click to unlink" : "Click if this proxy sits on the furniture"}>${n.name}${n.d != null && f.scale ? html` <span class="muted">${fmtLen(n.d / f.scale, this.hass)}</span>` : nothing}</button>`)}</div></div>
     <div class="row">
-      ${uiField({ label: "Entry share", type: "number", step: 0.05, min: 0.05, max: 0.95, value: item.enter_prob ?? "", placeholder: `${global} (default)`, onChange: (v) => this._edit("enter_prob", v === "" || v == null ? undefined : Number(v)), style: "width: 150px" })}
+      ${!this.expert ? nothing : uiField({ label: "Entry share", type: "number", step: 0.05, min: 0.05, max: 0.95, value: item.enter_prob ?? "", placeholder: `${global} (default)`, onChange: (v) => this._edit("enter_prob", v === "" || v == null ? undefined : Number(v)), style: "width: 150px" })}
     </div>
-    <div class="muted small">Proxies sitting on or against the furniture (a nightstand, both ends of a couch): a thing one of them hears close by, and clearly closer than any proxy not on the spot, counts as here. Entry share: how much of a thing's likely position must fall in the spot to enter it; blank uses the Tuning page's value.</div>`;
+    <div class="muted small">Proxies sitting on or against the furniture (a nightstand, both ends of a couch): a thing one of them hears close by, and clearly closer than any proxy not on the spot, counts as here.${this.expert ? " Entry share: how much of a thing's likely position must fall in the spot to enter it; blank uses the Tuning page's value." : nothing}</div>`;
   }
 
   _resizeSpot() {
@@ -1331,6 +1339,9 @@ class SextantEdit extends LitElement {
     const f = this._floorObj();
     const sel = this._selection;
     const listing = this._listing;
+    const rooms = (f?.zones || []).filter((z) => !z.no_go && z.cords?.length >= 3);
+    const focused = rooms.find((z) => z.zone_id === this._focus);
+    const locked = LOCKS.filter(([kind]) => this._locks[kind]).map(([, label]) => label);
     this.toggleAttribute("list", listing);
     const scanners = Object.entries(this.data?.scanners || {}).sort((a, b) => (a[1].name || "").localeCompare(b[1].name || ""));
     const placedAddr = new Set((this._draft?.floor || []).flatMap((fl) => (fl.receivers || []).map((r) => r.address)));
@@ -1345,7 +1356,7 @@ class SextantEdit extends LitElement {
         <div class="mapcorner">${renderScaleBar(this._floorObj()?.scale, this._map?.view?.k, isImperial(this.hass),
           () => this._setTool("measure"), "This floor has no scale yet: click to measure a known distance with the Scale tool")}</div>
         <div class="zoom" role="group" aria-label="Zoom">
-          <button title="Fit the whole floor into view" aria-label="Fit the whole floor" ?disabled=${!!this._map?.isFit()} @click=${() => this._map.fit()}><ha-icon icon="mdi:fit-to-screen-outline"></ha-icon></button>
+          <button title="Fit the whole floor into view" aria-label="Fit the whole floor" ?disabled=${!!this._map?.isFit()} @click=${() => (this._focus ? this._setFocus(null) : this._map.fit())}><ha-icon icon="mdi:fit-to-screen-outline"></ha-icon></button>
           <button title="Zoom in" aria-label="Zoom in" @click=${() => this._map.zoomBy(1.3)}><ha-icon icon="mdi:plus"></ha-icon></button>
           <button title="Zoom out" aria-label="Zoom out" @click=${() => this._map.zoomBy(1 / 1.3)}><ha-icon icon="mdi:minus"></ha-icon></button>
         </div>
@@ -1355,8 +1366,13 @@ class SextantEdit extends LitElement {
           ${uiMenu({ label: "More tools", icon: "mdi:dots-horizontal", items: TOOLS.filter(([id]) => !BASIC_TOOLS.includes(id))
             .map(([id, label, icon, tip]) => ({ label, icon, title: tip, onClick: () => this._setTool(id) })) })}
           <span class="sep"></span>
-          ${LOCKS.map(([kind, label, icon]) => html`<button class="tool lock ${this._locks[kind] ? "locked" : ""}" aria-label=${`${label} ${this._locks[kind] ? "locked" : "unlocked"}`} aria-pressed=${!!this._locks[kind]} title=${this._locks[kind] ? `${label} are locked: click to allow selecting and moving them` : `${label} can be moved: click to lock them`} @click=${() => this._setLock(kind, !this._locks[kind])}>
-            <span class="lockicons"><ha-icon icon=${icon}></ha-icon><ha-icon class="badge" icon=${this._locks[kind] ? "mdi:lock" : "mdi:lock-open-variant-outline"}></ha-icon></span><span>${label}</span></button>`)}
+          ${rooms.length ? uiMenu({ label: "Show one room: zoom to it and fade the rest", icon: "mdi:image-filter-center-focus",
+            items: [{ label: "Whole floor", icon: "mdi:floor-plan", onClick: () => this._setFocus(null) }, { divider: true },
+              ...rooms.map((z) => ({ label: z.entity_id, icon: z.zone_id === this._focus ? "mdi:radiobox-marked" : "mdi:radiobox-blank", onClick: () => this._setFocus(z.zone_id) }))] }) : nothing}
+          ${focused ? html`<button class="tool active chip" title="Back to the whole floor" @click=${() => this._setFocus(null)}><ha-icon icon="mdi:close"></ha-icon><span>${focused.entity_id}</span></button>` : nothing}
+          ${uiMenu({ label: `Layers: lock one to select what is under it${locked.length ? `. Locked: ${locked.join(", ")}` : ""}`, icon: locked.length ? "mdi:lock" : "mdi:lock-open-variant-outline",
+            items: LOCKS.map(([kind, label]) => ({ label: `${label}: ${this._locks[kind] ? "locked" : "can be edited"}`, icon: this._locks[kind] ? "mdi:lock" : "mdi:lock-open-variant-outline",
+              title: this._locks[kind] ? `${label} are locked: click to allow selecting and moving them` : `${label} can be moved: click to lock them`, onClick: () => this._setLock(kind, !this._locks[kind]) })) })}
           <span class="sep"></span>
           ${(([, label, icon, tip]) => html`<button class="tool ${this._snapMode === "off" ? "" : "active"}" aria-label=${label} title=${`${label}: ${tip}. Click for the next mode`} @click=${() => this._cycleSnap()}><ha-icon icon=${icon}></ha-icon><span>${label.replace("Snap: ", "")}</span></button>`)(SNAP_MODES.find(([k]) => k === this._snapMode) || SNAP_MODES[0])}
           <span class="sep"></span>
@@ -1382,6 +1398,7 @@ class SextantEdit extends LitElement {
               .map(([addr, s]) => html`<option value=${addr} ?selected=${addr === this._placing} ?disabled=${placedAddr.has(addr)}>${s.name || s.slug}${placedAddr.has(addr) ? " (placed)" : ""}${s.area ? ` · ${s.area}` : ""}</option>`)}
           </select></div>` : nothing}
         ${this._tool === "ap" ? this._renderApPicker() : nothing}
+        ${this._tool === "select" && !sel ? html`<div class="hint passive">Click a proxy, room or spot to edit it; drag it to move it.${locked.length ? ` Locked: ${locked.join(", ")} (the padlock in the toolbar).` : ""}</div>` : nothing}
         ${this._tool === "radar" ? html`<div class="hint">Click where the mmWave sensor is mounted, then pick the device and the way it faces in the side panel.</div>` : nothing}
         ${this._tool === "remark" ? html`<div class="hint">Click where the note goes, then type it in the side panel.</div>` : nothing}
         ${this._tool === "measure" ? html`<div class="hint">
@@ -1394,6 +1411,7 @@ class SextantEdit extends LitElement {
       <aside class="side">
         ${listing ? this._renderRoomList(f, sel?.kind === "zone" ? sel : null) : nothing}
         <div ?hidden=${listing}>
+        ${sel ? this._renderSelection(sel, f) : nothing}
         ${f ? html`
           <div class="card">
             <h4>${f.name} <span class="muted small">${fmtScale(f.scale, this.hass)}</span><span class="grow"></span>
@@ -1414,19 +1432,19 @@ class SextantEdit extends LitElement {
               ${uiField({ label: "Scale (px per m)", type: "number", step: 0.01, value: f.scale == null ? "" : Math.round(f.scale * 100) / 100, onChange: (v) => { this._snapshot(); f.scale = Number(v) || null; this._dirty = true; this.requestUpdate(); }, style: "width: 150px" })}
               ${uiField({ label: "Level", type: "number", step: 1, value: f.level ?? "", placeholder: "0", onChange: (v) => { this._snapshot(); if (v === "" || v == null) delete f.level; else f.level = Math.round(Number(v)); this._dirty = true; this.requestUpdate(); }, style: "width: 90px" })}
               ${uiField({ label: `Elevation (${lenUnit(this.hass)})`, type: "number", step: 0.05, value: toDisplayLen(f.elevation, this.hass), placeholder: String(toDisplayLen((f.level || 0) * 3, this.hass)), onChange: (v) => { this._snapshot(); const m = fromDisplayLen(v, this.hass); if (m == null || isNaN(m)) delete f.elevation; else f.elevation = m; this._dirty = true; this._refreshAlignment(); this.requestUpdate(); }, style: "width: 130px" })}
-              ${uiField({ label: "Election bias", type: "number", step: 0.05, min: 0.25, max: 4, value: f.bias ?? "", placeholder: "1", onChange: (v) => { this._snapshot(); if (v === "" || v == null) delete f.bias; else f.bias = Number(v); this._dirty = true; this.requestUpdate(); }, style: "width: 120px" })}
+              ${!this.expert ? nothing : uiField({ label: "Election bias", type: "number", step: 0.05, min: 0.25, max: 4, value: f.bias ?? "", placeholder: "1", onChange: (v) => { this._snapshot(); if (v === "" || v == null) delete f.bias; else f.bias = Number(v); this._dirty = true; this.requestUpdate(); }, style: "width: 120px" })}
               ${Object.keys(this.hass?.floors || {}).length ? uiSelect({ label: "Home Assistant floor", value: f.floor_id || "", options: [{ value: "", label: "not linked" }, ...Object.values(this.hass.floors).map((x) => ({ value: x.floor_id, label: x.name }))], onChange: (v) => { this._snapshot(); if (v) f.floor_id = v; else delete f.floor_id; this._dirty = true; this.requestUpdate(); }, style: "width: 170px" }) : nothing}
             </div>
             </details>
-          </div>` : html`<div class="card muted">No floor yet. Add one below.</div>`}
-        ${f ? this._renderBiasView(f) : nothing}
-        ${f ? this._renderAlignment(f) : nothing}
+          </div>` : html`<div class="card muted">No floor yet. Add one under Floor setup.</div>`}
         ${this._proposal ? html`<div class="card">
           <h4>Proposed ${this._proposal.target}</h4>
           <ul class="plain small">${(this._proposal.report || this._proposal.changes || []).slice(0, 12).map((c) => html`<li>${typeof c === "string" ? c : `${c.name || c.zone || ""}: ${c.change || c.note || JSON.stringify(c)}`}</li>`)}</ul>
           <div class="row">${uiButton({ label: "Accept", kind: "primary", onClick: () => this._acceptProposal() })}${uiButton({ label: "Reject", kind: "text", onClick: () => { this._proposal = null; } })}</div>
         </div>` : nothing}
-        ${sel ? this._renderSelection(sel, f) : html`<div class="card muted small">Select a proxy, room or spot on the map to edit it. Drag to move; drag a vertex or an edge midpoint; right-click a vertex to remove it. Locked layers (the padlocks in the toolbar) cannot be selected.</div>`}
+        <details class="more setup" ?open=${!f || this._tool === "pin" || sel?.kind === "pin" || (this.expert && !!this._biasView?.on)}><summary>Floor setup: alignment, add a floor, history</summary>
+        ${f && this.expert ? this._renderBiasView(f) : nothing}
+        ${f ? this._renderAlignment(f) : nothing}
         <div class="card">
           <h4>Add a floor</h4>
           <form @submit=${(e) => { e.preventDefault(); const fd = new FormData(e.target); this._addFloor(fd.get("name"), fd.get("file")); }}>
@@ -1436,6 +1454,7 @@ class SextantEdit extends LitElement {
           </form>
         </div>
         ${this._renderHistory()}
+        </details>
         ${(this.data?.scanner_diagnostics?.unplaced_scanners || []).length ? html`<div class="card small"><h4>Proxies reporting, not placed</h4>${this.data.scanner_diagnostics.unplaced_scanners.map((s) => proxyName(this.data, s)).join(", ")}</div>` : nothing}
         </div>
       </aside>
@@ -1539,7 +1558,7 @@ class SextantEdit extends LitElement {
         </div>
         <details class="more"><summary>More options</summary>
         <div class="row">
-          ${uiField({ label: "Correction ×", type: "number", step: 0.001, min: 0.5, max: 2, value: item.correction ?? "", onChange: (v) => this._edit("correction", v), style: "width: 150px" })}
+          ${!this.expert ? nothing : uiField({ label: "Correction ×", type: "number", step: 0.001, min: 0.5, max: 2, value: item.correction ?? "", onChange: (v) => this._edit("correction", v), style: "width: 150px" })}
         </div>
         ${uiSwitch({ label: "Use in positioning", checked: item.solve !== false,
           onChange: (v) => this._edit("solve", v ? undefined : false) })}
@@ -1675,6 +1694,8 @@ class SextantEdit extends LitElement {
        active one filled - names in the tooltips and aria labels. Save and
        Discard keep their words: they are actions, not modes. */
     .toolbar { position: absolute; left: 10px; top: 10px; display: flex; gap: 2px; padding: 4px; border-radius: 12px; background: var(--card-background-color); box-shadow: var(--ha-card-box-shadow, 0 2px 6px rgba(0,0,0,0.25)); align-items: center; z-index: 2; }
+    .toolbar button.tool.chip { width: auto; padding: 0 10px; gap: 4px; }
+    .toolbar button.tool.chip > span:not(.lockicons) { display: inline; position: static; font-size: 13px; white-space: nowrap; }
     .toolbar button.tool { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; min-width: 0; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--primary-text-color); cursor: pointer; }
     .toolbar button.tool > span:not(.lockicons) { display: none; }
     .toolbar button.tool:hover:not([disabled]) { background: var(--secondary-background-color, rgba(0,0,0,0.06)); }
@@ -1697,6 +1718,10 @@ class SextantEdit extends LitElement {
     .hint select { max-width: 100%; }
     .hint input[type="search"] { width: 200px; max-width: 100%; padding: 4px 6px; font: inherit; }
     details.more { margin-top: 6px; }
+    details.more.setup > summary { padding: 6px 12px; }
+    .hint.passive { pointer-events: none; }   /* nothing to click in it, and what is under it must stay reachable */
+    /* On a phone a toolbar menu opens from the toolbar's left edge: from its own button it ran off the screen. */
+    @media (max-width: 720px) { .toolbar { position: relative !important; } .toolbar details.menu { position: static; } }
     details.more > summary { cursor: pointer; padding: 6px 0; font-size: 13px; color: var(--secondary-text-color); }
     .toolbar details.menu .menu-items { left: 0; right: auto; }
     .toolbar details.menu > summary { width: 36px; height: 36px; color: var(--primary-text-color); }

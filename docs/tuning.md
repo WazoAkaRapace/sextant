@@ -4,6 +4,10 @@
 
 ![The Tuning page: the stability KPI with saved baselines above every tuning knob grouped by what it affects](../img/screenshots/sextant-tuning.png)
 
+The Tuning page is part of **Expert mode**: tick **Expert mode** at the right of the Setup bar to show it. The setting is kept per browser. Expert mode also shows the diagnostics under Proxies, the signal-link, range-circle and fingerprint layers and the Confidence and In the solve read-outs on Live, a floor's election bias, a proxy's Correction ×, a spot's Entry share, and a thing's routine pull, ref trim and positioning. With it off those stay at whatever they were set to and keep working; only the controls are hidden.
+
+The knobs are folded by group, each heading saying how many you have changed; the filter opens whatever it matches. Accuracy, **Try a room setting** and position history are under **Experiments and history** at the bottom.
+
 The **stability KPI** reads the recorder for any window and reports, per
 thing, room changes per hour, the share that were A → B → A flips, the
 median dwell, and *far moves* per day: changes to a room on the same floor

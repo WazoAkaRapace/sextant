@@ -42,11 +42,13 @@ export const sharedStyles = css`
   .chips > label.inline { padding: 4px 12px 4px 8px; }
   /* ⋮ overflow menu (uiMenu): the rare actions live here instead of each
      taking a button of its own down the side of a card. */
+  details.more { margin-top: 6px; }
+  details.more > summary { cursor: pointer; padding: 6px 0; font-size: 13px; color: var(--secondary-text-color); }
   details.menu { position: relative; }
   details.menu > summary { list-style: none; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 0; border-radius: 8px; background: transparent; color: var(--secondary-text-color); cursor: pointer; }
   details.menu > summary::-webkit-details-marker, details.menu > summary::marker { display: none; content: ""; }
   details.menu > summary:hover { background: var(--secondary-background-color, rgba(0,0,0,0.06)); color: var(--primary-text-color); }
-  details.menu .menu-items { position: absolute; right: 0; top: 36px; z-index: 5; min-width: 210px; padding: 4px; border-radius: 10px; background: var(--card-background-color); box-shadow: var(--ha-card-box-shadow, 0 4px 14px rgba(0,0,0,0.3)); display: flex; flex-direction: column; }
+  details.menu .menu-items { max-height: 60vh; overflow-y: auto; position: absolute; right: 0; top: 36px; z-index: 5; min-width: 210px; padding: 4px; border-radius: 10px; background: var(--card-background-color); box-shadow: var(--ha-card-box-shadow, 0 4px 14px rgba(0,0,0,0.3)); display: flex; flex-direction: column; }
   details.menu .menu-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 0; border-radius: 6px; background: transparent; text-align: left; font: inherit; color: var(--primary-text-color); cursor: pointer; }
   details.menu .menu-item:hover:not([disabled]) { background: var(--secondary-background-color, rgba(0,0,0,0.06)); }
   details.menu .menu-item[disabled] { opacity: 0.45; cursor: default; }
@@ -294,8 +296,13 @@ export function uiSwitch({ label, checked, onChange, disabled = false }) {
  * permanent button each. `items` are {label, onClick, icon?, title?, danger?,
  * disabled?} or {divider: true}. Built on <details> so it opens, closes and
  * takes focus without a click-outside listener. */
+/** Expert mode: the solver's own knobs and read-outs, which most installs never need. Kept per browser. */
+export function expertMode() { try { return localStorage.getItem("sextant.expert") === "1"; } catch { return false; } }
+export function setExpertMode(on) { try { localStorage.setItem("sextant.expert", on ? "1" : "0"); } catch { /* private mode */ } }
+
 export function uiMenu({ items, label = "More actions", icon = "mdi:dots-vertical" }) {
-  return html`<details class="menu">
+  // Opening one menu closes the others beside it, so two never overlap.
+  return html`<details class="menu" @toggle=${(e) => { const d = e.currentTarget; if (d.open) d.getRootNode().querySelectorAll("details.menu[open]").forEach((o) => { if (o !== d) o.open = false; }); }}>
     <summary title=${label} aria-label=${label} role="button"><ha-icon icon=${icon}></ha-icon></summary>
     <div class="menu-items" @click=${(e) => { const d = e.currentTarget.parentElement; if (d) d.open = false; }}>
       ${(items || []).map((it) => it.divider
