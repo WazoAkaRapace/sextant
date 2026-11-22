@@ -101,11 +101,11 @@ point on every room and spot change.
 
 On a phone those buttons collapse behind a single options button so they
 never force sideways scrolling, the floor picker and the countdown move to
-a bar under the page, and a row of **quick actions** — self-test, and for an administrator, adding a
-thing and starting calibration — jumps straight to the right page
-without hunting through the tabs. The map takes about half the screen and
-can be put away: **Hide map** in the Things heading, which stays put as the
-list scrolls, or the button on the map itself. Picking a thing opens it
+a bar under the page. The page opens on the search box and the list; for an
+administrator a pin button and, under it, a **+** to add a thing float at the
+bottom right. The map takes about half the screen: the map button beside the
+search box, which stays put as the list scrolls, shows and hides it, as does
+the button on the map itself. Picking a thing opens it
 again, under that thing's details. Editing the floor plan itself is still
 a desktop job.
 
