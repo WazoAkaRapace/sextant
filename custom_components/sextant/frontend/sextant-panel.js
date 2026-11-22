@@ -1751,15 +1751,13 @@ class SextantLive extends LitElement {
           </div>` : nothing}
       </div>
       <aside class="side">
-        <h3>Things <span class="muted">${rows.length}</span>
-          <span class="narrow-only maptoggle">${uiButton({
-            label: this._mapOpen ? "Hide map" : "Show map",
-            icon: this._mapOpen ? "mdi:map-minus" : "mdi:map-outline",
-            kind: "text",
-            onClick: () => { this._mapOpen = !this._mapOpen; },
-          })}</span>
-        </h3>
-        ${rows.length > 8 ? html`<input class="tsearch" type="search" placeholder="Find a thing" aria-label="Find a thing" .value=${this._find || ""} @input=${(e) => { this._find = e.target.value; }}>` : nothing}
+        <h3 class="wide-only">Things <span class="muted">${rows.length}</span></h3>
+        <div class="searchrow">
+          ${rows.length > 8 ? html`<input class="tsearch" type="search" placeholder=${`Find a thing (${rows.length})`} aria-label=${`Find a thing, ${rows.length} listed`} .value=${this._find || ""} @input=${(e) => { this._find = e.target.value; }}>`
+            : html`<span class="grow muted narrow-only">${rows.length} thing${rows.length === 1 ? "" : "s"}</span>`}
+          <button class="iconbtn narrow-only" title=${this._mapOpen ? "Hide the map" : "Show the map"} aria-label=${this._mapOpen ? "Hide the map" : "Show the map"}
+            @click=${() => { this._mapOpen = !this._mapOpen; }}><ha-icon icon=${this._mapOpen ? "mdi:map-minus" : "mdi:map-outline"}></ha-icon></button>
+        </div>
         <ul class="list">
           ${this._renderGroupedRows(shown)}
           ${rows.length ? (shown.length ? nothing : html`<li class="muted">Nothing matches "${this._find}".</li>`) : html`<li class="muted">No positions yet.</li>`}
@@ -1817,9 +1815,9 @@ class SextantLive extends LitElement {
             ${sel.robot ? nothing : this._renderLinks(sel.ent)}
           </div>` : nothing}
         ${this._isAdmin() && !this._pin && !sel ? html`
-          <button class="pinfab narrow-only" title="Quick pin: say where a thing really is" aria-label="Pin where a thing really is" @click=${() => this._startPin()}>
+          <button class="pinfab narrow-only ${this._mapOpen ? "lift" : ""}" title="Quick pin: say where a thing really is" aria-label="Pin where a thing really is" @click=${() => this._startPin()}>
             <ha-icon icon="mdi:map-marker-check"></ha-icon></button>
-          <button class="pinfab addfab narrow-only" title="Add a thing" aria-label="Add a thing" @click=${() => this._goto("things")}>
+          <button class="pinfab addfab narrow-only ${this._mapOpen ? "lift" : ""}" title="Add a thing" aria-label="Add a thing" @click=${() => this._goto("things")}>
             <ha-icon icon="mdi:plus"></ha-icon></button>` : nothing}
         ${this._pin?.step === "who" ? this._renderPinWho() : this._pin?.step === "done" ? this._renderPinDone() : nothing}
     `;
@@ -2059,7 +2057,8 @@ class SextantLive extends LitElement {
     @media (min-width: 721px) and (max-width: 1000px) { .mapcorner.besidecard { display: none; } }
     .detail h4 { display: flex; align-items: center; gap: 6px; }
     .list { list-style: none; margin: 0 0 12px; padding: 0; }
-    .tsearch { width: 100%; box-sizing: border-box; margin: 0 0 8px; padding: 6px 8px; font: inherit; color: var(--primary-text-color); background: var(--card-background-color); border: 1px solid var(--divider-color); border-radius: 6px; }
+    .searchrow { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; }
+    .tsearch { flex: 1; min-width: 0; box-sizing: border-box; margin: 0; padding: 6px 8px; font: inherit; color: var(--primary-text-color); background: var(--card-background-color); border: 1px solid var(--divider-color); border-radius: 6px; }
     .list li { display: grid; grid-template-columns: 30px 1fr auto; grid-template-rows: auto auto; column-gap: 10px; align-items: center; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
     .avatar { grid-row: 1 / 3; width: 30px; height: 30px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,0.15); display: flex; align-items: center; justify-content: center; overflow: hidden; color: #fff; }
     .avatar ha-icon { --mdc-icon-size: 18px; }
@@ -2170,14 +2169,15 @@ class SextantLive extends LitElement {
        tabs. Calibration and adding a thing are admin actions - offered
        only when this user could reach those pages at all. */
     .side h3 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-    .maptoggle { margin-left: auto; }
     /* Quick pin (phones; see _startPin). The list and done steps are sheets
        over the whole screen; the map step is the stage itself gone
        full-screen, with the chips, the ring and one button laid over it. */
-    .pinfab { position: fixed; right: 16px; bottom: calc(64px + env(safe-area-inset-bottom, 0px)); z-index: 6; height: 52px; width: 52px; padding: 0; justify-content: center; border: 0; border-radius: 999px; background: var(--primary-color, #03a9f4); color: var(--text-primary-color, #fff); font: inherit; font-weight: 600; font-size: 15px; align-items: center; gap: 6px; box-shadow: 0 6px 20px rgba(0,0,0,0.35); cursor: pointer; }
+    .pinfab { position: absolute; right: 16px; bottom: 66px; z-index: 6; height: 52px; width: 52px; padding: 0; justify-content: center; border: 0; border-radius: 999px; background: var(--primary-color, #03a9f4); color: var(--text-primary-color, #fff); font: inherit; font-weight: 600; font-size: 15px; align-items: center; gap: 6px; box-shadow: 0 6px 20px rgba(0,0,0,0.35); cursor: pointer; }
+    /* With the map open the buttons sit above its view tools. */
+    .pinfab.lift { bottom: 122px; }
+    .pinfab.addfab.lift { bottom: 68px; }
     .pinfab ha-icon { --mdc-icon-size: 22px; }
-    .pinfab:not(.addfab) { bottom: calc(126px + env(safe-area-inset-bottom, 0px)); }
-    .pinfab.addfab { height: 44px; width: 44px; right: 20px; background: var(--card-background-color); color: var(--primary-color, #03a9f4); border: 1px solid var(--divider-color); }
+    .pinfab.addfab { bottom: 12px; height: 44px; width: 44px; right: 20px; background: var(--card-background-color); color: var(--primary-color, #03a9f4); border: 1px solid var(--divider-color); }
     .pinsheet { position: fixed; inset: 0; z-index: 8; display: flex; flex-direction: column; background: var(--primary-background-color, #fafafa); color: var(--primary-text-color); }
     .pinhead { display: flex; align-items: center; gap: 12px; padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 8px; }
     .pinhead h3, .pinbar h3 { margin: 0; font-size: 18px; font-weight: 600; line-height: 1.2; text-transform: none; letter-spacing: 0; color: var(--primary-text-color); }
@@ -2253,15 +2253,15 @@ class SextantLive extends LitElement {
       .scrub, .zoom, .wifilegend { right: 10px; }
       sextant-stack { --sextant-stack-zoom-right: 10px; }
       .mapcorner.besidecard { left: 10px; }   /* the card sits under the map here */
-      /* Things, and with it Hide map, stays reachable however far the list
+      /* The search row, and with it Hide map, stays reachable however far the list
          is scrolled - it used to scroll away and leave no way to close a map
          taking half the screen. */
-      .side h3 { position: sticky; top: 0; z-index: 2; margin: 0; padding: 8px 0; background: var(--card-background-color); }
+      .searchrow { position: sticky; top: 0; z-index: 2; margin: 0; padding: 8px 0; background: var(--card-background-color); }
       .stage { order: 2; flex: 0 0 48vh; }
       .stage.collapsed { display: none; }
       /* Room to scroll the last rows clear of the Pin button. */
-      .side .list:last-of-type { padding-bottom: 72px; }
-      .wide-only, .overlay .chips.wide-only { display: none; }
+      .side .list:last-of-type { padding-bottom: 124px; }
+      .wide-only, .side h3.wide-only, .overlay .chips.wide-only { display: none; }
       .narrow-only { display: flex; }
     }
   `];
