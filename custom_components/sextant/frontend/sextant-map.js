@@ -1274,9 +1274,13 @@ export class SextantMap {
     const m = this.toMap(p);
     const slop = HIT_SLOP / this.view.k;
     if (this.mode !== "edit") {
-      for (let i = this.things.length - 1; i >= 0; i--) {
+      // The focused thing is drawn on top, so it is hit first.
+      const fi = this.things.findIndex((t) => t.ent === this.options.focus);
+      const order = [...this.things.keys()].reverse();
+      if (fi >= 0) order.unshift(fi);
+      for (const i of order) {
         const t = this.things[i];
-        if (!t.cords) continue;
+        if (!t?.cords) continue;
         if (Math.hypot(t.cords[0] - m.x, t.cords[1] - m.y) <= (THING_RADIUS + 4) / this.view.k) return { kind: "thing", index: i, ent: t.ent };
       }
     }
@@ -1311,7 +1315,8 @@ export class SextantMap {
       }
     }
     const rs = ((edit ? RECEIVER_SIZE_EDIT : RECEIVER_SIZE) + (edit ? 6 : 0)) / this.view.k;
-    if (!(edit && this.locks.receiver)) {
+    // Proxies that are not drawn are not clickable either.
+    if (!(edit && this.locks.receiver) && (edit || this.options.receivers !== false)) {
       for (let i = (f.receivers || []).length - 1; i >= 0; i--) {
         const r = f.receivers[i];
         if (r.cords && Math.abs(r.cords.x - m.x) <= slop + rs && Math.abs(r.cords.y - m.y) <= slop + rs) return { kind: "receiver", index: i, id: r.entity_id };
@@ -2265,7 +2270,8 @@ export class SextantMap {
     const clusters = this.options.cluster === false ? [] : clusterThings(this.things, (THING_RADIUS * 1.8) / k, picked);
     const clustered = new Map();
     for (const c of clusters) for (const m of c.members) clustered.set(m.ent, c);
-    for (const t of this.things) {
+    // The focused thing is drawn last, on top of whatever shares its spot.
+    for (const t of focus ? [...this.things].sort((a, b) => (a.ent === focus) - (b.ent === focus)) : this.things) {
       if (!t.cords) continue;
       const custom = t.color || null;
       const color = thingColor(t.ent, custom);
@@ -2346,7 +2352,8 @@ export class SextantMap {
         ctx.fillText((t.label || t.ent).slice(0, 2).toUpperCase(), t.cords[0], t.cords[1]);
       }
       const label = ghost ? `${t.label || t.ent} · ${shortAge(age)} ago` : (t.label || t.ent);
-      if (this.options.labels || focused || ghost) {
+      // With one thing picked out, the others keep their faded dots and lose their names.
+      if (focused || (!focus && (this.options.labels || ghost))) {
         this._label(ctx, label, t.cords[0], t.cords[1] + r + 9 / k, focused ? 13 : 11, 0.9, null,
                     focused ? LABEL_PRIO.focus : LABEL_PRIO.thing);
       }
@@ -2380,7 +2387,7 @@ export class SextantMap {
     ctx.fillText(String(c.members.length), c.x, c.y);
     const names = c.members.map((t) => t.label || t.ent);
     const label = names.length > 2 ? `${names[0]}, ${names[1]} +${names.length - 2}` : names.join(", ");
-    if (this.options.labels) this._label(ctx, label, c.x, c.y + r + 9 / k, 11, 0.9, null, LABEL_PRIO.thing);
+    if (this.options.labels && !focus) this._label(ctx, label, c.x, c.y + r + 9 / k, 11, 0.9, null, LABEL_PRIO.thing);
     this._thingMarks.push({ x: c.x, y: c.y, r });
     ctx.restore();
   }

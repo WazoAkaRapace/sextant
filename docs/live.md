@@ -10,7 +10,8 @@ administrator, and links to [Edit](edit.md) and
 
 The floor plan with every tracked thing drawn as an avatar in its own colour, the
 same colour as its row in the list. Click a thing (row or avatar) to
-focus it: everything else fades, it grows a halo, the panel switches to its
+focus it: the other things fade and lose their names, it is drawn on top
+with a halo, the panel switches to its
 floor, and the side panel shows its room, spot, floor, the proxy it is
 anchored to if any, and every proxy that hears it with the distance. Click
 a **proxy** instead and a card says what it is and what it is doing: its
@@ -33,8 +34,8 @@ plan image, the labels, the trails, the spots, the proxies, the Wi-Fi
 access points placed on the plan, the solver's distance circles and the
 fingerprint fix; each lights up while it is on.
 Labels names the rooms and the things (and whichever proxy you point at); a room's name sits at its most open point, so an L-shaped room's label is never in a corner or outside it,
-while Proxies draws the proxies themselves, which a busy plan is often
-better without. In the corner, a countdown says how many seconds until the
+while Proxies and Wi-Fi (both off by default) draw the proxies and the access
+points themselves, which a busy plan is often better without. In the corner, a countdown says how many seconds until the
 next positioning cycle, and falls back to how long ago the last one was
 when a cycle is late. For an admin it is also a menu: pick 5 or 10 seconds
 to watch something move (or 30 or 60 to go easy on the box) and Sextant
@@ -216,12 +217,13 @@ week. Asking for more than is kept says how far back it goes.
 
 ## Signal lines
 
-With a thing selected, **Signal lines** (on by default) draws a line from it
+With a thing selected, **Signal lines** (off by default, an Expert layer) draws a line from it
 to every proxy the solver used for it this cycle. Each line is green when the
 proxy is close and red by ten metres, labelled with the distance, and thicker
 for the proxies the solver weighted most. A phone or watch also gets a dashed
 line to the Wi-Fi access point it is joined to, when its owner's Wi-Fi tracker
-of the same kind is on an access point placed on this floor.
+of the same kind is on an access point placed on this floor. The thing's
+[location pins](live.md#location-pins) carry their numbers while the lines are on.
 
 A key in the bottom-left corner says what the colours mean while the lines
 show. The thing's details list the same proxies under **In the solve**: each one's
