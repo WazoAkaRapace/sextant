@@ -340,3 +340,13 @@ def test_the_last_charge_is_read_from_the_sensors_history():
     full = rows[:2] + [S(state="Full", last_changed=at(6)), S(state="NotCharging", last_changed=at(7))]
     assert persons.last_charge_began(full) == at(4).timestamp()     # Charging then Full is one charge
     assert persons.last_charge_began(rows[:1]) is None and persons.last_charge_began(None) is None
+
+
+def test_a_dog_unheard_with_her_collar_at_home_is_outside():
+    gps = {"zone": "home", "latitude": 1.0, "longitude": 2.0, "gps_accuracy": 5, "tracker": "device_tracker.collar"}
+    out = persons.fuse(None, [], "away", None, gps, [], dog=True)
+    assert out["sextant_person_location"][0] == "Outside" and out["sextant_person_location"][1]["kind"] == "outside"
+    assert out["sextant_person_room"][0] == "Outside"
+    assert persons.fuse(None, [], "away", None, gps, [])["sextant_person_location"][0] == "home"      # a cat or a person
+    away = {**gps, "zone": "not_home"}
+    assert persons.fuse(None, [], "away", None, away, [], dog=True)["sextant_person_location"][0] == "away"

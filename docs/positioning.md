@@ -26,7 +26,7 @@ nearest room, unless it stays more than `outside_margin_m` beyond every room for
 in a room all the same (no proxy out there pulls it out): heard by no more
 than `outside_faint_prox` proxies with the nearest `outside_faint_m` or more
 away, for `outside_secs`, it reads **Outside** too, and comes back in once a
-proxy is within `outside_near_m`. Never for a cat. A fix in a no-go area is snapped out of it, to the room the
+proxy is within `outside_near_m`. And once no proxy hears her at all, a dog whose GPS tracker (her collar, set on the People card) says home reads **Outside** rather than home. Never for a cat. A fix in a no-go area is snapped out of it, to the room the
 thing is already in while that room's wall is within 1.5 m of the nearest one
 (a fix inside a void is no evidence for either side of it).
 

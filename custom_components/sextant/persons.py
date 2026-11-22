@@ -590,7 +590,7 @@ def room_changes(baseline, pending, now, pets=()):
     return base, pend, out
 
 
-def fuse(best, why, presence, held, gps, ignored, home=None, wifi=None):
+def fuse(best, why, presence, held, gps, ignored, home=None, wifi=None, dog=False):
     """(suffix -> (state, attributes)) for a person's sensors, BLE, Wi-Fi and GPS fused.
 
     here: the thing that speaks for them (states). quiet: the place they were
@@ -599,7 +599,8 @@ def fuse(best, why, presence, held, gps, ignored, home=None, wifi=None):
     joined to a home access point, so they are home, in the room that access
     point most often means (wifi: {"entity", "home", "ap", "floor", "room",
     "area_id", "floor_id"}; see wifi.py). away: the GPS zone, or "away" with
-    nothing usable. The location sensor always carries the GPS side too
+    nothing usable; a dog (``dog``) whose collar says home while no proxy
+    hears her is in the garden: Outside. The location sensor always carries the GPS side too
     (zone, coordinates, distance from home), so a dashboard can show both.
     """
     gps_attrs = {"zone": None, "latitude": None, "longitude": None, "gps_accuracy": None, "tracker": None, "distance_m": None}
@@ -636,9 +637,11 @@ def fuse(best, why, presence, held, gps, ignored, home=None, wifi=None):
     else:
         state, source = "away", "none"
     blank = {"kind": "zone", "room": "unknown", "spot": None, "floor": "unknown", "area_id": None, "floor_id": None, "via": None}
+    if dog and state == "home":
+        state, blank = "Outside", {**blank, "kind": "outside", "room": "Outside"}
     return {
         "sextant_person_location": (state, {**blank, "source": source, **common, **gps_attrs, "considered": why or []}),
-        "sextant_person_room": ("unknown", {"area_id": None, "via": None, "source": source, "presence": presence}),
+        "sextant_person_room": (blank["room"], {"area_id": None, "via": None, "source": source, "presence": presence}),
         "sextant_person_floor": ("unknown", {"via": None, "source": source, "presence": presence}),
     }
 
