@@ -1137,6 +1137,13 @@ class SextantLive extends LitElement {
     if (changed.has("positions") || changed.has("floor") || changed.has("data") || changed.has("_scrub") || changed.has("_history")) this._pushThings();
     if (changed.has("hass") && changed.get("hass")?.areas !== this.hass?.areas) this._map.setAreas(this.hass?.areas);
     if (changed.has("floor") || changed.has("_marks") || changed.has("_options")) this._pushMarks();
+    // A selected thing brings its room up close and fades the rest of the
+    // floor; it follows the thing from room to room. The pin wizard zooms itself.
+    if (!this._pin && ["_selected", "floor", "data", "positions", "_pin"].some((k) => changed.has(k))) {
+      const p = this._selected ? this._allRows().find((r) => r.ent === this._selected) : null;
+      const zone = p?.floor === this.floor && p.zone ? (this._floorObj()?.zones || []).find((z) => z.entity_id === p.zone)?.zone_id || null : null;
+      if (zone !== this._map.focusZone) this._map.setFocusZone(zone);
+    }
     if (changed.has("floor") || changed.has("_heat") || changed.has("data")) this._pushHeat();
     if (changed.has("_options")) this._map.setOptions(this._options);
     if (changed.has("data")) this._map.setOptions({ staleAfter: this._staleAfter() });

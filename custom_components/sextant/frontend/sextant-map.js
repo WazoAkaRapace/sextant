@@ -1510,13 +1510,16 @@ export class SextantMap {
       const selected = this.selection && this.selection.kind === kind && this.selection.index === index;
       const hovered = this.hover && this.hover.kind === kind && this.hover.index === index;
       const noGo = !!item.no_go;
+      // Live is for reading where things are: the rooms and spots sit back as
+      // a tint. Edit keeps them strong, since there they are what you work on.
+      const soft = this.mode === "edit" ? 1 : 0.5;
       const hue = kind === "subzone" ? null : thingHue(item.entity_id || "");
       ctx.beginPath();
       pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
       if (pts.length >= 3) ctx.closePath();
       if (kind === "subzone") {
-        ctx.fillStyle = withAlpha(item.color || "hsl(175,70%,45%)", 0.22);
-        ctx.strokeStyle = item.color || "hsl(175,70%,45%)";
+        ctx.fillStyle = withAlpha(item.color || "hsl(175,70%,45%)", 0.22 * soft);
+        ctx.strokeStyle = withAlpha(item.color || "hsl(175,70%,45%)", soft);
       } else if (noGo) {
         // A void is read at a glance, not studied: the dashed outline and a
         // wash say "nothing here" without the heavy fill and close hatch that
@@ -1525,11 +1528,11 @@ export class SextantMap {
         ctx.strokeStyle = "rgba(70,70,70,0.75)";
       } else if (item.color) {
         // A colour picked for the room (Edit, from Home Assistant's list).
-        ctx.fillStyle = withAlpha(item.color, selected || hovered ? 0.28 : 0.16);
-        ctx.strokeStyle = withAlpha(item.color, 0.9);
+        ctx.fillStyle = withAlpha(item.color, (selected || hovered ? 0.28 : 0.16) * soft);
+        ctx.strokeStyle = withAlpha(item.color, 0.9 * soft);
       } else {
-        ctx.fillStyle = `hsla(${hue}, 60%, 55%, ${selected || hovered ? 0.28 : 0.16})`;
-        ctx.strokeStyle = `hsla(${hue}, 60%, 40%, 0.9)`;
+        ctx.fillStyle = `hsla(${hue}, 60%, 55%, ${(selected || hovered ? 0.28 : 0.16) * soft})`;
+        ctx.strokeStyle = `hsla(${hue}, 60%, 40%, ${0.9 * soft})`;
       }
       ctx.lineWidth = (selected ? 3 : hovered ? 2 : 1.25) / k;
       if (noGo) ctx.setLineDash([6 / k, 4 / k]);
@@ -2282,7 +2285,7 @@ export class SextantMap {
       // solid dot claiming a position nobody has confirmed.
       const { age, ghost } = staleness(t, this.options.staleAfter);
       ctx.save();
-      if (focus && !focused) ctx.globalAlpha = 0.28;   // everything but the one you clicked fades back
+      if (focus && !focused) ctx.globalAlpha = 0.16;   // everything but the one you clicked fades back
       if (ghost) ctx.globalAlpha *= 0.4;
       const trail = this.options.trails ? this.trails.get(t.ent) : null;
       if (trail && trail.length > 1) {
@@ -2373,7 +2376,7 @@ export class SextantMap {
     const custom = lead.color || null;
     const stale = c.members.every((t) => staleness(t, this.options.staleAfter).ghost);
     ctx.save();
-    if (focus) ctx.globalAlpha = 0.28;   // a cluster is never the focused thing
+    if (focus) ctx.globalAlpha = 0.16;   // a cluster is never the focused thing
     if (stale) ctx.globalAlpha *= 0.4;
     ctx.beginPath(); ctx.arc(c.x, c.y, r * 1.9, 0, Math.PI * 2);
     ctx.fillStyle = thingRgba(lead.ent, custom, 0.18); ctx.fill();

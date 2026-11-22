@@ -354,7 +354,7 @@ class SextantStack extends LitElement {
       const focused = focus && t.ent === focus;
       const { age, ghost } = staleness(t, this.staleAfter ?? 120);
       ctx.save();
-      if (focus && !focused) ctx.globalAlpha = 0.3;
+      if (focus && !focused) ctx.globalAlpha = 0.16;
       if (ghost) ctx.globalAlpha *= 0.45;
       const color = thingColor(t.ent, custom);
       // The stem and the shadow on the floor say where on the plan it is;
