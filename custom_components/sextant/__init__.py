@@ -510,6 +510,13 @@ COVERAGE_TARGET_N = 5.0      # heard receivers at which the coverage term satura
 # candidate still wins and its position is snapped out to the nearest allowed
 # zone — so a thing is never left position-less.
 NO_GO_CONF_PENALTY = 0.15
+# A fit only just inside a no-go zone is within the fit's own error (about a
+# metre) of the walkway beside it: Jack's watch in a bedroom beside the Foyer
+# Upper void fitted 0.5-0.7 m into it and lost its floor to the room below.
+# No penalty within NO_GO_GRACE_M of the edge, the full one from NO_GO_FULL_M
+# in, linear between.
+NO_GO_GRACE_M = 0.75
+NO_GO_FULL_M = 1.5
 # When snapping a fix out of dead space, grow the no-go footprint by this many
 # pixels before subtracting it from the allowed region, so the snap target's
 # boundary sits clear of the (boundary-inclusive) no-go edge rather than
@@ -3333,8 +3340,7 @@ def _solve_floor_jobs(jobs):
             # here (issue #60): down-weight it so the competition prefers the
             # floor where that spot is a real room. Down-weight, not eliminate -
             # a sole candidate still wins and is snapped out by the caller.
-            if _point_in_no_go(fix, job["zone_polys"]):
-                conf *= NO_GO_CONF_PENALTY
+            conf *= _no_go_factor(fix, job["zone_polys"], job["scale"])
         geometric = fix is not None
         fix, conf, fp = _fuse_fingerprint(job.get("fingerprint"), fix, conf)
         # A fingerprint-only fix has no geometry to check it, so check it
@@ -5227,6 +5233,11 @@ def _wifi_floor_factor(entity, layout, floor_name):
     wifi = (_wifi_now.get("by_person") or {}).get(owner)
     if not wifi or not wifi.get("odds"):
         return 1.0
+    # A watch keeps the access point it joined, however far away: Michelle's
+    # stayed on the garage one with her upstairs. Only a phone's says the floor.
+    src = (_wifi_now.get("candidates") or {}).get(wifi.get("entity")) or {}
+    if wifi_mod.is_watch(wifi.get("entity"), src.get("name")):
+        return 1.0
     return wifi_mod.floor_factor(wifi["odds"], floor_name, weight)
 
 
@@ -6969,6 +6980,22 @@ def _point_in_no_go(point, zone_polys):
         point = Point(float(point[0]), float(point[1]))
     return any(no_go and polygon.contains(point)
                for _zone_id, polygon, _buffer_size, no_go in zone_polys)
+
+
+def _no_go_factor(point, zone_polys, scale):
+    """The election-confidence multiplier for a fit at point: 1 outside every
+    no-go zone and within NO_GO_GRACE_M of its edge, NO_GO_CONF_PENALTY from
+    NO_GO_FULL_M in, linear between. No scale: the full penalty when inside."""
+    if not isinstance(point, Point):
+        point = Point(float(point[0]), float(point[1]))
+    depth = max((polygon.exterior.distance(point) for _zid, polygon, _b, no_go in zone_polys
+                 if no_go and polygon.contains(point)), default=None)
+    if depth is None:
+        return 1.0
+    if not scale:
+        return NO_GO_CONF_PENALTY
+    t = (depth / scale - NO_GO_GRACE_M) / (NO_GO_FULL_M - NO_GO_GRACE_M)
+    return 1.0 - (1.0 - NO_GO_CONF_PENALTY) * min(1.0, max(0.0, t))
 
 
 def find_zone_for_point(hass, data, entity, floor_name, point):
