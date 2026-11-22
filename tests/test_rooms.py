@@ -758,3 +758,7 @@ def test_a_room_keeps_its_since_over_a_restart(hass):
     sextant._publish_rooms(hass)
     assert shown("Office")[:2] == (False, "clear") and shown("Office")[2] > then + 3000
     assert shown("Hall") == (False, "clear", int(then))
+
+
+def test_a_dog_whose_collar_says_home_is_a_pet_at_home():
+    assert rooms.people_home({"Meg": "gps"}, pets={"Meg"})[1]["pets_home"] == ["Meg"]

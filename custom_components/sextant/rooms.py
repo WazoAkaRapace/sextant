@@ -352,7 +352,8 @@ def people_home(presences: dict[str, str], pets=()) -> tuple[int, dict]:
     person): they are listed apart and not counted.
     """
     pets = set(pets)
-    at_home = (*COUNTED, "wifi")     # a person BLE lost but whose phone is still on the house's Wi-Fi is home
+    # BLE lost them but their phone is on the house's Wi-Fi, or a dog's collar says home: home
+    at_home = (*COUNTED, "wifi", "gps")
     home = sorted(n for n, p in presences.items() if p in at_home and n not in pets)
     away = sorted(n for n, p in presences.items() if p not in at_home and n not in pets)
     pets_home = sorted(n for n, p in presences.items() if p in at_home and n in pets)

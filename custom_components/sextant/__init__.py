@@ -5466,7 +5466,8 @@ def _update_person_sensors(hass):
                 ap_floor, _room = wifi_mod.best_place(_wifi_store, c["ap"], (info.get("floor"), info.get("room")))
                 same_floor = (ap_floor == ble_floor) if ap_floor else None
             wifi_mod.match_update(_wifi_store, tracker, person, wifi_mod.agreement(c["home"], person_home, same_floor), now)
-        for suffix, (state, attrs) in persons_mod.fuse(best, why if best else held_why, presence, held, gps, ignored, home, wifi_home).items():
+        for suffix, (state, attrs) in persons_mod.fuse(best, why if best else held_why, presence, held, gps, ignored, home, wifi_home,
+                                                             dog=bool(things) and all(classes.get(t) == "dog" for t in things)).items():
             # What kind of thing speaks for them (phone, watch, cat...), so a card need not guess from its name.
             attrs["via_class"] = classes.get(attrs["via"]) if attrs.get("via") else None
             sensor_id = persons_mod.sensor_entity_id(slug, suffix, person in pets)
@@ -5478,7 +5479,8 @@ def _update_person_sensors(hass):
             update_sextant_sensor_state(hass, sensor_id, state, attrs)
             if suffix == "sextant_person_location":
                 logged = (state, attrs.get("source"))
-                room_ok = attrs.get("room") not in (None, "unknown")
+                # A dog's GPS Outside is no room to sleep in or move between.
+                room_ok = attrs.get("room") not in (None, "unknown") and attrs.get("source") != "gps"
                 _person_places[person] = (attrs["room"], attrs.get("floor")) if room_ok else None
         _person_visits[person] = persons_mod.visit(_person_visits.get(person), persons_mod.home_via(presence, gps, wifi_home), last_heard, now)
         _person_sleep[person] = persons_mod.sleep_tally(_person_sleep.get(person), _person_places.get(person), now, _local_tz,
@@ -5584,6 +5586,8 @@ def _update_room_sensors(hass):
         presences[name] = st.attributes.get("presence") or "away"
         if presences[name] == "away" and st.attributes.get("source") == "wifi":
             presences[name] = "wifi"       # BLE lost them, Wi-Fi still has them in the house
+        elif presences[name] == "away" and st.attributes.get("source") == "gps" and st.attributes.get("kind") == "outside":
+            presences[name] = "gps"        # a dog BLE lost whose collar says home: in the garden
         # Gone out (kind outside): the thing left in the room speaks for no one there.
         if st.attributes.get("via") and st.attributes.get("source") in ("ble", "held") and st.attributes.get("kind") != "outside":
             speaking.add(st.attributes["via"])
