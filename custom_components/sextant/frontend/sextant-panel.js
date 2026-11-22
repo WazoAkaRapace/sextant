@@ -586,6 +586,7 @@ class SextantLive extends LitElement {
       this._pushHeat();
       this._pushWifiHeat();
       this._pushFocusWifi();
+      this._pushFocusRoom();
     }
   }
 
@@ -1033,6 +1034,18 @@ class SextantLive extends LitElement {
     </div>`;
   }
 
+  /** A selected thing brings its room up close. Set when it is picked (or the
+   * floor changes), not as it moves, so the map never jumps under a pan. */
+  _pushFocusRoom() {
+    if (!this._map) return;
+    // The pin wizard zooms itself; leaving it zooms back to the room.
+    if (this._pin) { this._map.focusZone = null; return; }
+    const p = this._selected ? this._allRows().find((r) => r.ent === this._selected) : null;
+    const z = p?.floor === this.floor && p.zone ? (this._floorObj()?.zones || []).find((q) => q.entity_id === p.zone) : null;
+    const zone = z ? z.zone_id || z.entity_id : null;
+    if (zone !== this._map.focusZone) this._map.setFocusZone(zone);
+  }
+
   _pushMarks() {
     const mine = this._selected ? this._marks.filter((m) => m.floor === this.floor) : [];
     this._map?.setMarks(mine.map((m) => ({ x: m.x, y: m.y, label: this._options.links ? `mark ${m.id}` : "" })));
@@ -1137,13 +1150,7 @@ class SextantLive extends LitElement {
     if (changed.has("positions") || changed.has("floor") || changed.has("data") || changed.has("_scrub") || changed.has("_history")) this._pushThings();
     if (changed.has("hass") && changed.get("hass")?.areas !== this.hass?.areas) this._map.setAreas(this.hass?.areas);
     if (changed.has("floor") || changed.has("_marks") || changed.has("_options")) this._pushMarks();
-    // A selected thing brings its room up close and fades the rest of the
-    // floor; it follows the thing from room to room. The pin wizard zooms itself.
-    if (!this._pin && ["_selected", "floor", "data", "positions", "_pin"].some((k) => changed.has(k))) {
-      const p = this._selected ? this._allRows().find((r) => r.ent === this._selected) : null;
-      const zone = p?.floor === this.floor && p.zone ? (this._floorObj()?.zones || []).find((z) => z.entity_id === p.zone)?.zone_id || null : null;
-      if (zone !== this._map.focusZone) this._map.setFocusZone(zone);
-    }
+    if (["_selected", "floor", "_pin"].some((k) => changed.has(k))) this._pushFocusRoom();
     if (changed.has("floor") || changed.has("_heat") || changed.has("data")) this._pushHeat();
     if (changed.has("_options")) this._map.setOptions(this._options);
     if (changed.has("data")) this._map.setOptions({ staleAfter: this._staleAfter() });

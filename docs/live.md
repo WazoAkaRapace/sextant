@@ -10,8 +10,7 @@ administrator, and links to [Edit](edit.md) and
 
 The floor plan with every tracked thing drawn as an avatar in its own colour, the
 same colour as its row in the list. Click a thing (row or avatar) to
-focus it: the map zooms to its room and dims the rest of the floor (and
-follows it from room to room), the other things fade and lose their names,
+focus it: the map zooms to its room, the other things fade and lose their names,
 it is drawn on top with a halo, the panel switches to its
 floor, and the side panel shows its room, spot, floor, the proxy it is
 anchored to if any, and every proxy that hears it with the distance. Click

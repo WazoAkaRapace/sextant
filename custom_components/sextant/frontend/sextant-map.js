@@ -878,7 +878,7 @@ export class SextantMap {
 
   _focusCords() {
     if (!this.focusZone) return null;
-    const c = (this.floor?.zones || []).find((z) => z.zone_id === this.focusZone)?.cords;
+    const c = (this.floor?.zones || []).find((z) => z.zone_id === this.focusZone || z.entity_id === this.focusZone)?.cords;
     return c?.length >= 3 ? c : null;
   }
 
@@ -1426,7 +1426,8 @@ export class SextantMap {
     if (this.mode !== "edit") { this._drawThings(ctx); this._drawMarks(ctx); }
     this._drawProxyPeeks(ctx);
     this._flushLabels(ctx);
-    const focus = this._focusCords();
+    // Live only zooms to the room: its lines, pins and heat reach into other rooms.
+    const focus = this.mode === "edit" ? this._focusCords() : null;
     if (focus) {
       // One room at a time: a scrim over everything but the room, so the rest stays as a faint guide.
       ctx.save();
