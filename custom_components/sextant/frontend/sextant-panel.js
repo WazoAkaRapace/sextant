@@ -1753,9 +1753,9 @@ class SextantLive extends LitElement {
       <aside class="side">
         <h3 class="wide-only">Things <span class="muted">${rows.length}</span></h3>
         <div class="searchrow">
-          ${rows.length > 8 ? html`<input class="tsearch" type="search" placeholder="Find a thing" aria-label="Find a thing" .value=${this._find || ""} @input=${(e) => { this._find = e.target.value; }}>`
+          ${rows.length > 8 ? html`<input class="tsearch" type="search" placeholder=${`Find a thing (${rows.length})`} aria-label=${`Find a thing, ${rows.length} listed`} .value=${this._find || ""} @input=${(e) => { this._find = e.target.value; }}>`
             : html`<span class="grow muted narrow-only">${rows.length} thing${rows.length === 1 ? "" : "s"}</span>`}
-          <button class="iconbtn narrow-only" title=${this._mapOpen ? "Hide the map" : "Show the map"} aria-label=${this._mapOpen ? "Hide the map" : "Show the map"} aria-pressed=${this._mapOpen ? "true" : "false"}
+          <button class="iconbtn narrow-only" title=${this._mapOpen ? "Hide the map" : "Show the map"} aria-label=${this._mapOpen ? "Hide the map" : "Show the map"}
             @click=${() => { this._mapOpen = !this._mapOpen; }}><ha-icon icon=${this._mapOpen ? "mdi:map-minus" : "mdi:map-outline"}></ha-icon></button>
         </div>
         <ul class="list">
