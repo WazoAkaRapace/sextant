@@ -19,6 +19,13 @@ target:
   area_id: "{{ state_attr('sensor.alex_sextant_person_location', 'area_id') }}"
 ```
 
+**The toolbar** shows the four tools used every day: Select, Room, Proxy
+and Spot. No-go, Scale, Anchor, mmWave, Wi-Fi and Note are under **More
+tools** (the **⋯** button); the one in use shows in the toolbar until you
+go back to Select. A selected item's card shows its main fields, and the
+rest are under **More options**. A new room offers this floor's Home
+Assistant areas first, and takes the name of the one you pick.
+
 **Keys:** **Esc** cancels whatever is in progress. In the middle of a drag
 it puts the item, and anything it carried, back where it was; while drawing
 it drops the shape; otherwise it returns the tool to Select, then clears the
