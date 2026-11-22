@@ -501,20 +501,45 @@ class SextantDevices extends LitElement {
             ${icon ? html`<ha-icon icon=${icon}></ha-icon>` : html`<span class="initials">Ab</span>`}<span>${label}</span></button>`)}
         </div>
         <div class="row">
-          ${uiSelect({ label: "Pronouns", value: w.pronouns || "", options: [
-            { value: "", label: `From its class (${pronounKey({ thing_classes: { [w.slug]: w.thing_class || undefined } }, w.slug)})` },
-            { value: "he", label: "He / him" }, { value: "she", label: "She / her" },
-            { value: "they", label: "They / them" }, { value: "it", label: "It" },
-          ], onChange: (v) => { w.pronouns = v; this.requestUpdate(); }, style: "width: 220px" })}
-          <span class="small muted">How Sextant refers to this thing. A person or pet with no pronouns set is "they".</span>
-        </div>
-        <div class="row">
           ${uiSelect({ label: "Belongs to", value: w.owner || "", options: [{ value: "", label: "Nobody" },
             ...Object.values(this.hass?.states || {}).filter((s) => s.entity_id.startsWith("person."))
               .map((s) => ({ value: s.entity_id, label: s.attributes.friendly_name || s.entity_id }))
               .sort((a, b) => a.label.localeCompare(b.label))],
             onChange: (v) => { w.owner = v; this.requestUpdate(); }, style: "width: 220px" })}
           <span class="small muted">A Home Assistant person. Their things are grouped together on Live, and the one they are carrying gives them a location sensor of their own.</span>
+        </div>
+        <div class="row colour">
+          <span class="avatar-preview" style="background: ${thingColor(w.slug, w.color || null)}" title="how this thing will look">${w.preview || w.icon ? html`<img src=${w.preview || w.icon} alt="">` : classIcon(w.thing_class) ? html`<ha-icon icon=${classIcon(w.thing_class)}></ha-icon>` : html`<span class="initials">${(w.name || w.placeholder || "?").slice(0, 2).toUpperCase()}</span>`}</span>
+          <span class="small">Colour</span>
+          ${PALETTE.map((c) => html`<button class="swatch ${w.color === c ? "on" : ""}" style="background: ${c}" title=${c} @click=${() => { w.color = c; this.requestUpdate(); }}></button>`)}
+          <input type="color" title="Any colour" .value=${w.color || "#1e88e5"} @input=${(e) => { w.color = e.target.value; this.requestUpdate(); }}>
+          ${w.color ? uiButton({ label: "Auto", kind: "text", onClick: () => { w.color = ""; this.requestUpdate(); }, title: "Back to the automatic colour" }) : nothing}
+        </div>
+        <h4>Photo or custom icon <span class="muted small">optional, drawn instead of the class icon</span></h4>
+        ${w.crop ? html`<div class="cropper">
+          <canvas class="cropper" width=${CROP_SIZE} height=${CROP_SIZE}
+                  @pointerdown=${(e) => this._cropPointer(e)} @pointermove=${(e) => this._cropPointer(e)} @pointerup=${(e) => this._cropPointer(e)} @pointercancel=${(e) => this._cropPointer(e)}
+                  @wheel=${(e) => this._cropWheel(e)}></canvas>
+          <div class="row">
+            <span class="small muted">Drag to move</span>
+            <input type="range" min="1" max="4" step="0.02" .value=${String(w.crop.zoom)} title="Zoom" @input=${(e) => { w.crop.zoom = Number(e.target.value); this._drawCropper(); }}>
+            ${uiButton({ label: "Use this crop", kind: "primary", onClick: () => this._acceptCrop() })}
+            ${uiButton({ label: "Cancel", kind: "text", onClick: () => { URL.revokeObjectURL(w.crop.url); w.crop = null; this.requestUpdate(); } })}
+          </div>
+        </div>` : html`<div class="row">
+          ${w.preview ? html`<img class="icon round" src=${w.preview} alt=""><span class="small muted">cropped photo, uploaded on ${w.new ? "Track" : "Save"}</span>` : w.icon ? html`<img class="icon round" src=${w.icon} alt="">` : nothing}
+          <label class="btn small" title="Pick a photo, then frame it in the circle">Photo…<input type="file" accept="image/*" hidden @change=${(e) => { this._startCrop(e.target.files[0] || null); e.target.value = ""; }}></label>
+          ${uiSelect({ label: "Icon", value: w.preview ? "none" : (w.icon || "none"), options: [{ value: "none", label: w.preview ? "the cropped photo" : "class icon" }, ...(this.data?.icons || []).map((i) => ({ value: i.value, label: i.label }))], onChange: (v) => { w.icon = v === "none" ? "" : v; if (w.icon) { w.file = null; if (w.preview) URL.revokeObjectURL(w.preview); w.preview = null; } this.requestUpdate(); }, style: "min-width: 180px" })}
+          ${(w.preview || w.icon) ? uiButton({ label: "Remove", kind: "text", onClick: () => { w.icon = ""; w.file = null; if (w.preview) URL.revokeObjectURL(w.preview); w.preview = null; this.requestUpdate(); } }) : nothing}
+        </div>`}
+        <details class="more"><summary>More options: pronouns, charger, battery, home, height, positioning</summary>
+        <div class="row">
+          ${uiSelect({ label: "Pronouns", value: w.pronouns || "", options: [
+            { value: "", label: `From its class (${pronounKey({ thing_classes: { [w.slug]: w.thing_class || undefined } }, w.slug)})` },
+            { value: "he", label: "He / him" }, { value: "she", label: "She / her" },
+            { value: "they", label: "They / them" }, { value: "it", label: "It" },
+          ], onChange: (v) => { w.pronouns = v; this.requestUpdate(); }, style: "width: 220px" })}
+          <span class="small muted">How Sextant refers to this thing. A person or pet with no pronouns set is "they".</span>
         </div>
         ${w.owner ? html`<div class="row">
           ${uiSelect({ label: "Gives the owner's location", value: w.locates || "", options: [
@@ -559,14 +584,6 @@ class SextantDevices extends LitElement {
             onChange: (v) => { w.classHabit = v; w.classHabitFor = w.thing_class; this.requestUpdate(); }, style: "width: 260px" })}
           <span class="small muted">How far where this kind of thing usually is at this hour eases a close call between two rooms. Blank is the default: the Tuning page's value, and none for pets. 0 turns it off for the class.</span>
         </div>` : nothing}
-        <div class="row colour">
-          <span class="avatar-preview" style="background: ${thingColor(w.slug, w.color || null)}" title="how this thing will look">${w.preview || w.icon ? html`<img src=${w.preview || w.icon} alt="">` : classIcon(w.thing_class) ? html`<ha-icon icon=${classIcon(w.thing_class)}></ha-icon>` : html`<span class="initials">${(w.name || w.placeholder || "?").slice(0, 2).toUpperCase()}</span>`}</span>
-          <span class="small">Colour</span>
-          ${PALETTE.map((c) => html`<button class="swatch ${w.color === c ? "on" : ""}" style="background: ${c}" title=${c} @click=${() => { w.color = c; this.requestUpdate(); }}></button>`)}
-          <input type="color" title="Any colour" .value=${w.color || "#1e88e5"} @input=${(e) => { w.color = e.target.value; this.requestUpdate(); }}>
-          ${w.color ? uiButton({ label: "Auto", kind: "text", onClick: () => { w.color = ""; this.requestUpdate(); }, title: "Back to the automatic colour" }) : nothing}
-        </div>
-        <p class="small muted">The colour is used everywhere this thing is drawn: the map, the Live list, the map card.</p>
         <div class="row">
           ${uiField({ label: `Height (${unit})`, type: "number", step: 0.05, min: 0, max: unit === "ft" ? 16 : 5, value: w.height, placeholder: String(toDisplayLen(this._defaultHeight(), this.hass)), onChange: (v) => { w.height = v; this.requestUpdate(); }, style: "width: 150px" })}
           ${uiField({ label: "Ref trim (dB)", type: "number", step: 0.5, min: -20, max: 20, value: w.ref, placeholder: "0", onChange: (v) => { w.ref = v; this.requestUpdate(); }, style: "width: 150px" })}
@@ -576,23 +593,7 @@ class SextantDevices extends LitElement {
           ${uiSelect({ label: "Positioning", value: w.estimator || "default", options: [{ value: "default", label: `Default (${this.data?.layout?.tuning?.position_estimator || "geometric"})` }, { value: "geometric", label: "Geometric only, no fingerprint" }, { value: "fused", label: "Fused" }, { value: "fingerprint", label: "Fingerprint only" }], onChange: (v) => { w.estimator = v === "default" ? "" : v; this.requestUpdate(); }, style: "min-width: 280px" })}
         </div>
         <p class="small muted">Positioning: the estimator for this thing alone. If the fingerprint makes placement worse (a Tile or a tag whose radio reads unlike the phones), pick geometric only.</p>
-        <h4>Photo or custom icon <span class="muted small">optional, drawn instead of the class icon</span></h4>
-        ${w.crop ? html`<div class="cropper">
-          <canvas class="cropper" width=${CROP_SIZE} height=${CROP_SIZE}
-                  @pointerdown=${(e) => this._cropPointer(e)} @pointermove=${(e) => this._cropPointer(e)} @pointerup=${(e) => this._cropPointer(e)} @pointercancel=${(e) => this._cropPointer(e)}
-                  @wheel=${(e) => this._cropWheel(e)}></canvas>
-          <div class="row">
-            <span class="small muted">Drag to move</span>
-            <input type="range" min="1" max="4" step="0.02" .value=${String(w.crop.zoom)} title="Zoom" @input=${(e) => { w.crop.zoom = Number(e.target.value); this._drawCropper(); }}>
-            ${uiButton({ label: "Use this crop", kind: "primary", onClick: () => this._acceptCrop() })}
-            ${uiButton({ label: "Cancel", kind: "text", onClick: () => { URL.revokeObjectURL(w.crop.url); w.crop = null; this.requestUpdate(); } })}
-          </div>
-        </div>` : html`<div class="row">
-          ${w.preview ? html`<img class="icon round" src=${w.preview} alt=""><span class="small muted">cropped photo, uploaded on ${w.new ? "Track" : "Save"}</span>` : w.icon ? html`<img class="icon round" src=${w.icon} alt="">` : nothing}
-          <label class="btn small" title="Pick a photo, then frame it in the circle">Photo…<input type="file" accept="image/*" hidden @change=${(e) => { this._startCrop(e.target.files[0] || null); e.target.value = ""; }}></label>
-          ${uiSelect({ label: "Icon", value: w.preview ? "none" : (w.icon || "none"), options: [{ value: "none", label: w.preview ? "the cropped photo" : "class icon" }, ...(this.data?.icons || []).map((i) => ({ value: i.value, label: i.label }))], onChange: (v) => { w.icon = v === "none" ? "" : v; if (w.icon) { w.file = null; if (w.preview) URL.revokeObjectURL(w.preview); w.preview = null; } this.requestUpdate(); }, style: "min-width: 180px" })}
-          ${(w.preview || w.icon) ? uiButton({ label: "Remove", kind: "text", onClick: () => { w.icon = ""; w.file = null; if (w.preview) URL.revokeObjectURL(w.preview); w.preview = null; this.requestUpdate(); } }) : nothing}
-        </div>`}
+        </details>
         <div class="row end">
           ${uiButton({ label: "Cancel", kind: "text", onClick: () => { this._wizard = null; } })}
           ${uiButton({ label: this._busy ? (w.new ? "Tracking…" : "Saving…") : (w.new ? "Track" : "Save"), kind: "primary", disabled: this._busy, onClick: () => this._saveWizard() })}

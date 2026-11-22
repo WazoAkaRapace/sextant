@@ -385,11 +385,13 @@ class SextantHealth extends LitElement {
       case "calibration":
         return html`<div class="page"><div class="cols">${this._renderCalibration()}</div></div>`;
       case "tuning":
-        return html`<div class="page"><div class="cols">${this._renderKpi()}${this._renderAccuracy()}${this._renderReplay()}${this._renderTuning()}${this._renderHistory()}</div></div>`;
+        return html`<div class="page"><div class="cols">${this._renderKpi()}${this._renderTuning()}
+          <details class="fold"><summary>Experiments and history: accuracy against pins, try a setting, forget history</summary><div class="cols">${this._renderAccuracy()}${this._renderReplay()}${this._renderHistory()}</div></details></div></div>`;
       case "advice":
         return html`<div class="page"><div class="cols">${this._renderAdvice()}</div></div>`;
       default:
-        return html`<div class="page"><div class="cols">${this._renderReceivers()}${this._renderSelftest()}${this._renderReport()}${this._renderWifiRooms()}</div></div>`;
+        return html`<div class="page"><div class="cols">${this._renderReceivers()}
+          <details class="fold"><summary>Diagnostics: proxy self-test, proxies against real fixes, Wi-Fi signal by room</summary><div class="cols">${this._renderSelftest()}${this._renderReport()}${this._renderWifiRooms()}</div></details></div></div>`;
     }
   }
 
@@ -840,7 +842,13 @@ class SextantHealth extends LitElement {
     return html`<section class="card wide">
       <h3>Tuning <span class="muted small">applies live, no restart · distances here are metres, the solver's own unit</span></h3>
       <div class="row"><input class="tfilter" type="search" placeholder="Filter by key, label or help" aria-label="Filter tuning keys" .value=${this._tfilter} @input=${(e) => { this._tfilter = e.target.value; }}></div>
-      ${groups.map(([name, keys]) => shown(keys).length ? html`<h4>${name}</h4><div class="row">${keys.map(field)}</div>` : nothing)}
+      ${groups.map(([name, keys]) => {
+        const vis = shown(keys);
+        if (!vis.length) return nothing;
+        const chg = vis.filter((k) => tuningChanged(this._tuning[k], spec[k].default)).length;
+        // Closed until asked for: eighty-odd knobs at once hid the few anyone changes. A filter opens what it matches.
+        return html`<details class="tgroup" ?open=${!!this._tfilter}><summary><b>${name}</b> <span class="muted small">${vis.length} setting${vis.length === 1 ? "" : "s"}${chg ? html` · <span class="chg">${chg} changed</span>` : nothing}</span></summary><div class="row">${keys.map(field)}</div></details>`;
+      })}
       <div class="row">${uiButton({ label: "Apply", kind: "primary", onClick: () => this._saveTuning() })}${uiButton({ label: "Restore defaults", kind: "text", onClick: () => this._resetTuning() })}</div>
     </section>`;
   }
@@ -894,7 +902,9 @@ class SextantHealth extends LitElement {
     .bad { color: var(--error-color, #c62828); font-weight: 600; }
     :host { display: block; overflow: auto; }
     .cols { grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); }
-    .card.wide { grid-column: 1 / -1; }
+    .card.wide, details.fold { grid-column: 1 / -1; }
+    details.fold > summary, details.tgroup > summary { cursor: pointer; padding: 8px 4px; }
+    details.fold > .cols { margin-top: 8px; }
     section.receivers { grid-column: 1 / -1; }
     .attention { margin: 8px 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
     .group { border-top: 1px solid var(--divider-color); margin-top: 6px; }
@@ -919,7 +929,7 @@ class SextantHealth extends LitElement {
     .tfilter { box-sizing: border-box; width: 280px; max-width: 100%; padding: 8px 10px; border: 1px solid var(--divider-color); border-radius: 6px; background: var(--card-background-color); color: var(--primary-text-color); font: inherit; }
     .tfield { max-width: 260px; }
     .tfield .thelp { font-size: 11px; color: var(--secondary-text-color); padding-left: 2px; overflow-wrap: anywhere; }
-    .tfield .chg { color: var(--warning-color, #f59e0b); font-weight: 600; }
+    .chg { color: var(--warning-color, #f59e0b); font-weight: 600; }
     .tfield .treset { color: var(--primary-color); }
     @media (pointer: coarse) { .tfield .treset { display: inline-block; padding: 8px 6px; } }
     .ponly { display: none; }

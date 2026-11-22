@@ -42,6 +42,8 @@ export const sharedStyles = css`
   .chips > label.inline { padding: 4px 12px 4px 8px; }
   /* ⋮ overflow menu (uiMenu): the rare actions live here instead of each
      taking a button of its own down the side of a card. */
+  details.more { margin-top: 6px; }
+  details.more > summary { cursor: pointer; padding: 6px 0; font-size: 13px; color: var(--secondary-text-color); }
   details.menu { position: relative; }
   details.menu > summary { list-style: none; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 0; border-radius: 8px; background: transparent; color: var(--secondary-text-color); cursor: pointer; }
   details.menu > summary::-webkit-details-marker, details.menu > summary::marker { display: none; content: ""; }

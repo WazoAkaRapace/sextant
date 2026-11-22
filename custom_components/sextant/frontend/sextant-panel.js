@@ -14,7 +14,7 @@
  */
 import { LitElement, html, css, nothing } from "./lit.js";
 import { signalColour, distanceColour, SextantMap, thingColor, thingHue, staleness, shortAge, heatCells, pointInPolygon, polygonCentroid } from "./sextant-map.js";
-import { sharedStyles, widgetStyles, fmtAge, fmtNum, toast, confirmAsync, ensureHaComponents, uiSelect, uiButton, callWS, sortFloors, thingName, proxyName, fmtLen, fmtSpeed, classIcon, pronounsFor, uiIconButton, uiSegmented, isImperial, mapOverlayStyles, renderScaleBar, signalLegend, mapUrlFor, retryWait, loadLayout, subscribePositions } from "./sextant-ui.js";
+import { sharedStyles, widgetStyles, fmtAge, fmtNum, toast, confirmAsync, ensureHaComponents, uiSelect, uiButton, callWS, sortFloors, thingName, proxyName, fmtLen, fmtSpeed, classIcon, pronounsFor, uiIconButton, uiSegmented, uiMenu, isImperial, mapOverlayStyles, renderScaleBar, signalLegend, mapUrlFor, retryWait, loadLayout, subscribePositions } from "./sextant-ui.js";
 import { personGroups } from "./sextant-groups.js";
 import { spotInRoom, askStrimmer } from "./sextant-occupancy-data.js";
 
@@ -1665,6 +1665,8 @@ class SextantLive extends LitElement {
     ];
     // The map's own switches, as the pressed buttons the Edit tools and a
     // thing's quick actions use: an icon with its word under it.
+    // The switches used daily stay as buttons; the rest are one menu away.
+    const MAIN_LAYERS = ["labels", "receivers", "trails"];
     const optBtn = ([k, label, tip, icon]) => html`<button class="qa opt ${this._options[k] ? "on" : ""}" title=${`${label}: ${tip}`}
       aria-label=${label} aria-pressed=${!!this._options[k]} @click=${() => this._setOption(k, !this._options[k])}>
       <ha-icon icon=${icon}></ha-icon><span>${label}</span></button>`;
@@ -1713,7 +1715,8 @@ class SextantLive extends LitElement {
         <div class="overlay" role="toolbar" aria-label="Map">
           <span class="wide-only">${deepBtn}</span>
           <span class="sep wide-only"></span>
-          <div class="chips wide-only">${switches.map(optBtn)}</div>
+          <div class="chips wide-only">${switches.filter(([k]) => MAIN_LAYERS.includes(k)).map(optBtn)}${uiMenu({ label: "More layers", icon: "mdi:layers-outline",
+            items: switches.filter(([k]) => !MAIN_LAYERS.includes(k)).map(([k, label, tip]) => ({ label, title: tip, icon: this._options[k] ? "mdi:checkbox-marked-outline" : "mdi:checkbox-blank-outline", onClick: () => this._setOption(k, !this._options[k]) })) })}</div>
           ${deep ? spreadBtn : html`<span class="sep wide-only"></span><span class="wide-only">${gridBtn}</span>`}
           <button class="iconbtn narrow-only" title="Map options" aria-label="Map options" @click=${() => { this._optionsOpen = !this._optionsOpen; }}><ha-icon icon="mdi:tune-variant"></ha-icon></button>
           <button class="iconbtn narrow-only" title="Hide the map" aria-label="Hide the map" @click=${() => { this._mapOpen = false; }}><ha-icon icon="mdi:map-minus"></ha-icon></button>
@@ -2005,6 +2008,8 @@ class SextantLive extends LitElement {
     .overlay .chips { display: flex; flex-wrap: wrap; gap: 2px; }
     .overlay .qa.opt { flex-direction: row; min-width: 0; width: 34px; height: 34px; padding: 0; gap: 0; justify-content: center; border: 0; border-radius: 8px; background: transparent; position: relative; }
     .overlay .qa.opt > span { display: none; }
+    .overlay details.menu > summary { width: 34px; height: 34px; color: var(--primary-text-color); }
+    .overlay details.menu .menu-items { left: 0; right: auto; }
     .overlay .qa.opt:hover { background: var(--secondary-background-color, rgba(0,0,0,0.06)); filter: none; }
     .overlay .qa.opt.on { background: var(--primary-color, #03a9f4); color: var(--text-primary-color, #fff); }
     .overlay .qa.opt .unit { position: absolute; right: 2px; bottom: 1px; font-size: 8px; line-height: 1; }
