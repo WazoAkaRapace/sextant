@@ -34,8 +34,8 @@ plan image, the labels, the trails, the spots, the proxies, the Wi-Fi
 access points placed on the plan, the solver's distance circles and the
 fingerprint fix; each lights up while it is on.
 Labels names the rooms and the things (and whichever proxy you point at); a room's name sits at its most open point, so an L-shaped room's label is never in a corner or outside it,
-while Proxies (off by default) draws the proxies themselves, which a busy
-plan is often better without. In the corner, a countdown says how many seconds until the
+while Proxies and Wi-Fi (both off by default) draw the proxies and the access
+points themselves, which a busy plan is often better without. In the corner, a countdown says how many seconds until the
 next positioning cycle, and falls back to how long ago the last one was
 when a cycle is late. For an admin it is also a menu: pick 5 or 10 seconds
 to watch something move (or 30 or 60 to go easy on the box) and Sextant

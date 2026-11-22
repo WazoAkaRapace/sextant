@@ -535,13 +535,13 @@ class SextantLive extends LitElement {
     this._truth = null;     // the last mark's evaluation {mark, rows, current_weight}
     this._marks = [];       // the selected thing's marks
     this._blend = null;     // slider value while it is being dragged (0..100)
-    this._options = { circles: false, fingerprint: false, trails: true, grid: "off", labels: true, subzones: true, receivers: false, access_points: true, links: false, all_links: false, image: true,
+    this._options = { circles: false, fingerprint: false, trails: true, grid: "off", labels: true, subzones: true, receivers: false, access_points: false, links: false, all_links: false, image: true,
                       view: "2d", walls: true, all_floors: false, spread: "apart" };
     try { Object.assign(this._options, JSON.parse(localStorage.getItem("sextant.live.options") || "{}")); } catch { /* ignore */ }
-    // Proxies and signal lines used to be on by default, so a saved "on" from
+    // Proxies, access points and signal lines used to be on by default, so a saved "on" from
     // before then is the old default rather than a choice: switch them off once.
     if (!this._options.quiet) {
-      Object.assign(this._options, { receivers: false, links: false, quiet: 1 });
+      Object.assign(this._options, { receivers: false, access_points: false, links: false, quiet: 1 });
       try { localStorage.setItem("sextant.live.options", JSON.stringify(this._options)); } catch { /* ignore */ }
     }
     this._history = null; // {ent, from, to, points:[{t,x,y,f}] }
