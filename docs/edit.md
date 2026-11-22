@@ -32,6 +32,12 @@ under **Floor setup**, which opens by itself while the Anchor tool is in
 use. The padlock in the toolbar is the **Layers** menu: lock rooms, spots,
 proxies or anchors to reach what is underneath them.
 
+**One room at a time:** the focus button next to it lists the floor's rooms.
+Pick one and the map zooms to that room and fades the rest of the floor, so
+you can place its proxies, spots and sensors without the whole plan in the
+way. The room's name then shows in the toolbar; click it, or pick **Whole
+floor**, to go back.
+
 **Keys:** **Esc** cancels whatever is in progress. In the middle of a drag
 it puts the item, and anything it carried, back where it was; while drawing
 it drops the shape; otherwise it returns the tool to Select, then clears the

@@ -71,6 +71,7 @@ function layoutKey(layout) {
 class SextantEdit extends LitElement {
   static properties = {
     expert: { type: Boolean },
+    _focus: { state: true },
     hass: { attribute: false },
     data: { attribute: false },
     floor: { type: String },
@@ -238,6 +239,7 @@ class SextantEdit extends LitElement {
   get _listing() { return this._phone && this._list !== false; }
 
   _pick(sel) { this._selection = sel; this._map?.setSelection(sel); }
+  _setFocus(zoneId) { this._focus = zoneId || null; this._map?.setFocusZone(this._focus); }
   _setList(on) {
     if (on && this._drawing()) { toast(this, "Finish or cancel the shape first"); return; }
     if (on && this._selection && this._selection.kind !== "zone") this._pick(null);
@@ -289,6 +291,7 @@ class SextantEdit extends LitElement {
       onContextMenu: (hit) => this._context(hit),
     });
     this._map.setMode("edit");
+    this._map.focusZone = this._focus || null;   // a rebuilt map keeps the room it was showing
     this._map.setOptions({ labels: true, subzones: true, receivers: true, trails: false });
     this._applySnap();
     this._map.setLocks(this._locks);
@@ -384,6 +387,7 @@ class SextantEdit extends LitElement {
     this._map?.setOffline(this.data?.offline_receivers || []);
     this._map?.setSelection(null);
     this._selection = null;
+    if (this._focus && !(f?.zones || []).some((z) => z.zone_id === this._focus)) this._setFocus(null);
     // The last report already covers every floor: show THIS floor's rings now
     // rather than leaving the previous floor's drawn until the next reply.
     this._markPins();
@@ -1332,6 +1336,8 @@ class SextantEdit extends LitElement {
     const f = this._floorObj();
     const sel = this._selection;
     const listing = this._listing;
+    const rooms = (f?.zones || []).filter((z) => !z.no_go && z.cords?.length >= 3);
+    const focused = rooms.find((z) => z.zone_id === this._focus);
     const locked = LOCKS.filter(([kind]) => this._locks[kind]).map(([, label]) => label);
     this.toggleAttribute("list", listing);
     const scanners = Object.entries(this.data?.scanners || {}).sort((a, b) => (a[1].name || "").localeCompare(b[1].name || ""));
@@ -1357,6 +1363,10 @@ class SextantEdit extends LitElement {
           ${uiMenu({ label: "More tools", icon: "mdi:dots-horizontal", items: TOOLS.filter(([id]) => !BASIC_TOOLS.includes(id))
             .map(([id, label, icon, tip]) => ({ label, icon, title: tip, onClick: () => this._setTool(id) })) })}
           <span class="sep"></span>
+          ${rooms.length ? uiMenu({ label: "Show one room: zoom to it and fade the rest", icon: "mdi:image-filter-center-focus",
+            items: [{ label: "Whole floor", icon: "mdi:floor-plan", onClick: () => this._setFocus(null) }, { divider: true },
+              ...rooms.map((z) => ({ label: z.entity_id, icon: z.zone_id === this._focus ? "mdi:radiobox-marked" : "mdi:radiobox-blank", onClick: () => this._setFocus(z.zone_id) }))] }) : nothing}
+          ${focused ? html`<button class="tool active" title="Back to the whole floor" @click=${() => this._setFocus(null)}><ha-icon icon="mdi:close"></ha-icon><span>${focused.entity_id}</span></button>` : nothing}
           ${uiMenu({ label: `Layers: lock one to select what is under it${locked.length ? `. Locked: ${locked.join(", ")}` : ""}`, icon: locked.length ? "mdi:lock" : "mdi:lock-open-variant-outline",
             items: LOCKS.map(([kind, label]) => ({ label: `${label}: ${this._locks[kind] ? "locked" : "can be edited"}`, icon: this._locks[kind] ? "mdi:lock" : "mdi:lock-open-variant-outline",
               title: this._locks[kind] ? `${label} are locked: click to allow selecting and moving them` : `${label} can be moved: click to lock them`, onClick: () => this._setLock(kind, !this._locks[kind]) })) })}
