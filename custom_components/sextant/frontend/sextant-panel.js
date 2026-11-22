@@ -540,7 +540,10 @@ class SextantLive extends LitElement {
     try { Object.assign(this._options, JSON.parse(localStorage.getItem("sextant.live.options") || "{}")); } catch { /* ignore */ }
     // Proxies and signal lines used to be on by default, so a saved "on" from
     // before then is the old default rather than a choice: switch them off once.
-    if (!this._options.quiet) Object.assign(this._options, { receivers: false, links: false, quiet: 1 });
+    if (!this._options.quiet) {
+      Object.assign(this._options, { receivers: false, links: false, quiet: 1 });
+      try { localStorage.setItem("sextant.live.options", JSON.stringify(this._options)); } catch { /* ignore */ }
+    }
     this._history = null; // {ent, from, to, points:[{t,x,y,f}] }
     this._timeline = null; // {ent, at, stays:[{start,end,floor,room,spot,unheard?,partial?}], last_heard}
     this._timelineAll = false;
@@ -1031,8 +1034,8 @@ class SextantLive extends LitElement {
   }
 
   _pushMarks() {
-    const mine = this._selected && this._options.links ? this._marks.filter((m) => m.floor === this.floor) : [];
-    this._map?.setMarks(mine.map((m) => ({ x: m.x, y: m.y, label: `mark ${m.id}` })));
+    const mine = this._selected ? this._marks.filter((m) => m.floor === this.floor) : [];
+    this._map?.setMarks(mine.map((m) => ({ x: m.x, y: m.y, label: this._options.links ? `mark ${m.id}` : "" })));
   }
 
   /** The map click while marking: record where the selected thing really is, then evaluate. */
@@ -1668,7 +1671,7 @@ class SextantLive extends LitElement {
       ["access_points", "Wi-Fi", "Draw the Wi-Fi access points placed on the plan. Point at one (or tap it) for its name and how many clients it has", "mdi:wifi"],
       ...(deep ? [] : [
         ...(this._isAdmin() ? [["wifi_heat", "Signal", "The Wi-Fi signal map: how strong the signal is in each square metre, or which access point clients are on there, measured from the proxies and the people's phones and watches", "mdi:wifi-strength-3"]] : []),
-        ["links", "Signal lines", "With a thing selected: a line to each proxy that heard it, green when close and red by ten metres, thicker for the ones that count most - and for a phone or watch, a dashed line to its Wi-Fi access point. Also the pins where you said it really was", "mdi:transit-connection-variant"],
+        ["links", "Signal lines", "With a thing selected: a line to each proxy that heard it, green when close and red by ten metres, thicker for the ones that count most - and for a phone or watch, a dashed line to its Wi-Fi access point. Also numbers the pins where you said it really was", "mdi:transit-connection-variant"],
         ["all_links", "All lines", "A line from every thing on the floor to the proxy that heard it best, without selecting one: which proxy is carrying what, at a glance", "mdi:vector-polyline"],
         ["circles", "Range circles", "The distance each proxy measured, as a circle: the fix is where they meet", "mdi:radar"],
         ["fingerprint", "Fingerprint fix", "Where the fingerprint estimator alone would put each thing (dashed), next to the published fix", "mdi:fingerprint"],

@@ -223,7 +223,7 @@ proxy is close and red by ten metres, labelled with the distance, and thicker
 for the proxies the solver weighted most. A phone or watch also gets a dashed
 line to the Wi-Fi access point it is joined to, when its owner's Wi-Fi tracker
 of the same kind is on an access point placed on this floor. The thing's
-[location pins](live.md#location-pins) are drawn on the plan with the lines.
+[location pins](live.md#location-pins) carry their numbers while the lines are on.
 
 A key in the bottom-left corner says what the colours mean while the lines
 show. The thing's details list the same proxies under **In the solve**: each one's

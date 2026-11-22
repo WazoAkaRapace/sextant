@@ -1274,9 +1274,13 @@ export class SextantMap {
     const m = this.toMap(p);
     const slop = HIT_SLOP / this.view.k;
     if (this.mode !== "edit") {
-      for (let i = this.things.length - 1; i >= 0; i--) {
+      // The focused thing is drawn on top, so it is hit first.
+      const fi = this.things.findIndex((t) => t.ent === this.options.focus);
+      const order = [...this.things.keys()].reverse();
+      if (fi >= 0) order.unshift(fi);
+      for (const i of order) {
         const t = this.things[i];
-        if (!t.cords) continue;
+        if (!t?.cords) continue;
         if (Math.hypot(t.cords[0] - m.x, t.cords[1] - m.y) <= (THING_RADIUS + 4) / this.view.k) return { kind: "thing", index: i, ent: t.ent };
       }
     }
@@ -1311,7 +1315,8 @@ export class SextantMap {
       }
     }
     const rs = ((edit ? RECEIVER_SIZE_EDIT : RECEIVER_SIZE) + (edit ? 6 : 0)) / this.view.k;
-    if (!(edit && this.locks.receiver)) {
+    // Proxies that are not drawn are not clickable either.
+    if (!(edit && this.locks.receiver) && (edit || this.options.receivers !== false)) {
       for (let i = (f.receivers || []).length - 1; i >= 0; i--) {
         const r = f.receivers[i];
         if (r.cords && Math.abs(r.cords.x - m.x) <= slop + rs && Math.abs(r.cords.y - m.y) <= slop + rs) return { kind: "receiver", index: i, id: r.entity_id };
