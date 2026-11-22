@@ -5479,7 +5479,8 @@ def _update_person_sensors(hass):
             update_sextant_sensor_state(hass, sensor_id, state, attrs)
             if suffix == "sextant_person_location":
                 logged = (state, attrs.get("source"))
-                room_ok = attrs.get("room") not in (None, "unknown")
+                # A dog's GPS Outside is no room to sleep in or move between.
+                room_ok = attrs.get("room") not in (None, "unknown") and attrs.get("source") != "gps"
                 _person_places[person] = (attrs["room"], attrs.get("floor")) if room_ok else None
         _person_visits[person] = persons_mod.visit(_person_visits.get(person), persons_mod.home_via(presence, gps, wifi_home), last_heard, now)
         _person_sleep[person] = persons_mod.sleep_tally(_person_sleep.get(person), _person_places.get(person), now, _local_tz,
@@ -5585,6 +5586,8 @@ def _update_room_sensors(hass):
         presences[name] = st.attributes.get("presence") or "away"
         if presences[name] == "away" and st.attributes.get("source") == "wifi":
             presences[name] = "wifi"       # BLE lost them, Wi-Fi still has them in the house
+        elif presences[name] == "away" and st.attributes.get("source") == "gps" and st.attributes.get("kind") == "outside":
+            presences[name] = "gps"        # a dog BLE lost whose collar says home: in the garden
         # Gone out (kind outside): the thing left in the room speaks for no one there.
         if st.attributes.get("via") and st.attributes.get("source") in ("ble", "held") and st.attributes.get("kind") != "outside":
             speaking.add(st.attributes["via"])
