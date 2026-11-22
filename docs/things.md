@@ -2,7 +2,7 @@
 
 # Things
 
-![The Things page: every tracked thing with its class icon, where it is, its height and its reference trim](../img/screenshots/sextant-things.png)
+![The Things page: every tracked thing with its class icon and where it is](../img/screenshots/sextant-things.png)
 
 Bermuda's device management without its options flow. **Add a thing…** asks
 what you are adding, because how a thing is followed depends on whether its
@@ -16,7 +16,7 @@ Bluetooth address stays put:
 | Anything else | Nothing. An iBeacon, a fitness band or a tag with a fixed address simply appears below once a couple of proxies hear it. |
 
 The top list is what
-is tracked: click the name or the icon to open the thing dialog and set a
+is tracked, with its class and where it is: click the name or the icon to open the thing dialog and set a
 display name, a class (person, dog, cat, phone, watch, headphones, keys, tag and more,
 each with its icon on the map), pronouns (he, she, they or it: how the panel
 refers to it; left unset, a man is he, a woman she, a device it, and a
@@ -47,7 +47,7 @@ FindMy accessory set up in Bermuda has not been heard since Bermuda started:
 Bermuda does not count it as tracked until then, and an AirTag that is only
 away must not lose its settings.
 
-Below is everything Bermuda hears but does not track, with the kind of
+Below, folded until you tap it (it opens by itself while nothing is tracked, after **Add a thing…**, or while Find near is on), is everything Bermuda hears but does not track, with the kind of
 device (iBeacon, Tile, Apple, IRK, plain address), what it appears to be
 (the Bermuda fork names families the Bluetooth SIG's lists cannot — a Govee
 sensor, a Samsung SmartTag — and says when that kind rotates its address,
