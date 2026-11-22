@@ -1084,7 +1084,7 @@ class SextantEdit extends LitElement {
     <div class="row">
       ${!this.expert ? nothing : uiField({ label: "Entry share", type: "number", step: 0.05, min: 0.05, max: 0.95, value: item.enter_prob ?? "", placeholder: `${global} (default)`, onChange: (v) => this._edit("enter_prob", v === "" || v == null ? undefined : Number(v)), style: "width: 150px" })}
     </div>
-    <div class="muted small">Proxies sitting on or against the furniture (a nightstand, both ends of a couch): a thing one of them hears close by, and clearly closer than any proxy not on the spot, counts as here. Entry share: how much of a thing's likely position must fall in the spot to enter it; blank uses the Tuning page's value.</div>`;
+    <div class="muted small">Proxies sitting on or against the furniture (a nightstand, both ends of a couch): a thing one of them hears close by, and clearly closer than any proxy not on the spot, counts as here.${this.expert ? " Entry share: how much of a thing's likely position must fall in the spot to enter it; blank uses the Tuning page's value." : nothing}</div>`;
   }
 
   _resizeSpot() {

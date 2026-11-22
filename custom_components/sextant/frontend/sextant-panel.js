@@ -377,7 +377,7 @@ class SextantPanel extends LitElement {
                                         @layout-changed=${() => this._onLayoutChanged()}></sextant-property>`;
         }
         if (!(this._data?.layout?.floor || []).length) return this._renderFirstRun();
-        return html`<sextant-live .hass=${this.hass} .data=${this._data} .positions=${this._positions} .floor=${this._floor}
+        return html`<sextant-live .expert=${this._expert} .hass=${this.hass} .data=${this._data} .positions=${this._positions} .floor=${this._floor}
                                   @layout-changed=${() => this._onLayoutChanged()} @floor-changed=${(e) => { this._floor = e.detail; }}
                                   @quick-nav=${(e) => this._setMode(e.detail)}></sextant-live>`;
     }
@@ -392,7 +392,7 @@ class SextantPanel extends LitElement {
     .brand-name { font-weight: 600; font-size: 18px; }
     .brand-sub { font-size: 9px; letter-spacing: 0.04em; opacity: 0.75; text-transform: uppercase; }
     .modes { display: flex; gap: 2px; }
-    .subbar label.expert { flex: none; display: flex; align-items: center; gap: 6px; padding-left: 12px; font-size: 13px; color: var(--secondary-text-color); white-space: nowrap; cursor: pointer; }
+    .subbar label.expert { flex: none; position: sticky; right: 0; background: var(--card-background-color); display: flex; align-items: center; gap: 6px; padding-left: 12px; font-size: 13px; color: var(--secondary-text-color); white-space: nowrap; cursor: pointer; }
     .subbar { display: flex; flex: none; padding: 6px 12px; overflow-x: auto; background: var(--card-background-color); border-bottom: 1px solid var(--divider-color); }
     .modes button { display: flex; align-items: center; gap: 6px; background: transparent; color: inherit; border: 0; border-bottom: 3px solid transparent; padding: 0 10px; height: 56px; cursor: pointer; font: inherit; opacity: 0.8; }
     .modes button.active { opacity: 1; border-bottom-color: currentColor; }
@@ -495,6 +495,7 @@ class SextantPanel extends LitElement {
 
 class SextantLive extends LitElement {
   static properties = {
+    expert: { type: Boolean },
     hass: { attribute: false },
     data: { attribute: false },
     positions: { attribute: false },
@@ -1576,7 +1577,7 @@ class SextantLive extends LitElement {
                share: total > 0 ? (Number(r[3]) || 0) / total : null,
                colour: distanceColour(metres) };
     }).sort((a, b) => (b.share ?? 0) - (a.share ?? 0) || a.metres - b.metres);
-    if (!this._expert) return nothing;
+    if (!this.expert) return nothing;
     return html`<details class="telemetry heardby">
       <summary>In the solve <span class="muted small">${rows.length} ${rows.length === 1 ? "proxy" : "proxies"} the position comes from, the ones that count most first</span></summary>
       <ul class="plain heard">${rows.map((r) => html`<li><i class="dot" style=${`background:${r.colour}`}></i><span class="grow">${r.name}</span>
@@ -1675,6 +1676,8 @@ class SextantLive extends LitElement {
     // The switches used daily stay as buttons; the rest are one menu away.
     const MAIN_LAYERS = ["labels", "receivers", "trails"];
     const EXPERT_LAYERS = ["links", "all_links", "circles", "fingerprint"];
+    // An expert layer left switched on stays listed, so it can be switched off.
+    const layerShown = (k) => this.expert || !EXPERT_LAYERS.includes(k) || !!this._options[k];
     const optBtn = ([k, label, tip, icon]) => html`<button class="qa opt ${this._options[k] ? "on" : ""}" title=${`${label}: ${tip}`}
       aria-label=${label} aria-pressed=${!!this._options[k]} @click=${() => this._setOption(k, !this._options[k])}>
       <ha-icon icon=${icon}></ha-icon><span>${label}</span></button>`;
@@ -1711,7 +1714,7 @@ class SextantLive extends LitElement {
     </div>`;
     return html`
       <div class="quick-actions">
-        ${uiButton({ label: "Self-test", kind: "outline", icon: "mdi:clipboard-check-outline", onClick: () => this._goto("proxies") })}
+        ${this.expert ? uiButton({ label: "Self-test", kind: "outline", icon: "mdi:clipboard-check-outline", onClick: () => this._goto("proxies") }) : nothing}
         ${this._isAdmin() ? html`
           ${uiButton({ label: "New thing", kind: "outline", icon: "mdi:plus-circle-outline", onClick: () => this._goto("things") })}
           ${uiButton({ label: "Calibrate", kind: "outline", icon: "mdi:tune-vertical", onClick: () => this._goto("calibration") })}` : nothing}
@@ -1724,7 +1727,7 @@ class SextantLive extends LitElement {
           <span class="wide-only">${deepBtn}</span>
           <span class="sep wide-only"></span>
           <div class="chips wide-only">${switches.filter(([k]) => MAIN_LAYERS.includes(k)).map(optBtn)}${uiMenu({ label: "More layers", icon: "mdi:layers-outline",
-            items: switches.filter(([k]) => !MAIN_LAYERS.includes(k) && (this._expert || !EXPERT_LAYERS.includes(k))).map(([k, label, tip]) => ({ label, title: tip, icon: this._options[k] ? "mdi:checkbox-marked-outline" : "mdi:checkbox-blank-outline", onClick: () => this._setOption(k, !this._options[k]) })) })}</div>
+            items: switches.filter(([k]) => !MAIN_LAYERS.includes(k) && layerShown(k)).map(([k, label, tip]) => ({ label, title: tip, icon: this._options[k] ? "mdi:checkbox-marked-outline" : "mdi:checkbox-blank-outline", onClick: () => this._setOption(k, !this._options[k]) })) })}</div>
           ${deep ? spreadBtn : html`<span class="sep wide-only"></span><span class="wide-only">${gridBtn}</span>`}
           <button class="iconbtn narrow-only" title="Map options" aria-label="Map options" @click=${() => { this._optionsOpen = !this._optionsOpen; }}><ha-icon icon="mdi:tune-variant"></ha-icon></button>
           <button class="iconbtn narrow-only" title="Hide the map" aria-label="Hide the map" @click=${() => { this._mapOpen = false; }}><ha-icon icon="mdi:map-minus"></ha-icon></button>
@@ -1740,7 +1743,7 @@ class SextantLive extends LitElement {
           <div class="opts-backdrop narrow-only" @click=${() => { this._optionsOpen = false; }}></div>
           <div class="opts-sheet narrow-only">
             <h3>Map options</h3>
-            <div class="chips optgrid">${deepBtn}${switches.map(optBtn)}${spreadBtn}</div>
+            <div class="chips optgrid">${deepBtn}${switches.filter(([k]) => MAIN_LAYERS.includes(k) || layerShown(k)).map(optBtn)}${spreadBtn}</div>
             ${deep ? nothing : gridPicker}
             ${uiButton({ label: "Done", kind: "primary", onClick: () => { this._optionsOpen = false; } })}
           </div>` : nothing}
@@ -1803,7 +1806,7 @@ class SextantLive extends LitElement {
             </dl>
             ${this._renderTimeline(sel)}
             ${sel.robot ? nothing : this._renderHeardBy(sel)}
-            ${sel.robot || !this._expert ? nothing : html`<details class="telemetry">
+            ${sel.robot || !this.expert ? nothing : html`<details class="telemetry">
               <summary>Confidence <span class="muted small">how sure Sextant is, and why</span></summary>
               <dl>
                 <dt>Floor odds</dt><dd>${sel.floors ? Object.entries(sel.floors).sort((a, b) => b[1] - a[1]).map(([f, p]) => `${f} ${(p * 100).toFixed(0)}%`).join(" · ") : "—"}</dd>

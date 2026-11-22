@@ -852,7 +852,7 @@ class SextantDevices extends LitElement {
           })}
           ${tracked.length ? nothing : html`<tr><td colspan="5" class="muted">Nothing tracked yet.</td></tr>`}
         </table></div>
-        <p class="small muted">Click a name to set its name, class, height, ref trim or icon.</p>
+        <p class="small muted">Click a name to set its name, class, height or icon.</p>
       </section>
 
       <section class="card">
