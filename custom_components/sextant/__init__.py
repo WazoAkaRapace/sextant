@@ -6156,12 +6156,17 @@ def _elect_floor(probs, incumbent, solved, challenge, now=None,
     mine = challenge if challenge and challenge.get("floor") == best else {}
     # A lead under the margin that never lapses still wins in the end: David's
     # phone led the kitchen floor by 0.06 against a 0.15 margin for ten minutes.
-    led = mine.get("led", now)
+    # "led" is how long the incumbent has been behind anyone, so two challengers
+    # trading first place cannot keep restarting it.
+    led = (challenge or {}).get("led", now)
     lasting = now - led >= max(FLOOR_LASTING_LEAD_MIN_S, FLOOR_LASTING_LEAD_X * switch_secs)
-    if lead < margin and not lasting:
-        return incumbent, {"floor": best, "led": led}
+    agree = not (scores and scores.get(best, 0.0) <= scores.get(incumbent, 0.0))
+    if lead < margin:
+        if lasting and agree:
+            return best, None
+        return incumbent, {"floor": best, "led": led}  # no "since": not a margin challenge
     since = mine.get("since", now)
-    if (lasting or now - since >= switch_secs) and not (scores and scores.get(best, 0.0) <= scores.get(incumbent, 0.0)):
+    if (lasting or now - since >= switch_secs) and agree:
         return best, None
     return incumbent, {"floor": best, "since": since, "led": led}
 
