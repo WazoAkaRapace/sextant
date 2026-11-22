@@ -4,6 +4,8 @@
 
 ![The Tuning page: the stability KPI with saved baselines above every tuning knob grouped by what it affects](../img/screenshots/sextant-tuning.png)
 
+The knobs are folded by group, each heading saying how many you have changed; the filter opens whatever it matches. Accuracy, **Try a room setting** and position history are under **Experiments and history** at the bottom.
+
 The **stability KPI** reads the recorder for any window and reports, per
 thing, room changes per hour, the share that were A → B → A flips, the
 median dwell, and *far moves* per day: changes to a room on the same floor

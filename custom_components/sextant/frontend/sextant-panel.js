@@ -2010,6 +2010,7 @@ class SextantLive extends LitElement {
     .overlay .qa.opt > span { display: none; }
     .overlay details.menu > summary { width: 34px; height: 34px; color: var(--primary-text-color); }
     .overlay details.menu .menu-items { left: 0; right: auto; }
+    .overlay:has(details.menu[open]) { z-index: 4; }   /* above the proxy card, which the open menu would otherwise slip under */
     .overlay .qa.opt:hover { background: var(--secondary-background-color, rgba(0,0,0,0.06)); filter: none; }
     .overlay .qa.opt.on { background: var(--primary-color, #03a9f4); color: var(--text-primary-color, #fff); }
     .overlay .qa.opt .unit { position: absolute; right: 2px; bottom: 1px; font-size: 8px; line-height: 1; }
@@ -2254,7 +2255,7 @@ class SextantLive extends LitElement {
       .stage.collapsed { display: none; }
       /* Room to scroll the last rows clear of the Pin button. */
       .side .list:last-of-type { padding-bottom: 72px; }
-      .wide-only { display: none; }
+      .wide-only, .overlay .chips.wide-only { display: none; }
       .narrow-only { display: flex; }
     }
   `];
