@@ -896,9 +896,10 @@ class SextantEdit extends LitElement {
       ${uiSelect({ label: "Home Assistant area", value: item.area_id || "", options: [{ value: "", label: "not linked" },
         ...areas.map((a) => ({ value: a.area_id, label: a.floor_id && floors[a.floor_id] ? `${a.name} (${floors[a.floor_id].name})` : a.name }))],
         onChange: (v) => {
+          const first = !item.area_id;
           this._edit("area_id", v || undefined);
           const picked = this.hass?.areas?.[v];
-          if (picked && /^Room \d+$/.test(item.entity_id || "")) this._edit("entity_id", picked.name);   // a room not named yet takes the area's name
+          if (picked && first && /^Room \d+$/.test(item.entity_id || "")) this._edit("entity_id", picked.name);   // a room not named yet takes the area's name
           this._map.invalidate();
         }, style: "flex: 1" })}
       ${area?.icon ? html`<ha-icon icon=${area.icon} title="The area's icon, shown in this room's label"></ha-icon>` : nothing}
@@ -921,7 +922,7 @@ class SextantEdit extends LitElement {
       ${steps.map((step) => this._renderRoomStep(item, step, !!wizard))}
       ${wizard ? html`<div class="row">
           ${uiButton({ label: "Back", disabled: wizard.step === 0, onClick: () => go(wizard.step - 1) })}<span class="grow"></span>
-          ${uiButton({ label: "Show all", kind: "text", onClick: () => go(null) })}
+          ${uiButton({ label: "Show all", kind: "text", onClick: () => { go(null); this.updateComplete.then(() => { const d = this.renderRoot.querySelector("details.more.room"); if (d) d.open = true; }); } })}
           ${wizard.step < ROOM_STEPS.length - 1 ? uiButton({ label: "Next", kind: "primary", onClick: () => go(wizard.step + 1) })
             : uiButton({ label: "Done", kind: "primary", onClick: () => { go(null); toast(this, "Room set up. Save to keep it"); } })}
         </div>` : html`
@@ -1155,7 +1156,7 @@ class SextantEdit extends LitElement {
     const ext = file.name.includes(".") ? file.name.slice(file.name.lastIndexOf(".")) : ".png";
     const filename = `${name}${ext}`;
     // Named like a Home Assistant floor: linked to it, at its level.
-    const ha = Object.values(this.hass?.floors || {}).find((x) => String(x.name).trim().toLowerCase() === String(name).trim().toLowerCase());
+    const ha = Object.values(this.hass?.floors || {}).find((x) => !draft.floor.some((f) => f.floor_id === x.floor_id) && String(x.name).trim().toLowerCase() === String(name).trim().toLowerCase());
     draft.floor.push({ name, scale: null, receivers: [], zones: [], subzones: [],
       ...(ha ? { floor_id: ha.floor_id, ...(Number.isFinite(ha.level) ? { level: ha.level } : {}) } : {}) });
     const form = new FormData();
@@ -1552,7 +1553,7 @@ class SextantEdit extends LitElement {
         </details>
         <div class="muted small">${item.unmatched ? "Bermuda does not report this proxy right now." : "Linked."} x ${fmtNum(item.cords?.x, 0)}, y ${fmtNum(item.cords?.y, 0)}</div>` : nothing}
       ${sel.kind === "zone" && !item.no_go ? this._renderOccupancyOptions(item, "head") : nothing}
-      ${sel.kind === "zone" ? html`<details class="more"><summary>More options</summary>
+      ${sel.kind === "zone" ? html`<details class="more room"><summary>More options</summary>
       ${sel.kind === "zone" && !this._listing ? uiSwitch({ label: "No-go area (things can never be here)", checked: !!item.no_go, onChange: (v) => this._edit("no_go", v) }) : nothing}
       ${sel.kind === "zone" && !item.no_go ? html`<div class="row">${uiColour({ host: this, value: item.color || null, auto: "Automatic (from the name)", autoSwatch: `hsl(${thingHue(item.entity_id || "")}, 60%, 55%)`, custom: this._customColourFor === item, onCustom: (on) => { this._customColourFor = on ? item : null; this.requestUpdate(); }, onChange: (v) => this._edit("color", v || undefined) })}</div>` : nothing}
       ${item.no_go ? nothing : html`<div class="muted small">A thing in a room linked to an area reports the area's id (<code>area_id</code> on its room and location sensors), so an automation can act on the area itself.</div>`}

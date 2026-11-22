@@ -176,6 +176,7 @@ class SextantPanel extends LitElement {
     const floors = this._data?.layout?.floor || [];
     const setup = this._modes().filter(([id]) => SETUP_MODES.includes(id));
     const inSetup = setup.some(([id]) => id === this._mode);
+    if (inSetup) this._lastSetup = this._mode;
     return html`
       <div class="topbar">
         <ha-menu-button .hass=${this.hass} .narrow=${this.narrow}></ha-menu-button>
@@ -196,7 +197,7 @@ class SextantPanel extends LitElement {
         <a class="repo" href=${REPO_URL} target="_blank" rel="noopener" title="Sextant on GitHub"><ha-icon icon="mdi:github"></ha-icon></a>
       </div>
       ${inSetup ? html`<nav class="subbar" aria-label="Setup pages">${uiSegmented({ value: this._mode, options: setup.map(([id, label]) => ({ value: id, label })),
-        onChange: (v) => { this._lastSetup = v; this._setMode(v); } })}</nav>` : nothing}
+        onChange: (v) => this._setMode(v) })}</nav>` : nothing}
       ${this._error ? html`<div class="banner error">${this._error} <button @click=${() => this._load()}>Retry</button></div>` : nothing}
       ${this._renderVersionBanner()}
       <div class="body">${this._renderMode()}</div>
