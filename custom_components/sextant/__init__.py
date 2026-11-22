@@ -477,6 +477,10 @@ FLOOR_SWITCH_MARGIN = 0.05   # probability lead that starts/keeps a challenge
 # The default lives in TUNING_SPEC ("floor_switch_secs") so it can be changed
 # live; this is the fallback when _elect_floor is called without one.
 FLOOR_SWITCH_SECS = 60.0
+# A challenger ahead by any amount, unbroken, for this many switch_secs (and
+# at least FLOOR_LASTING_LEAD_MIN_S) takes the floor whatever the margin.
+FLOOR_LASTING_LEAD_X = 4.0
+FLOOR_LASTING_LEAD_MIN_S = 120.0
 FLOOR_DARK_GRACE_S = 45.0    # how long a dark incumbent holds everything frozen (was 3 cycles at 15 s)
 
 # The smoothing weights (FLOOR_PROB_SMOOTHING, zone_prob_smoothing) are the
@@ -3158,7 +3162,7 @@ async def update_trilateration_and_zone(hass, new_global_data, entity):
         zone, zone_locked, zone_speed = _elect_zone(
             entity, lowest_floor_name, instant_zone, test_point,
             kf_for_election, zone_polys, scale, layout, now=now,
-            hold=_floor_challenge.get(entity) is not None,
+            hold=(_floor_challenge.get(entity) or {}).get("since") is not None,  # a margin challenge, not a small lead
             anchor_point=Point(anchor["x"], anchor["y"]) if anchor is not None else None,
         )
         # Sub-zone: only the elected zone's own sub-zones are eligible, with
@@ -6146,12 +6150,20 @@ def _elect_floor(probs, incumbent, solved, challenge, now=None,
     best = max(contenders, key=contenders.get)
     if incumbent is None or incumbent not in contenders:
         return best, None  # no standing incumbent: adopt the best immediately
-    if best == incumbent or contenders[best] - contenders[incumbent] < margin:
+    lead = contenders[best] - contenders[incumbent]
+    if best == incumbent or lead <= 0:
         return incumbent, None
-    since = challenge["since"] if challenge and challenge.get("floor") == best else now
-    if now - since >= switch_secs and not (scores and scores.get(best, 0.0) <= scores.get(incumbent, 0.0)):
+    mine = challenge if challenge and challenge.get("floor") == best else {}
+    # A lead under the margin that never lapses still wins in the end: David's
+    # phone led the kitchen floor by 0.06 against a 0.15 margin for ten minutes.
+    led = mine.get("led", now)
+    lasting = now - led >= max(FLOOR_LASTING_LEAD_MIN_S, FLOOR_LASTING_LEAD_X * switch_secs)
+    if lead < margin and not lasting:
+        return incumbent, {"floor": best, "led": led}
+    since = mine.get("since", now)
+    if (lasting or now - since >= switch_secs) and not (scores and scores.get(best, 0.0) <= scores.get(incumbent, 0.0)):
         return best, None
-    return incumbent, {"floor": best, "since": since}
+    return incumbent, {"floor": best, "since": since, "led": led}
 
 
 # --- Zone election ------------------------------------------------------------
