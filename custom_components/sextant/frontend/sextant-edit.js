@@ -1331,6 +1331,7 @@ class SextantEdit extends LitElement {
     const f = this._floorObj();
     const sel = this._selection;
     const listing = this._listing;
+    const locked = LOCKS.filter(([kind]) => this._locks[kind]).map(([, label]) => label);
     this.toggleAttribute("list", listing);
     const scanners = Object.entries(this.data?.scanners || {}).sort((a, b) => (a[1].name || "").localeCompare(b[1].name || ""));
     const placedAddr = new Set((this._draft?.floor || []).flatMap((fl) => (fl.receivers || []).map((r) => r.address)));
@@ -1355,8 +1356,9 @@ class SextantEdit extends LitElement {
           ${uiMenu({ label: "More tools", icon: "mdi:dots-horizontal", items: TOOLS.filter(([id]) => !BASIC_TOOLS.includes(id))
             .map(([id, label, icon, tip]) => ({ label, icon, title: tip, onClick: () => this._setTool(id) })) })}
           <span class="sep"></span>
-          ${LOCKS.map(([kind, label, icon]) => html`<button class="tool lock ${this._locks[kind] ? "locked" : ""}" aria-label=${`${label} ${this._locks[kind] ? "locked" : "unlocked"}`} aria-pressed=${!!this._locks[kind]} title=${this._locks[kind] ? `${label} are locked: click to allow selecting and moving them` : `${label} can be moved: click to lock them`} @click=${() => this._setLock(kind, !this._locks[kind])}>
-            <span class="lockicons"><ha-icon icon=${icon}></ha-icon><ha-icon class="badge" icon=${this._locks[kind] ? "mdi:lock" : "mdi:lock-open-variant-outline"}></ha-icon></span><span>${label}</span></button>`)}
+          ${uiMenu({ label: `Layers: lock one to select what is under it${locked.length ? `. Locked: ${locked.join(", ")}` : ""}`, icon: locked.length ? "mdi:lock" : "mdi:lock-open-variant-outline",
+            items: LOCKS.map(([kind, label]) => ({ label: `${label}: ${this._locks[kind] ? "locked" : "can be edited"}`, icon: this._locks[kind] ? "mdi:lock" : "mdi:lock-open-variant-outline",
+              title: this._locks[kind] ? `${label} are locked: click to allow selecting and moving them` : `${label} can be moved: click to lock them`, onClick: () => this._setLock(kind, !this._locks[kind]) })) })}
           <span class="sep"></span>
           ${(([, label, icon, tip]) => html`<button class="tool ${this._snapMode === "off" ? "" : "active"}" aria-label=${label} title=${`${label}: ${tip}. Click for the next mode`} @click=${() => this._cycleSnap()}><ha-icon icon=${icon}></ha-icon><span>${label.replace("Snap: ", "")}</span></button>`)(SNAP_MODES.find(([k]) => k === this._snapMode) || SNAP_MODES[0])}
           <span class="sep"></span>
@@ -1382,6 +1384,7 @@ class SextantEdit extends LitElement {
               .map(([addr, s]) => html`<option value=${addr} ?selected=${addr === this._placing} ?disabled=${placedAddr.has(addr)}>${s.name || s.slug}${placedAddr.has(addr) ? " (placed)" : ""}${s.area ? ` · ${s.area}` : ""}</option>`)}
           </select></div>` : nothing}
         ${this._tool === "ap" ? this._renderApPicker() : nothing}
+        ${this._tool === "select" && !sel ? html`<div class="hint">Click a proxy, room or spot to edit it; drag it to move it.${locked.length ? ` Locked: ${locked.join(", ")} (the padlock in the toolbar).` : ""}</div>` : nothing}
         ${this._tool === "radar" ? html`<div class="hint">Click where the mmWave sensor is mounted, then pick the device and the way it faces in the side panel.</div>` : nothing}
         ${this._tool === "remark" ? html`<div class="hint">Click where the note goes, then type it in the side panel.</div>` : nothing}
         ${this._tool === "measure" ? html`<div class="hint">
@@ -1394,6 +1397,7 @@ class SextantEdit extends LitElement {
       <aside class="side">
         ${listing ? this._renderRoomList(f, sel?.kind === "zone" ? sel : null) : nothing}
         <div ?hidden=${listing}>
+        ${sel ? this._renderSelection(sel, f) : nothing}
         ${f ? html`
           <div class="card">
             <h4>${f.name} <span class="muted small">${fmtScale(f.scale, this.hass)}</span><span class="grow"></span>
@@ -1418,15 +1422,15 @@ class SextantEdit extends LitElement {
               ${Object.keys(this.hass?.floors || {}).length ? uiSelect({ label: "Home Assistant floor", value: f.floor_id || "", options: [{ value: "", label: "not linked" }, ...Object.values(this.hass.floors).map((x) => ({ value: x.floor_id, label: x.name }))], onChange: (v) => { this._snapshot(); if (v) f.floor_id = v; else delete f.floor_id; this._dirty = true; this.requestUpdate(); }, style: "width: 170px" }) : nothing}
             </div>
             </details>
-          </div>` : html`<div class="card muted">No floor yet. Add one below.</div>`}
-        ${f ? this._renderBiasView(f) : nothing}
-        ${f ? this._renderAlignment(f) : nothing}
+          </div>` : html`<div class="card muted">No floor yet. Add one under Floor setup.</div>`}
         ${this._proposal ? html`<div class="card">
           <h4>Proposed ${this._proposal.target}</h4>
           <ul class="plain small">${(this._proposal.report || this._proposal.changes || []).slice(0, 12).map((c) => html`<li>${typeof c === "string" ? c : `${c.name || c.zone || ""}: ${c.change || c.note || JSON.stringify(c)}`}</li>`)}</ul>
           <div class="row">${uiButton({ label: "Accept", kind: "primary", onClick: () => this._acceptProposal() })}${uiButton({ label: "Reject", kind: "text", onClick: () => { this._proposal = null; } })}</div>
         </div>` : nothing}
-        ${sel ? this._renderSelection(sel, f) : html`<div class="card muted small">Select a proxy, room or spot on the map to edit it. Drag to move; drag a vertex or an edge midpoint; right-click a vertex to remove it. Locked layers (the padlocks in the toolbar) cannot be selected.</div>`}
+        <details class="more setup" ?open=${!f || this._tool === "pin"}><summary>Floor setup: alignment, add a floor, history</summary>
+        ${f ? this._renderBiasView(f) : nothing}
+        ${f ? this._renderAlignment(f) : nothing}
         <div class="card">
           <h4>Add a floor</h4>
           <form @submit=${(e) => { e.preventDefault(); const fd = new FormData(e.target); this._addFloor(fd.get("name"), fd.get("file")); }}>
@@ -1436,6 +1440,7 @@ class SextantEdit extends LitElement {
           </form>
         </div>
         ${this._renderHistory()}
+        </details>
         ${(this.data?.scanner_diagnostics?.unplaced_scanners || []).length ? html`<div class="card small"><h4>Proxies reporting, not placed</h4>${this.data.scanner_diagnostics.unplaced_scanners.map((s) => proxyName(this.data, s)).join(", ")}</div>` : nothing}
         </div>
       </aside>
@@ -1697,6 +1702,7 @@ class SextantEdit extends LitElement {
     .hint select { max-width: 100%; }
     .hint input[type="search"] { width: 200px; max-width: 100%; padding: 4px 6px; font: inherit; }
     details.more { margin-top: 6px; }
+    details.more.setup > summary { padding: 6px 12px; }
     details.more > summary { cursor: pointer; padding: 6px 0; font-size: 13px; color: var(--secondary-text-color); }
     .toolbar details.menu .menu-items { left: 0; right: auto; }
     .toolbar details.menu > summary { width: 36px; height: 36px; color: var(--primary-text-color); }

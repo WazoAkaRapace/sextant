@@ -45,7 +45,7 @@ Sextant**. **Sextant** appears in the sidebar.
 
 Open **Sextant → Edit**. Start with the floor you spend the most time on.
 
-1. **Add a floor** at the bottom of the side panel: a name and the plan
+1. **Add a floor** under **Floor setup** in the side panel: a name and the plan
    image. The name field offers your Home Assistant floors; picking one
    links the floor and takes its level. Otherwise give it *Level* 0 (under
    **More options** on the floor's card) if it is the ground floor.
