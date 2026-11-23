@@ -28,13 +28,14 @@ each one is in, and which rooms have people in them.
   watch on the line between two rooms doesn't flip back and forth.
 - 📡 **Uses what you have.** Add mmWave presence sensors, motion sensors,
   door contacts and TVs to a room and Sextant combines them with
-  Bluetooth. Roborock vacuums show up on the plan too, and with UniFi a
+  Bluetooth. Roborock vacuums show up on the plan too (with the
+  [Roborock override](https://github.com/davidcoulson/ha-roborock-override)), and with UniFi a
   phone on the home Wi-Fi keeps its owner home.
 - 🎯 **Teach it.** If something shows up in the wrong place, click where it
-  really is and Sextant adjusts itself.
+  really is and Sextant works out better settings for your house.
 - 🔧 **Set up in an afternoon.** Upload a floor plan, draw your rooms, mark
   where the proxies are and pick what to track. Everything happens on
-  Sextant's own page in Home Assistant, with no YAML.
+  Sextant's own page in Home Assistant, with no YAML for Sextant itself.
 
 ![A sketch plan of an invented single-floor house with seven rooms. Bluetooth proxies sit in most rooms, motion sensors in the Kitchen, Lounge, Study and Bedroom, a tracking mmWave radar and a presence sensor on the Study wall, a door contact on the Bedroom door, and a TV in the Kitchen whose power draw is used as a sensor. Sam is in the Study, Robin in the Bedroom and Pepper the cat in the Lounge.](docs/images/occupancy-house.svg)
 
@@ -53,7 +54,7 @@ on a floor plan.
 | Tracks phones, watches and tags over Bluetooth | ✅ with Bermuda | ✅ with Bermuda | ✅ | ✅ | ➖ reads other trackers | ❌ |
 | Shows them on your floor plan | ✅ | ✅ | ❌ | ✅ with its Companion app | ❌ | ❌ |
 | Knows which room each person or thing is in | ✅ | ✅ | ✅ | ✅ | ➖ from other trackers | ❌ |
-| Knows which floor | ✅ | ✅ | ❌ | ➖ one plan per floor | ➖ groups rooms by floor | ❌ |
+| Knows which floor | ✅ | ✅ | ❌ | ✅ with its Companion app | ➖ groups rooms by floor | ❌ |
 | Spots inside a room (sofa, bed) | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Room sensor that says *who* is inside | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Combines motion, mmWave, doors and TVs per room | ✅ | ❌ | ❌ | ❌ | ✅ | ✅ |
@@ -88,8 +89,9 @@ The full list, including the setting each ESPHome proxy needs, is in
 
 1. In Home Assistant, go to **Settings → Marketplace → Add from link**,
    enter `davidcoulson/sextant` and install **Sextant**. (Adding a project
-   from a link asks you to sign in to GitHub once. Before Home Assistant
-   2026.11, use HACS → **Custom repositories** instead.)
+   from a link asks you to sign in to GitHub once. On Home Assistant
+   2026.9 or 2026.10, use HACS → **Custom repositories** instead, add it as
+   an Integration, download it and restart.)
 2. Go to **Settings → Devices & Services → Add Integration → Sextant**.
 3. Open **Sextant** in the sidebar. On **Edit**, add a floor from your plan
    image, set its scale, place the proxies, draw the rooms and save.
@@ -106,6 +108,7 @@ and units:
 
 - **[Live](docs/live.md)**: everything on the plan, with each thing's room,
   spot, floor and history.
+- **Occupancy**: every room at a glance, with who is in it.
 - **[Edit](docs/edit.md)**: draw rooms and spots, place proxies and sensors.
 - **[Things](docs/things.md)**: choose what to track, give things names,
   colours and owners.

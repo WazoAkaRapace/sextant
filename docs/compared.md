@@ -38,7 +38,7 @@ Sextant is the fourth step in a lineage:
 | Proxy and thing heights | no | no | proxy heights | proxy heights and per-thing carry heights |
 | No-go areas | no | no | yes | yes |
 | Position history | no | session trail | scrubber, hours to days | scrubber, hours to days |
-| Panel | config flow | iframe with a pasted token | dark iframe panel | native Home Assistant panel, seven pages |
+| Panel | config flow | iframe with a pasted token | dark iframe panel | native Home Assistant panel |
 | Manage Bermuda from the panel | n/a | no | no | track, untrack, Find My, Tiles, global options |
 | Stability KPI and baselines | no | no | no | yes |
 | Live tuning | options flow | no | no | every knob, no restart |

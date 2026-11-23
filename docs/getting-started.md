@@ -38,8 +38,9 @@ scale, and the scale matters more than anything else you will enter.
 
 **Settings → Marketplace → Add from link** → enter
 `davidcoulson/sextant` → install **Sextant** (restart Home Assistant if it
-asks). Adding from a link needs a one-time GitHub sign-in; before Home
-Assistant 2026.11, use HACS → ⋮ → **Custom repositories** instead. Then **Settings → Devices & Services → Add Integration →
+asks). Adding from a link needs a one-time GitHub sign-in. On Home Assistant
+2026.9 or 2026.10, use HACS → ⋮ → **Custom repositories**, add it as an
+Integration, download it and restart. Then **Settings → Devices & Services → Add Integration →
 Sextant**. **Sextant** appears in the sidebar.
 
 ## 2. Draw the first floor
