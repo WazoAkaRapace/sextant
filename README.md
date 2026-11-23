@@ -10,7 +10,7 @@ map of your home. It tells your automations which **floor**, which **room**
 and even which **spot** in the room (the sofa, the bed, the dog basket)
 each one is in, and which rooms have people in them.
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=davidcoulson&repository=sextant&category=Integration)
+[![Open your Home Assistant instance and show Sextant in the Marketplace.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=davidcoulson&repository=sextant&category=Integration)
 
 ![The Live page: the floor plan with every tracked thing, the list grouped by person with pets on their own, and the selected dog's card with its room, spot, floor, proxies and timeline](img/screenshots/sextant-live.png)
 
@@ -35,6 +35,12 @@ each one is in, and which rooms have people in them.
 - 🔧 **Set up in an afternoon.** Upload a floor plan, draw your rooms, mark
   where the proxies are and pick what to track. Everything happens on
   Sextant's own page in Home Assistant, with no YAML.
+
+![A sketch plan of an invented single-floor house with seven rooms. Bluetooth proxies sit in most rooms, motion sensors in the Kitchen, Lounge, Study and Bedroom, a tracking mmWave radar and a presence sensor on the Study wall, a door contact on the Bedroom door, and a TV in the Kitchen whose power draw is used as a sensor. Sam is in the Study, Robin in the Bedroom and Pepper the cat in the Lounge.](docs/images/occupancy-house.svg)
+
+*Bluetooth, mmWave radar, motion sensors, a door and a TV working together:
+Sam is in the Study, Robin in the Bedroom and Pepper the cat in the
+Lounge. [How occupancy works](docs/occupancy.md) explains it.*
 
 ## How it compares
 
@@ -80,8 +86,10 @@ The full list, including the setting each ESPHome proxy needs, is in
 
 ## Quick start
 
-1. In HACS, add `davidcoulson/sextant` as a custom repository
-   (Integration), install **Sextant** and restart Home Assistant.
+1. In Home Assistant, go to **Settings → Marketplace → Add from link**,
+   enter `davidcoulson/sextant` and install **Sextant**. (Adding a project
+   from a link asks you to sign in to GitHub once. Before Home Assistant
+   2026.11, use HACS → **Custom repositories** instead.)
 2. Go to **Settings → Devices & Services → Add Integration → Sextant**.
 3. Open **Sextant** in the sidebar. On **Edit**, add a floor from your plan
    image, set its scale, place the proxies, draw the rooms and save.
@@ -120,7 +128,7 @@ Also [Where Sextant fits](docs/compared.md) and
 Sextant was written with [Claude](https://claude.ai) as a coding partner.
 Claude wrote most of the code, tests and docs; the author sets the
 direction and decides what ships. Every change runs in the author's home
-first: more than 60 Bluetooth proxies, 20 rooms on three floors, mmWave
+first: more than 100 Bluetooth proxies, 21 rooms on three floors, mmWave
 sensors, three robot vacuums, and a mix of people, phones, watches and
 seven animals wearing collar tags. Bugs are still bugs, whoever typed
 them, so issues and pull requests are welcome.

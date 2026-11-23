@@ -30,8 +30,8 @@ Assistant is lost on the next save.
 
 Every release runs in the author's house before it ships, which is where most
 of the odd cases in this codebase came from. It is three floors: 21 rooms and
-12 spots over a Ground Floor, a Second Floor and a Basement, with 58 placed
-proxies. They are a mix of bare ESP boards and Shelly hardware, but the
+12 spots over a Ground Floor, a Second Floor and a Basement, with more
+than 100 placed proxies. They are a mix of bare ESP boards and Shelly hardware, but the
 distinction is only in the casing: the Shellys run ESPHome too, so every
 proxy in the house speaks the same firmware.
 
