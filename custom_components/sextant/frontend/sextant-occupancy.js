@@ -1,7 +1,7 @@
 /** Occupancy tab: floors stacked like the house, a tile per room with who is in it and why it is on. Read only. */
 import { LitElement, html, css, nothing } from "./lit.js";
 import { sharedStyles, fmtAge, fmtLen, classIcon, THING_CLASSES } from "./sextant-ui.js";
-import { occupancyByFloor, outsideNow, chipDetail, firstName, spotInRoom, SOURCE_ICON, SOURCE_LABEL, WHERE_SOURCE, WHERE_ICON } from "./sextant-occupancy-data.js";
+import { occupancyByFloor, outsideNow, chipDetail, firstName, spotInRoom, SOURCE_ICON, SOURCE_LABEL, WHERE_SOURCE, WHERE_ICON, modeIcon } from "./sextant-occupancy-data.js";
 
 class SextantOccupancy extends LitElement {
   static properties = { hass: {}, data: {}, _open: { state: true } };
@@ -39,6 +39,10 @@ class SextantOccupancy extends LitElement {
     .room.on { background: color-mix(in srgb, var(--primary-color) 14%, transparent); border-color: var(--primary-color); }
     .room.pets { background: var(--secondary-background-color); border: 1px dashed var(--primary-color); }
     .room { position: relative; }
+    /* Background only: the border still says occupied (solid) or pets only (dashed). */
+    .room.mode { background: color-mix(in srgb, var(--accent-color, #ff9800) 18%, transparent); }
+    .rn ha-icon { --mdc-icon-size: 16px; color: var(--accent-color, #ff9800); vertical-align: -3px; margin-right: 3px; }
+    .rn .ml { font-weight: 400; color: var(--secondary-text-color); }
     .rn { font-size: 13px; font-weight: 500; margin-bottom: 6px; padding-right: 44px; }
     .src { position: absolute; top: 6px; right: 8px; display: flex; gap: 4px; color: var(--secondary-text-color); }
     .src ha-icon { --mdc-icon-size: 16px; }
@@ -121,8 +125,8 @@ class SextantOccupancy extends LitElement {
           <span class="pill ${f.people ? "on" : ""}">${f.people} ${f.people === 1 ? "person" : "people"}</span>
           ${f.pets ? html`<span class="pill">${f.pets} ${f.pets === 1 ? "pet" : "pets"}</span>` : nothing}</div>
         <div class="grid">${f.rooms.map((r) => html`
-          <div class="room ${r.on ? (r.peopleOn ? "on" : "pets") : ""}">
-            ${f === this._outside ? nothing : html`<div class="rn">${r.room}</div>`}
+          <div class="room ${r.on ? (r.peopleOn ? "on" : "pets") : ""} ${r.mode ? "mode" : ""}">
+            ${f === this._outside ? nothing : html`<div class="rn">${r.mode ? html`<ha-icon icon=${modeIcon(r.mode)} aria-hidden="true"></ha-icon>` : nothing}${r.room}${r.mode ? html`<span class="ml"> · ${r.mode}</span>` : nothing}</div>`}
             ${r.people.map((p) => this._chip(r, p, "mdi:account", firstName(p)))}
             ${r.pets.map((p) => this._chip(r, p, "mdi:paw"))}
             ${r.on && r.sources.length ? html`<div class="src">${r.sources.map((x) => html`<ha-icon icon=${SOURCE_ICON[x] || "mdi:help-circle-outline"} title=${SOURCE_LABEL[x] || x}></ha-icon>`)}</div>` : nothing}

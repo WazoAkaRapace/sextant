@@ -122,3 +122,15 @@ test("askStrimmer asks once per connection, again on each reconnect, and swallow
   askStrimmer(undefined);
   await new Promise((r) => setTimeout(r, 0));   // the rejections must not surface as unhandled
 });
+
+test("a room in a mode carries it, and the mode picks an icon", async () => {
+  const { modeIcon } = await import("../../custom_components/sextant/frontend/sextant-occupancy-data.js");
+  const out = occupancyByFloor({ "binary_sensor.ht": st("on", "Home Theater", "Basement", { mode: "Movie" }), "binary_sensor.den": st("off", "Den", "Basement") }, []);
+  const [den, ht] = out[0].rooms;
+  assert.equal(ht.mode, "Movie"); assert.equal(den.mode, null);
+  assert.equal(modeIcon("Movie"), "mdi:movie-open");
+  assert.equal(modeIcon("Gaming"), "mdi:controller");
+  assert.equal(modeIcon("Chill"), "mdi:tag");
+  assert.equal(modeIcon("Flowerbed"), "mdi:tag");
+  assert.equal(modeIcon("Work then Movie"), "mdi:briefcase");
+});
