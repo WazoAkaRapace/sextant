@@ -1337,16 +1337,23 @@ def test_a_floor_heard_only_by_non_voting_proxies_is_scored_on_their_ranges():
         {"entity_id": f"l{i}", "cords": {"x": i * 100.0, "y": 0.0, "r": d * SCALE}, "distance": d, "floor_vote": False}
         for i, d in enumerate([3.3, 3.4, 3.6])]}
     (cand,) = sextant.extract_candidate_floors([{"entity": "e", "data": {"floor": [floor], "tuning": {}}}], "e")
-    assert abs(cand["near_k_m"] - 3.4333) < 1e-3 and cand["nearest_m"] == float("inf")
+    assert cand["near_k_m"] == cand["nearest_m"] == float("inf")
+    assert abs(cand["near_k_any_m"] - 3.4333) < 1e-3
     scores = {"Second Floor": 0.4844, "Ground Floor": 0.6024, "Basement": 0.5333}
     nearest = {"Second Floor": 1.64, "Ground Floor": 2.98, "Basement": cand["near_k_m"]}
+    stand_in = {"Second Floor": 1.64, "Ground Floor": 2.98, "Basement": cand["near_k_any_m"]}
     for blend in ("geometric", "gated"):
-        out = sextant._proximity_weighted_scores(scores, nearest, 0.5, blend)
+        out = sextant._proximity_weighted_scores(scores, nearest, 0.5, blend, stand_in)
         assert max(out, key=out.get) == "Second Floor", blend
     # A thing really in the basement, heard only by its ceiling lights nearby,
-    # still wins against a floor whose proxies are further away.
-    out = sextant._proximity_weighted_scores({"Ground": 0.4, "Basement": 0.5}, {"Ground": 3.0, "Basement": 1.2}, 0.5, "geometric")
+    # still wins against a floor whose proxies are further away ...
+    out = sextant._proximity_weighted_scores({"Ground": 0.4, "Basement": 0.5}, {"Ground": 3.0, "Basement": math.inf},
+                                             0.5, "geometric", {"Basement": 1.2})
     assert out["Basement"] > out["Ground"]
+    # ... but a through-slab 1 m stand-in never marks down the floor it is under.
+    out = sextant._proximity_weighted_scores({"Bedroom": 0.6, "Basement": 0.55}, {"Bedroom": 2.0, "Basement": math.inf},
+                                             0.5, "gated", {"Basement": 1.0})
+    assert out == {"Bedroom": 0.6, "Basement": 0.55}
 
 
 def test_geometric_blend_lets_the_nearest_proxies_outweigh_a_poor_fit():

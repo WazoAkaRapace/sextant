@@ -2994,6 +2994,7 @@ async def update_trilateration_and_zone(hass, new_global_data, entity):
         {c["name"]: c.get("near_k_m", c.get("nearest_m")) for c in candidates},
         _tuning(layout, "floor_proximity_weight"),
         _tuning(layout, "floor_proximity_blend"),
+        {c["name"]: c.get("near_k_any_m") for c in candidates},
     )
     # The floor's own prior (layout floor["bias"], default 1): in a house the
     # ground floor is where things usually are, and a phone on the kitchen
@@ -5828,9 +5829,8 @@ def extract_candidate_floors(new_global_data, tmpentity):
             cords, heard = _select_receivers(entries, max_receivers, max_range, near_always)
             voting = [e[0] for e in entries if e[2] not in no_vote]
             nearest = min(voting, default=float("inf"))  # admission and the fingerprint-only gate: voters only
-            # No voter heard it: fall back to the non-voters' slants rather than inf,
-            # which _proximity_weighted_scores reads as "unknown" and credits in full.
-            ranked = sorted(voting or (e[0] for e in entries))[:prox_k]
+            ranked = sorted(voting)[:prox_k]
+            any_k = sorted(e[0] for e in entries)[:prox_k]
             if cords:
                 candidates.append({
                     "name": floor["name"],
@@ -5840,6 +5840,8 @@ def extract_candidate_floors(new_global_data, tmpentity):
                     # Mean of the floor_proximity_k nearest slants: what the
                     # proximity term compares across floors.
                     "near_k_m": sum(ranked) / len(ranked) if ranked else float("inf"),
+                    # The same over every proxy, voters or not: the stand-in when no voter heard it.
+                    "near_k_any_m": sum(any_k) / len(any_k) if any_k else float("inf"),
                     "no_vote": no_vote,  # entity_ids of this floor's position-only proxies
                 })
     candidates.sort(key=lambda c: c["nearest_m"])  # stable: file order breaks ties
@@ -6052,7 +6054,7 @@ def floor_bias_map(layout, frames, floor_name, other_name, cell_m=0.5):
     return {"cell_px": step, "registered": registered, "cells": cells, "min": min(ratios), "max": max(ratios)}
 
 
-def _proximity_weighted_scores(scores, nearest_by_floor, weight, blend="gated"):
+def _proximity_weighted_scores(scores, nearest_by_floor, weight, blend="gated", stand_in_by_floor=None):
     """Scale each solved floor's confidence by receiver proximity.
 
     ``prox`` for a floor is the nearest measured distance on ANY competing
@@ -6064,7 +6066,11 @@ def _proximity_weighted_scores(scores, nearest_by_floor, weight, blend="gated"):
     whose fit is poor (a fix a metre over a void, the no-go penalty applied)
     is not capped by that fit when its proxies are plainly the nearest. With
     one solved floor, an unusable distance, or weight 0, the scores pass
-    through unchanged. Distances are the raw slants (metres) the candidate
+    through unchanged. A floor with no usable distance but a ``stand_in_by_floor``
+    one (heard only by proxies whose "Use for floor choice" is off) is scored
+    on that, capped at prox 1, but never sets the nearest for the others: a
+    through-slab ceiling light must neither elect its floor for free nor mark
+    down the floor the thing is on. Distances are the raw slants (metres) the candidate
     ranking already uses, so a through-slab reading directly below a thing
     counts against the floor below it just as it did in the old
     nearest-receiver election - but now as one weighted term inside the fit
@@ -6078,12 +6084,18 @@ def _proximity_weighted_scores(scores, nearest_by_floor, weight, blend="gated"):
         if f in scores and isinstance(d, (int, float)) and not isinstance(d, bool)
         and d > 0 and math.isfinite(d)
     }
-    if len(usable) < 2:
+    stand_in = {
+        f: float(d) for f, d in (stand_in_by_floor or {}).items()
+        if f in scores and f not in usable and isinstance(d, (int, float)) and not isinstance(d, bool)
+        and d > 0 and math.isfinite(d)
+    }
+    if len(usable) + len(stand_in) < 2:
         return dict(scores)
-    best = min(usable.values())
+    best = min(usable.values()) if usable else min(stand_in.values())
     out = {}
     for floor, conf in scores.items():
-        prox = best / usable[floor] if floor in usable else 1.0
+        d = usable.get(floor, stand_in.get(floor))
+        prox = min(1.0, best / d) if d else 1.0
         if blend == "geometric":
             out[floor] = (max(conf, 0.0) ** (1.0 - weight)) * (prox ** weight)
         else:
