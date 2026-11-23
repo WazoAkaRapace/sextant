@@ -6089,9 +6089,9 @@ def _proximity_weighted_scores(scores, nearest_by_floor, weight, blend="gated", 
         if f in scores and f not in usable and isinstance(d, (int, float)) and not isinstance(d, bool)
         and d > 0 and math.isfinite(d)
     }
-    if len(usable) + len(stand_in) < 2:
-        return dict(scores)
-    best = min(usable.values()) if usable else min(stand_in.values())
+    if not usable or len(usable) + len(stand_in) < 2:
+        return dict(scores)  # no voting baseline: stand-ins never set one
+    best = min(usable.values())
     out = {}
     for floor, conf in scores.items():
         d = usable.get(floor, stand_in.get(floor))

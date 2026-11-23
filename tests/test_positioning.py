@@ -1354,6 +1354,9 @@ def test_a_floor_heard_only_by_non_voting_proxies_is_scored_on_their_ranges():
     out = sextant._proximity_weighted_scores({"Bedroom": 0.6, "Basement": 0.55}, {"Bedroom": 2.0, "Basement": math.inf},
                                              0.5, "gated", {"Basement": 1.0})
     assert out == {"Bedroom": 0.6, "Basement": 0.55}
+    # No voting distance anywhere: stand-ins never become the baseline.
+    sc = {"A": 0.5, "B": 0.6}
+    assert sextant._proximity_weighted_scores(sc, {"A": math.inf, "B": math.inf}, 0.5, "gated", {"A": 1.0, "B": 4.0}) == sc
 
 
 def test_geometric_blend_lets_the_nearest_proxies_outweigh_a_poor_fit():
