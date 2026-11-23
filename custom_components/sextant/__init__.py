@@ -6062,7 +6062,8 @@ def _proximity_weighted_scores(scores, nearest_by_floor, weight, blend="gated"):
     whose fit is poor (a fix a metre over a void, the no-go penalty applied)
     is not capped by that fit when its proxies are plainly the nearest. With
     one solved floor, an unusable distance, or weight 0, the scores pass
-    through unchanged. Distances are the raw slants (metres) the candidate
+    through unchanged - except a floor heard only by proxies whose "Use for
+    floor choice" is off (distance inf), which scores prox 0. Distances are the raw slants (metres) the candidate
     ranking already uses, so a through-slab reading directly below a thing
     counts against the floor below it just as it did in the old
     nearest-receiver election - but now as one weighted term inside the fit
@@ -6076,12 +6077,15 @@ def _proximity_weighted_scores(scores, nearest_by_floor, weight, blend="gated"):
         if f in scores and isinstance(d, (int, float)) and not isinstance(d, bool)
         and d > 0 and math.isfinite(d)
     }
-    if len(usable) < 2:
+    # Heard only by proxies kept out of the floor choice (``near_k_m`` is inf):
+    # their through-ceiling readings must not elect their floor by its fit alone.
+    mute = {f for f, d in nearest_by_floor.items() if f in scores and d == math.inf}
+    if not usable or (len(usable) < 2 and not mute):
         return dict(scores)
     best = min(usable.values())
     out = {}
     for floor, conf in scores.items():
-        prox = best / usable[floor] if floor in usable else 1.0
+        prox = 0.0 if floor in mute else best / usable[floor] if floor in usable else 1.0
         if blend == "geometric":
             out[floor] = (max(conf, 0.0) ** (1.0 - weight)) * (prox ** weight)
         else:
