@@ -80,3 +80,4 @@ def test_two_floors_of_one_name_are_refused():
     floors = [{"name": "Ground"}, {"name": " ground "}]
     assert "two floors" in layout_check.layout_problem({"floor": floors})
     assert layout_check.layout_problem({"floor": [{"name": "Ground"}, {"name": "Basement"}]}) is None
+    assert layout_check.layout_problem({"floor": [{"name": "Ground Floor"}, {"name": "Ground-Floor"}]}), "one map key"

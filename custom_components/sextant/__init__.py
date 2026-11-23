@@ -1818,6 +1818,11 @@ async def update_tracked_entities(hass):
                 continue  # Skip and start over
             if num_points < 3:
                 _LOGGER.info("There are not enough things with available data to track, sleep 10 seconds")
+                # Too few readings to solve, but a thing one proxy still hears is here, not leaving.
+                heard_now = {p for (p, _s), r in readings.items() if r.get("distance") is not None} \
+                    if tracked_prefixes is not None else set(unique_values)
+                for ent in heard_now & set(unique_values):
+                    _last_seen[ent] = {**(_last_seen.get(ent) or {}), "updated": time.time()}
                 _update_people(hass)
                 _maintain_dead_issues(hass)
                 await asyncio.sleep(10)
@@ -8169,6 +8174,9 @@ class SextantSaveAPIText(HomeAssistantView):
         # --- Inputs valid: persist. Map first (so the saved layout never names
         # a map that failed to write), then the layout, then delete the old map. ---
         if map_target is not None:
+            # A second editor adding the same floor: its upload must not replace the first's map.
+            if await hass.async_add_executor_job(map_target.exists):
+                return web.Response(status=409, text=f"A map named {map_target.name} is already there: pick another floor name")
             try:
                 async with aiofiles.open(map_target, "wb") as f:
                     await f.write(map_bytes)

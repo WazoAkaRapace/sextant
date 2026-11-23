@@ -157,3 +157,16 @@ def test_a_plain_hour_left_behind_by_a_crash_after_its_gzip_is_not_archived_twic
     os.utime(plain, (NOW - 100, NOW - 100))  # the gzip landed after the plain file's last row
     el.compress_closed(str(d), NOW)
     assert not plain.exists() and el.open_text(str(plain) + ".gz").read() == "x\n"
+
+
+def test_late_rows_after_a_clock_step_back_are_appended_even_when_older_than_the_archive(tmp_path):
+    import gzip, os
+    d = tmp_path / "log"
+    d.mkdir()
+    plain = d / el.file_for(NOW - 2 * HOUR)
+    with gzip.open(str(plain) + ".gz", "wt") as fh:
+        fh.write("x\n")
+    plain.write_text("late\n")
+    os.utime(plain, (NOW - 9999, NOW - 9999))  # written under the stepped-back clock
+    el.compress_closed(str(d), NOW)
+    assert not plain.exists() and el.open_text(str(plain) + ".gz").read() == "x\nlate\n"

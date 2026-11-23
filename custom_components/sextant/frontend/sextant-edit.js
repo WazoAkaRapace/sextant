@@ -1145,8 +1145,10 @@ class SextantEdit extends LitElement {
     else if (field === "height" || field === "correction" || field === "hold_s") item[field] = value === "" || value == null ? undefined : Number(value);
     else if (field === "no_go") item.no_go = !!value;
     else if (field === "entity_id" && sel.kind === "zone") {
-      // A radar limited to this room follows it to its new name.
-      for (const r of f.radars || []) if (r.room && r.room === item.entity_id) r.room = value;
+      // A radar limited to this room follows it to its new name - when this is
+      // the room the radar resolves to (the first of that name that is not a no-go area).
+      const target = (f.zones || []).find((z) => !z.no_go && z.entity_id === item.entity_id);
+      if (target === item) for (const r of f.radars || []) if (r.room && r.room === item.entity_id) r.room = value;
       item.entity_id = value;
     }
     else item[field] = value;
