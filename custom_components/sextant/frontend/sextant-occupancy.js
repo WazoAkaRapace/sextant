@@ -41,7 +41,8 @@ class SextantOccupancy extends LitElement {
     .room { position: relative; }
     /* Background only: the border still says occupied (solid) or pets only (dashed). */
     .room.mode { background: color-mix(in srgb, var(--accent-color, #ff9800) 18%, transparent); }
-    .rn ha-icon { --mdc-icon-size: 16px; color: var(--accent-color, #ff9800); vertical-align: -3px; margin-right: 3px; }
+    .src .mi { --mdc-icon-size: 20px; color: var(--accent-color, #ff9800); }
+    .room.mode .rn { padding-right: 26px; overflow-wrap: anywhere; }   /* one icon up there, not three */
     .rn .ml { font-weight: 400; color: var(--secondary-text-color); }
     .rn { font-size: 13px; font-weight: 500; margin-bottom: 6px; padding-right: 44px; }
     .src { position: absolute; top: 6px; right: 8px; display: flex; gap: 4px; color: var(--secondary-text-color); }
@@ -126,10 +127,10 @@ class SextantOccupancy extends LitElement {
           ${f.pets ? html`<span class="pill">${f.pets} ${f.pets === 1 ? "pet" : "pets"}</span>` : nothing}</div>
         <div class="grid">${f.rooms.map((r) => html`
           <div class="room ${r.on ? (r.peopleOn ? "on" : "pets") : ""} ${r.mode ? "mode" : ""}">
-            ${f === this._outside ? nothing : html`<div class="rn">${r.mode ? html`<ha-icon icon=${modeIcon(r.mode)} aria-hidden="true"></ha-icon>` : nothing}${r.room}${r.mode ? html`<span class="ml"> · ${r.mode}</span>` : nothing}</div>`}
+            ${f === this._outside ? nothing : html`<div class="rn">${r.room}${r.mode ? html`<span class="ml"> · ${r.mode}</span>` : nothing}</div>`}
             ${r.people.map((p) => this._chip(r, p, "mdi:account", firstName(p)))}
             ${r.pets.map((p) => this._chip(r, p, "mdi:paw"))}
-            ${r.on && r.sources.length ? html`<div class="src">${r.sources.map((x) => html`<ha-icon icon=${SOURCE_ICON[x] || "mdi:help-circle-outline"} title=${SOURCE_LABEL[x] || x}></ha-icon>`)}</div>` : nothing}
+            ${r.mode ? html`<div class="src"><ha-icon class="mi" icon=${modeIcon(r.mode)} aria-hidden="true"></ha-icon></div>` : r.on && r.sources.length ? html`<div class="src">${r.sources.map((x) => html`<ha-icon icon=${SOURCE_ICON[x] || "mdi:help-circle-outline"} title=${SOURCE_LABEL[x] || x}></ha-icon>`)}</div>` : nothing}
           </div>`)}</div>
       </div>`)}
       <div class="foot">${people} ${people === 1 ? "person" : "people"} in the house</div>`;
