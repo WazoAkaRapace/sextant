@@ -1327,6 +1327,38 @@ def test_proximity_weighting_favours_the_floor_with_the_nearest_receiver():
     assert out == scores
 
 
+def test_a_floor_heard_only_by_non_voting_proxies_is_scored_on_their_ranges():
+    """David's phone at 04:43, on his bedside table: the master bedroom proxy
+    and three basement ceiling Lumarys (floor_vote off) hearing it through two
+    slabs at 3.3-3.6 m. With no voting basement proxy the basement's near_k_m
+    was inf, so it got full proximity credit and its fit (0.53) beat the
+    bedroom's (0.48). Now the non-voters' slants stand in."""
+    floor = {"name": "Basement", "scale": SCALE, "receivers": [
+        {"entity_id": f"l{i}", "cords": {"x": i * 100.0, "y": 0.0, "r": d * SCALE}, "distance": d, "floor_vote": False}
+        for i, d in enumerate([3.3, 3.4, 3.6])]}
+    (cand,) = sextant.extract_candidate_floors([{"entity": "e", "data": {"floor": [floor], "tuning": {}}}], "e")
+    assert cand["near_k_m"] == cand["nearest_m"] == float("inf")
+    assert abs(cand["near_k_any_m"] - 3.4333) < 1e-3
+    scores = {"Second Floor": 0.4844, "Ground Floor": 0.6024, "Basement": 0.5333}
+    nearest = {"Second Floor": 1.64, "Ground Floor": 2.98, "Basement": cand["near_k_m"]}
+    stand_in = {"Second Floor": 1.64, "Ground Floor": 2.98, "Basement": cand["near_k_any_m"]}
+    for blend in ("geometric", "gated"):
+        out = sextant._proximity_weighted_scores(scores, nearest, 0.5, blend, stand_in)
+        assert max(out, key=out.get) == "Second Floor", blend
+    # A thing really in the basement, heard only by its ceiling lights nearby,
+    # still wins against a floor whose proxies are further away ...
+    out = sextant._proximity_weighted_scores({"Ground": 0.4, "Basement": 0.5}, {"Ground": 3.0, "Basement": math.inf},
+                                             0.5, "geometric", {"Basement": 1.2})
+    assert out["Basement"] > out["Ground"]
+    # ... but a through-slab 1 m stand-in never marks down the floor it is under.
+    out = sextant._proximity_weighted_scores({"Bedroom": 0.6, "Basement": 0.55}, {"Bedroom": 2.0, "Basement": math.inf},
+                                             0.5, "gated", {"Basement": 1.0})
+    assert out == {"Bedroom": 0.6, "Basement": 0.55}
+    # No voting distance anywhere: stand-ins never become the baseline.
+    sc = {"A": 0.5, "B": 0.6}
+    assert sextant._proximity_weighted_scores(sc, {"A": math.inf, "B": math.inf}, 0.5, "gated", {"A": 1.0, "B": 4.0}) == sc
+
+
 def test_geometric_blend_lets_the_nearest_proxies_outweigh_a_poor_fit():
     """Robin's phone at 05:37: its own floor's fit was cut to 0.15 by the
     no-go penalty (a fix a metre over the foyer void) while the floor below,
