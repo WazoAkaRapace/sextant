@@ -2,161 +2,136 @@
 
 # Sextant
 
-**Indoor positioning for Home Assistant, powered by [Bermuda](https://github.com/agittins/bermuda).**
+**See where everyone and everything is in your house, on your own floor plan, in Home Assistant.**
 
-Bermuda's Bluetooth proxies measure how far each phone, watch, pet tag or
-Tile is from each proxy. Sextant turns those distances into a dot on your
-floor plan, and from the dot into the four things automations want: which
-**floor**, which **room**, which **spot** in the room, and the **nearest
-room** when the fix sits between two.
+Sextant uses the Bluetooth proxies you may already have (ESPHome boards,
+Shelly switches) to place phones, watches, pet tags and key finders on a
+map of your home. It tells your automations which **floor**, which **room**
+and even which **spot** in the room (the sofa, the bed, the dog basket)
+each one is in, and which rooms have people in them.
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=davidcoulson&repository=sextant&category=Integration)
 
 ![The Live page: the floor plan with every tracked thing, the list grouped by person with pets on their own, and the selected dog's card with its room, spot, floor, proxies and timeline](img/screenshots/sextant-live.png)
 
-## TL;DR
+## What you can do with it
 
-- 🐱 **Where is the cat?** Put a tag on her collar and Sextant shows her on
-  your floor plan: which floor, which room, even which spot in the room
-  (the sofa, the bed, the litter box). Same for the dog, your watch, your
-  phone, the kids, the car keys.
-- 🏠 **Automations that know who is where.** Lights that follow you from
-  room to room, heating that knows the bedroom is empty, a nudge when the
-  dog is on the couch again, a TV that pauses when you walk out. Every
-  tracked thing gets five sensors: where it is (spot if it is in one,
-  room if not), plus floor, room, spot and nearest room. Give things an
-  owner and each person gets the same, placed by whichever of their things
-  is with them, plus a device tracker.
-- 📡 **More than Bluetooth.** An mmWave presence sensor on the plan puts
-  the phone in front of it on the exact spot, pins locations by itself and
-  counts people who carry nothing. Roborock vacuums are placed from their
-  own maps. With UniFi, a phone still on the home Wi-Fi keeps its owner
-  home, and the Live map shows the Wi-Fi signal measured in every room.
-- 🔧 **Set up in an afternoon.** Install from HACS, upload a floor plan,
-  draw your rooms, drop your Bluetooth proxies where they sit in the house,
-  choose what to track. That is all.
-- 📍 **Steady, not jumpy.** A cat asleep on the bed stays "on the bed". A
-  watch on the boundary between the kitchen and the dining room does not
-  flip back and forth every few seconds.
-- 🎯 **Teach it.** If something shows in the wrong place, click where it
-  really is and Sextant works out which settings fit that thing best.
-- 🤖 **Built with AI, tested in a real house.** Sextant was developed with
-  Claude as a coding partner, and every change runs in the author's home
-  before it ships: more than 60 Bluetooth proxies, 23 tracked phones,
-  watches, pets and belongings plus three robot vacuums, 20 rooms on three
-  floors. See
-  [AI-assisted development](#ai-assisted-development).
+- 🐱 **Find the cat.** Put a tag on her collar and see her on the plan: the
+  basement, the guest room, on the bed. The same goes for the dog, your
+  phone, your watch or the car keys.
+- 💡 **Rooms that know who is in them.** Each room gets an occupancy sensor
+  that names the people and pets inside. Lights follow you, the heating
+  skips empty bedrooms, and the TV pauses when you walk out.
+- 👪 **People, not just phones.** Give each phone, watch or tag an owner and
+  Sextant places the person by whichever of their things is with them.
+- 🪑 **Steady answers.** Someone asleep on the sofa stays "on the sofa". A
+  watch on the line between two rooms doesn't flip back and forth.
+- 📡 **Uses what you have.** Add mmWave presence sensors, motion sensors,
+  door contacts and TVs to a room and Sextant combines them with
+  Bluetooth. Roborock vacuums show up on the plan too, and with UniFi a
+  phone on the home Wi-Fi keeps its owner home.
+- 🎯 **Teach it.** If something shows up in the wrong place, click where it
+  really is and Sextant adjusts itself.
+- 🔧 **Set up in an afternoon.** Upload a floor plan, draw your rooms, mark
+  where the proxies are and pick what to track. Everything happens on
+  Sextant's own page in Home Assistant, with no YAML.
 
-## Docs
+## How it compares
 
-**New here? Start with [Getting started](docs/getting-started.md)**: from
-nothing to a thing on your floor plan and a first automation.
+Sextant sits alongside other Home Assistant room-presence projects. Some
+do the Bluetooth part, some do the room-occupancy part. Sextant does both,
+on a floor plan.
 
-| Install | Configure | Tune | Automate |
-|---|---|---|---|
-| [Getting started](docs/getting-started.md) · [Installing](docs/install.md) · [What you need](docs/install.md#what-you-need) · [Upgrading from BPS](docs/install.md#upgrading-from-bps-or-bps-improved) | [Edit](docs/edit.md) · [Things](docs/things.md) · [Bermuda](docs/bermuda.md) · [Proxies](docs/proxies.md) | [Live](docs/live.md) · [Calibration](docs/calibration.md) · [Tuning](docs/tuning.md) · [Advice](docs/advice.md) · [How positioning works](docs/positioning.md) | [Recipes](docs/recipes.md) · [How occupancy works](docs/occupancy.md) · [Sensors, card, services and API](docs/automation.md) |
+| | Sextant | [BPS](https://github.com/Hogster/BPS) | [Bermuda](https://github.com/agittins/bermuda) | [ESPresense](https://espresense.com) | [Magic Areas](https://github.com/jseidl/hass-magic_areas) | [Area Occupancy Detection](https://github.com/Hankanman/Area-Occupancy-Detection) |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| Tracks phones, watches and tags over Bluetooth | ✅ with Bermuda | ✅ with Bermuda | ✅ | ✅ | ➖ reads other trackers | ❌ |
+| Shows them on your floor plan | ✅ | ✅ | ❌ | ✅ with its Companion app | ❌ | ❌ |
+| Knows which room each person or thing is in | ✅ | ✅ | ✅ | ✅ | ➖ from other trackers | ❌ |
+| Knows which floor | ✅ | ✅ | ❌ | ➖ one plan per floor | ➖ groups rooms by floor | ❌ |
+| Spots inside a room (sofa, bed) | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Room sensor that says *who* is inside | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Combines motion, mmWave, doors and TVs per room | ✅ | ❌ | ❌ | ❌ | ✅ | ✅ |
+| Set up by drawing your house in Home Assistant | ✅ | ✅ | ❌ | ➖ separate web app | ❌ | ❌ |
 
-Also [Hardware](docs/hardware.md) (turning outlets and switches into
-proxies, with the pin maps), [Where Sextant fits](docs/compared.md) (Bermuda, BPS, BPS-improved and
-Sextant side by side) and [Data and development](docs/development.md).
+✅ yes · ➖ partly · ❌ no. Based on each project's own README in November
+2026.
+
+**Use them together.** Sextant needs [Bermuda](https://github.com/agittins/bermuda)
+to hear the Bluetooth devices. Its room sensors can feed Magic Areas or
+Area Occupancy Detection if you like their lighting and climate
+automations. Sextant began as a fork of BPS and can
+[take over a BPS setup](docs/install.md#upgrading-from-bps-or-bps-improved).
+[Where Sextant fits](docs/compared.md) goes into the details.
+
+## What you need
+
+- Home Assistant with [Bermuda](https://github.com/agittins/bermuda)
+  installed. For every feature, use
+  [the Bermuda fork](https://github.com/davidcoulson/bermuda).
+- At least three Bluetooth proxies on each floor: ESP32 boards running
+  ESPHome, or Shelly Plus switches and plugs. More proxies give better
+  answers.
+- A floor plan image for each floor.
+- Things to track: phones with the Home Assistant app, watches, iBeacon
+  pet tags, Tiles or Find My accessories.
+
+The full list, including the setting each ESPHome proxy needs, is in
+[What you need](docs/install.md#what-you-need).
 
 ## Quick start
 
-1. HACS → Integrations → ⋮ → **Custom repositories**: add
-   `davidcoulson/sextant` as an Integration, install **Sextant**, restart.
-2. **Settings → Devices & Services → Add Integration → Sextant**. Bermuda
-   must already be set up; for everything Sextant can do, run the
-   [Bermuda fork](https://github.com/davidcoulson/bermuda).
-3. Open **Sextant** in the sidebar. On **Edit**, add a floor from a plan
-   image, set its scale, place the proxies, draw the rooms, Save.
-4. On **Things**, pick what to track. Positions appear on **Live**
-   within a cycle.
-5. With more than one floor, give each an elevation and line them up with
-   [alignment anchors](docs/edit.md#lining-the-floors-up).
+1. In HACS, add `davidcoulson/sextant` as a custom repository
+   (Integration), install **Sextant** and restart Home Assistant.
+2. Go to **Settings → Devices & Services → Add Integration → Sextant**.
+3. Open **Sextant** in the sidebar. On **Edit**, add a floor from your plan
+   image, set its scale, place the proxies, draw the rooms and save.
+4. On **Things**, pick what to track. Positions appear on **Live** a few
+   seconds later.
 
-[Getting started](docs/getting-started.md) walks through all of it.
+[Getting started](docs/getting-started.md) walks through every step and
+ends with a first automation.
 
-You want three or more proxies per floor, and each ESPHome proxy should
-advertise an iBeacon so its siblings can range it. The details, including
-the beacon block, are in [What you need](docs/install.md#what-you-need).
+## The Sextant page
 
-## The panel
+Sextant adds its own page to the Home Assistant sidebar, in your theme
+and units:
 
-A native Home Assistant panel at `/sextant`, no iframe and no pasted
-token, in Home Assistant's own theme and unit system. Eight pages:
+- **[Live](docs/live.md)**: everything on the plan, with each thing's room,
+  spot, floor and history.
+- **[Edit](docs/edit.md)**: draw rooms and spots, place proxies and sensors.
+- **[Things](docs/things.md)**: choose what to track, give things names,
+  colours and owners.
+- **Setup**: [Bermuda](docs/bermuda.md), [Proxies](docs/proxies.md),
+  [Calibration](docs/calibration.md) and [Advice](docs/advice.md) on where
+  one more proxy would help most. Expert mode adds
+  [Tuning](docs/tuning.md).
 
-| Page | For |
-|---|---|
-| [Live](docs/live.md) | every tracked thing on the plan, grouped by person; focus one for its room, spot, floor, proxies, timeline and activity heatmap; location pins; a refresh menu on the countdown |
-| [Edit](docs/edit.md) | place proxies, mmWave sensors and Wi-Fi access points, draw rooms, spots and no-go areas, set the scale and floor levels, line the floors up with anchors |
-| [Things](docs/things.md) | what is tracked and everything Bermuda hears; name, class, colour, photo, height, owner and estimator per thing; people and their GPS fallbacks; robot vacuums |
-| [Bermuda](docs/bermuda.md) | Bermuda's global options, Find My accessories, Tiles |
-| [Proxies](docs/proxies.md) | proxy health by floor and room, what each proxy hears, the self-test |
-| [Calibration](docs/calibration.md) | proxies calibrate each other; apply into Sextant or into Bermuda |
-| [Tuning](docs/tuning.md) | the stability KPI, accuracy from location pins, every knob live |
-| [Advice](docs/advice.md) | which rooms the proxies serve worst and where one more would help |
+## Docs
 
-In the panel, Bermuda, Proxies, Calibration and Advice are the pages of the **Setup** tab; **Expert mode** there adds Tuning and the solver's diagnostics.
+| Start | Set up | Improve | Automate |
+|---|---|---|---|
+| [Getting started](docs/getting-started.md) · [Installing](docs/install.md) · [Hardware](docs/hardware.md) | [Edit](docs/edit.md) · [Things](docs/things.md) · [Bermuda](docs/bermuda.md) · [Proxies](docs/proxies.md) | [Live](docs/live.md) · [Calibration](docs/calibration.md) · [Tuning](docs/tuning.md) · [Advice](docs/advice.md) · [How positioning works](docs/positioning.md) | [Recipes](docs/recipes.md) · [How occupancy works](docs/occupancy.md) · [Sensors, card and services](docs/automation.md) |
 
-## What Sextant adds to Bermuda
+Also [Where Sextant fits](docs/compared.md) and
+[Data and development](docs/development.md).
 
-- A position on the floor plan: trilateration fused with fingerprints the
-  proxies build by hearing each other's beacons.
-- Rooms as polygons with spots and no-go areas. Room and spot elections
-  with a margin, a dwell and a stationary lock, so sensors do not flap.
-- Floor election by competition between floors, scaled by proximity and a
-  per-floor bias that can vary across the plan (a bias field), for landings
-  and double-height rooms where both floors hear a thing equally.
-- Alignment anchors that say how the floors stack, with an elevation per
-  floor: shared named points on every plan, fitted into one house frame,
-  with misplaced pins found and named and each floor's scale audited.
-- Proxy calibration with 3D heights, written into Bermuda if you like.
-- Location pins: say where a thing really is and Sextant finds the settings
-  that fit it, and reports accuracy in metres.
-- People: things given an owner place that person, by whichever of them is
-  moving or most recently arrived, with a GPS tracker to fall back on when
-  the house has lost them.
-- mmWave presence sensors (Everything Presence, Apollo R PRO-1 and other
-  LD2450 boards) on the plan: a thing near a target is put on it, a still
-  target and a still thing make a pin nobody had to tap, and a target no
-  device accounts for counts as an untracked person and keeps the room's
-  occupancy sensor on.
-- Roborock vacuums placed from their own maps, lined up with the plan by
-  the rooms both maps name.
-- Bermuda management from the panel: track, untrack, Find My accessories,
-  Tiles followed across address rotation (with the fork).
-- Rooms as sensors: an occupancy binary per room that names the people,
-  pets and things in it, ready for an aggregator such as Area Occupancy
-  Detection, and a count of the people home. See
-  [How occupancy works](docs/occupancy.md).
-- Five sensors per thing, a map card, services and a websocket push per
-  cycle. Pure numpy, no SciPy.
+## Built with AI, tested in a real house
 
-## AI-assisted development
-
-Sextant was written with [Claude](https://claude.ai) as a pair programmer,
-through Claude Code. Claude wrote most of the code, the tests and these
-docs. What keeps that honest is the test bed: every change runs in the
-author's house before it ships, with more than 60 Bluetooth proxies (bare
-ESP boards and Shellys, all running ESPHome), 20 rooms with 13 spots across
-three floors, an mmWave sensor, three Roborock vacuums, and a tracked mix of
-people, phones, watches, Find My accessories and seven animals on iBeacon
-collar tags. The author sets the
-direction, watches what the things do on the real floor plan, and
-decides what ships. Expect the codebase to read the way an AI writes it:
-long comments explaining why, a consistent shape from file to file, and a
-test for nearly everything. Bugs are still bugs, whoever typed them;
-issues and pull requests are welcome on
-[davidcoulson/sextant](https://github.com/davidcoulson/sextant).
+Sextant was written with [Claude](https://claude.ai) as a coding partner.
+Claude wrote most of the code, tests and docs; the author sets the
+direction and decides what ships. Every change runs in the author's home
+first: more than 60 Bluetooth proxies, 20 rooms on three floors, mmWave
+sensors, three robot vacuums, and a mix of people, phones, watches and
+seven animals wearing collar tags. Bugs are still bugs, whoever typed
+them, so issues and pull requests are welcome.
 
 ## Credits
 
 Sextant began as a fork of [Hogster/BPS](https://github.com/Hogster/BPS)
 via [maxi1134/BPS-improved](https://github.com/maxi1134/BPS-improved).
-Full credit for the original integration goes to
-[@Hogster](https://github.com/Hogster) and [@maxi1134](https://github.com/maxi1134),
-to [@agittins](https://github.com/agittins) for
+Thanks to [@Hogster](https://github.com/Hogster) and
+[@maxi1134](https://github.com/maxi1134) for the original integration, to
+[@agittins](https://github.com/agittins) for
 [Bermuda](https://github.com/agittins/bermuda), and to
 [Megarushing](https://github.com/Megarushing/bermuda) for the Find My
-accessory support merged into the Bermuda fork. MIT licensed, see
-[LICENSE](LICENSE).
+support in the Bermuda fork. MIT licensed, see [LICENSE](LICENSE).
