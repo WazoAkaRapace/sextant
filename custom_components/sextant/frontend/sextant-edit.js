@@ -10,7 +10,7 @@
 import { LitElement, html, css, nothing } from "./lit.js";
 import { SextantMap, polygonCentroid, snapToVertex, squareUp, thingHue, radarCalibration } from "./sextant-map.js";
 import { sharedStyles, widgetStyles, toast, callWS, confirmAsync, fmtNum, fmtLen, uiField, uiSelect, uiSwitch, uiButton, uiIconButton, uiMenu, uiSegmented, proxyName, lenUnit, toDisplayLen, fromDisplayLen, fmtScale, isImperial, THING_CLASSES, CLASS_FAMILIES, mapOverlayStyles, renderScaleBar, uiColour, mapUrlFor } from "./sextant-ui.js";
-import { lostShapes, planKey } from "./sextant-shapes.js";
+import { lostShapes, planKey, freeName, sameName } from "./sextant-shapes.js";
 import { ROOM_STEPS, areaEntities, suggestions, picked, toggled } from "./sextant-room-setup.js";
 
 // [id, label under the icon, icon, tooltip]
@@ -833,7 +833,7 @@ class SextantEdit extends LitElement {
     const tool = this._tool;
     if (tool === "zone" || tool === "nogo") {
       f.zones = f.zones || [];
-      const name = tool === "nogo" ? `No-go ${f.zones.filter((z) => z.no_go).length + 1}` : `Room ${f.zones.length + 1}`;
+      const name = freeName(tool === "nogo" ? "No-go" : "Room", f.zones);
       f.zones.push({ zone_id: uid("zone"), entity_id: name, poly: true, cords: pts, type: "zone", ...(tool === "nogo" ? { no_go: true } : {}) });
       if (this._locks.zone) this._setLock("zone", false);   // you just drew one: you are editing rooms
       this._selection = { kind: "zone", index: f.zones.length - 1 };
@@ -844,7 +844,7 @@ class SextantEdit extends LitElement {
       // spot to that room.
       const rooms = (f.zones || []).filter((z) => !z.no_go);
       const parent = rooms.find((z) => this._inside(pts[0], z.cords)) || rooms.find((z) => this._inside(polygonCentroid(pts), z.cords));
-      f.subzones.push({ sub_zone_id: uid("subzone"), entity_id: `Spot ${f.subzones.length + 1}`, parent: parent?.zone_id || null, poly: true,
+      f.subzones.push({ sub_zone_id: uid("subzone"), entity_id: freeName("Spot", f.subzones), parent: parent?.zone_id || null, poly: true,
         color: `hsl(${Math.floor(Math.random() * 360)}, 70%, 45%)`, cords: pts, type: "subzone" });
       this._selection = { kind: "subzone", index: f.subzones.length - 1 };
     }
@@ -1144,6 +1144,11 @@ class SextantEdit extends LitElement {
     if (field === "calibrate" || field === "solve" || field === "floor_vote") { if (value === undefined) delete item[field]; else item[field] = value; }
     else if (field === "height" || field === "correction" || field === "hold_s") item[field] = value === "" || value == null ? undefined : Number(value);
     else if (field === "no_go") item.no_go = !!value;
+    else if (field === "entity_id" && sel.kind === "zone") {
+      // A radar limited to this room follows it to its new name.
+      for (const r of f.radars || []) if (r.room && r.room === item.entity_id) r.room = value;
+      item.entity_id = value;
+    }
     else item[field] = value;
     if (item.height === undefined) delete item.height;
     if (item.correction === undefined) delete item.correction;
@@ -1158,6 +1163,7 @@ class SextantEdit extends LitElement {
 
   async _addFloor(name, file) {
     if (!name || !file) return toast(this, "A floor needs a name and a map image");
+    if ((this._draft?.floor || []).some((f) => String(f.name).trim().toLowerCase() === String(name).trim().toLowerCase())) return toast(this, `There is already a floor named ${name}`);
     // Adding a floor sends every floor too (see _save).
     if ((await this._changedElsewhere()) && !(await confirmAsync(CHANGED_ELSEWHERE))) return;
     const draft = this._cleanDraft();
@@ -1549,6 +1555,7 @@ class SextantEdit extends LitElement {
       <div class="row">
         ${uiField({ label: "Name", value: item.entity_id || "", onChange: (v) => this._edit("entity_id", v), style: "flex: 1" })}
       </div>
+      ${sel.kind !== "receiver" && sameName(list, item) ? html`<div class="warn small">Another ${sel.kind === "zone" ? "room" : "spot"} on this floor is named ${item.entity_id}: the two act as one.</div>` : nothing}
       ${sel.kind === "receiver" ? html`
         <div class="row">
           ${uiSelect({ label: "Bermuda proxy", value: item.address || "", options: [{ value: "", label: "none" }, ...Object.entries(this.data?.scanners || {}).map(([addr, s]) => ({ value: addr, label: `${s.name || s.slug} · ${addr}` }))], onChange: (v) => this._edit("address", v || undefined), style: "flex: 1" })}

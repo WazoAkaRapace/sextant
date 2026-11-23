@@ -146,7 +146,9 @@ def compress_closed(dirpath: str, now: float):
             continue
         path = os.path.join(dirpath, name)
         try:
-            if os.path.exists(path + ".gz"):
+            if os.path.exists(path + ".gz") and os.path.getmtime(path) < os.path.getmtime(path + ".gz"):
+                pass  # already archived: stopped between the gzip landing and this remove
+            elif os.path.exists(path + ".gz"):
                 # The clock stepped back into an archived hour: add the late
                 # rows as a second gzip member instead of replacing the archive.
                 with open(path, "rb") as src, gzip.open(path + ".gz", "ab") as dst:

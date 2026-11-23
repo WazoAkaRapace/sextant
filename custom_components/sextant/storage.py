@@ -42,6 +42,9 @@ STORAGE_KEY_RUNTIME = "sextant_runtime"              # -> each thing's elections
 # (panel save + calibration). Lives here so both importers share one lock
 # without an import cycle (was previously defined in calibration.py).
 LAYOUT_LOCK = asyncio.Lock()
+# Held across each load-edit-save of the truth marks and of the KPI baselines.
+TRUTH_LOCK = asyncio.Lock()
+KPI_LOCK = asyncio.Lock()
 
 # The integration was called "bps" before it became Sextant. Its Store keys,
 # history directory and maps directory all carried that name.
