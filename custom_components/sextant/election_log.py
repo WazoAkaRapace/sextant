@@ -135,6 +135,17 @@ def usage(dirpath: str):
     return files, size
 
 
+def _archived(path: str) -> bool:
+    """The plain file's rows already end its gzip (a stop between the gzip
+    landing and the plain file's removal), so appending them would log the hour twice."""
+    try:
+        with open(path, "rb") as src, gzip.open(path + ".gz", "rb") as gz:
+            tail = src.read()
+            return gz.read().endswith(tail)
+    except (OSError, EOFError):  # a truncated archive: keep the plain rows (appended, as before)
+        return False
+
+
 def compress_closed(dirpath: str, now: float):
     """Gzip every plain file whose hour is over. The plain file goes only
     after its gzip is in place under the final name. Caller holds ``_FILES``."""
@@ -146,7 +157,9 @@ def compress_closed(dirpath: str, now: float):
             continue
         path = os.path.join(dirpath, name)
         try:
-            if os.path.exists(path + ".gz"):
+            if os.path.exists(path + ".gz") and _archived(path):
+                pass  # already archived: stopped between the gzip landing and this remove
+            elif os.path.exists(path + ".gz"):
                 # The clock stepped back into an archived hour: add the late
                 # rows as a second gzip member instead of replacing the archive.
                 with open(path, "rb") as src, gzip.open(path + ".gz", "ab") as dst:

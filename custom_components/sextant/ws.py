@@ -34,7 +34,7 @@ from . import truth as truth_mod
 from . import robots as robots_mod
 from .storage import (
     maps_dir,
-    LAYOUT_LOCK, get_layout, get_layout_for_edit, get_layout_version, load_kpi_baselines, save_kpi_baselines,
+    LAYOUT_LOCK, TRUTH_LOCK, KPI_LOCK, get_layout, get_layout_for_edit, get_layout_version, load_kpi_baselines, save_kpi_baselines,
     load_truth, save_truth,
     save_layout,
 )
@@ -643,15 +643,16 @@ async def ws_truth_mark(hass, connection, msg):
     samples = core._truth_buffer.samples(msg["entity"], since=since, floor=msg["floor"])
     if len(samples) < truth_mod.MIN_SAMPLES:
         return _error(connection, msg, f"Only {len(samples)} recent cycle(s) placed this thing on {msg['floor']}; wait a minute with it in place and try again")
-    store = await load_truth(hass)
-    mark = {
-        "id": int(store.get("next_id") or 1), "entity": msg["entity"], "floor": msg["floor"],
-        "x": round(float(msg["x"]), 2), "y": round(float(msg["y"]), 2), "t": time.time(), "samples": samples,
-    }
-    store["next_id"] = mark["id"] + 1
-    store.setdefault("marks", []).append(mark)
-    await save_truth(hass, store)
-    _refresh_mark_refs(core, store)
+    async with TRUTH_LOCK:
+        store = await load_truth(hass)
+        mark = {
+            "id": int(store.get("next_id") or 1), "entity": msg["entity"], "floor": msg["floor"],
+            "x": round(float(msg["x"]), 2), "y": round(float(msg["y"]), 2), "t": time.time(), "samples": samples,
+        }
+        store["next_id"] = mark["id"] + 1
+        store.setdefault("marks", []).append(mark)
+        await save_truth(hass, store)
+        _refresh_mark_refs(core, store)
     rows = await _evaluate_mark(hass, core, mark)
     connection.send_result(msg["id"], {"mark": _mark_public(mark), "rows": rows, "current_weight": _current_weight(core, get_layout(hass), mark["entity"])})
 
@@ -670,11 +671,12 @@ async def ws_truth_list(hass, connection, msg):
 @websocket_api.async_response
 async def ws_truth_delete(hass, connection, msg):
     core = _core()
-    store = await load_truth(hass)
-    before = len(store.get("marks", []))
-    store["marks"] = [m for m in store.get("marks", []) if m.get("id") != msg["mark_id"]]
-    await save_truth(hass, store)
-    _refresh_mark_refs(core, store)
+    async with TRUTH_LOCK:
+        store = await load_truth(hass)
+        before = len(store.get("marks", []))
+        store["marks"] = [m for m in store.get("marks", []) if m.get("id") != msg["mark_id"]]
+        await save_truth(hass, store)
+        _refresh_mark_refs(core, store)
     connection.send_result(msg["id"], {"removed": before - len(store["marks"])})
 
 
@@ -1384,12 +1386,13 @@ async def ws_kpi_baseline_save(hass, connection, msg):
         return _error(connection, msg, str(e))
     if not result["entities"]:
         return _error(connection, msg, "no zone sensors in the recorder window; nothing to save")
-    baselines = await load_kpi_baselines(hass)
-    baselines[name] = {
-        "saved_at": result["generated_at"], "hours": hours,
-        "entities": result["entities"], "summary": result["summary"],
-    }
-    await save_kpi_baselines(hass, baselines)
+    async with KPI_LOCK:
+        baselines = await load_kpi_baselines(hass)
+        baselines[name] = {
+            "saved_at": result["generated_at"], "hours": hours,
+            "entities": result["entities"], "summary": result["summary"],
+        }
+        await save_kpi_baselines(hass, baselines)
     connection.send_result(msg["id"], {"name": name, "saved_at": result["generated_at"], "things": len(result["entities"])})
 
 
@@ -1397,11 +1400,12 @@ async def ws_kpi_baseline_save(hass, connection, msg):
 @websocket_api.require_admin
 @websocket_api.async_response
 async def ws_kpi_baseline_delete(hass, connection, msg):
-    baselines = await load_kpi_baselines(hass)
-    if msg["name"] not in baselines:
-        return _error(connection, msg, f"no KPI baseline named {msg['name']!r}")
-    del baselines[msg["name"]]
-    await save_kpi_baselines(hass, baselines)
+    async with KPI_LOCK:
+        baselines = await load_kpi_baselines(hass)
+        if msg["name"] not in baselines:
+            return _error(connection, msg, f"no KPI baseline named {msg['name']!r}")
+        del baselines[msg["name"]]
+        await save_kpi_baselines(hass, baselines)
     connection.send_result(msg["id"], {"deleted": msg["name"]})
 
 

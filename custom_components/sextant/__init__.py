@@ -60,6 +60,7 @@ from .storage import (
     maps_dir,
     migrate_maps_out_of_www,
     LAYOUT_LOCK,
+    TRUTH_LOCK,
     get_layout,
     get_layout_for_edit,
     get_layout_version,
@@ -330,6 +331,17 @@ def _admin_only(request):
 # Non-map files that live in www/sextant_maps and must never be deletable via the
 # save_text "remove" field (that field is only meant to drop an old map image).
 _PROTECTED_MAPS_FILES = {"bpsdata.txt", "sextant_calibration_state.json"}
+
+
+def _map_key(name):
+    """A map file or floor name as the panel's mapUrlFor matches them."""
+    return re.sub(r"[\s_-]+", "", re.sub(r"\.[a-z0-9]+$", "", str(name).lower()))
+
+
+def _map_taken(maps_path, filename):
+    """A map is already there for this name, under any extension."""
+    key = _map_key(filename)
+    return any(p.is_file() and _map_key(p.name) == key for p in Path(maps_path).iterdir())
 
 
 def _safe_maps_child(maps_path, raw_name, allowed_exts=None):
@@ -1811,13 +1823,17 @@ async def update_tracked_entities(hass):
 
             if not unique_values:
                 _LOGGER.info("There are no devices present to track, sleep 10 seconds")
-                _maintain_rooms(hass)
+                _update_people(hass)
                 _maintain_dead_issues(hass)
                 await asyncio.sleep(10)
                 continue  # Skip and start over
             if num_points < 3:
                 _LOGGER.info("There are not enough things with available data to track, sleep 10 seconds")
-                _maintain_rooms(hass)
+                # Too few readings to solve, but a thing one proxy still hears is here, not leaving.
+                heard_now = _heard_now(hass, readings if tracked_prefixes is not None else None, tracked_entities)
+                for ent in heard_now & set(unique_values):
+                    _last_seen[ent] = {**(_last_seen.get(ent) or {}), "updated": time.time()}
+                _update_people(hass)
                 _maintain_dead_issues(hass)
                 await asyncio.sleep(10)
                 continue  # Skip and start over
@@ -3803,16 +3819,7 @@ async def process_entities(hass, new_global_data):
             if n == 1 or n % CYCLE_ERROR_REPEAT_EVERY == 0:
                 _LOGGER.exception("Positioning failed for %s (%d cycle%s in a row)", ent, n, "" if n == 1 else "s")
         await asyncio.sleep(0)  # a thing with nothing to solve never awaits: yield for it
-    try:
-        _update_person_sensors(hass)
-    except Exception as e:  # noqa: BLE001 - a person's sensor must never stop the things'
-        _LOGGER.warning("Person locations not updated: %s", e)
-    _maintain_rooms(hass)
-    try:
-        layout = get_layout(hass)
-        _publish_presence(hass, layout if isinstance(layout, dict) else {})
-    except Exception as e:  # noqa: BLE001 - an attribute must never stop the things'
-        _LOGGER.debug("Presence not published: %s", e)
+    _update_people(hass)
     _maintain_dead_issues(hass)
     try:
         layout = get_layout(hass)
@@ -4190,22 +4197,23 @@ async def _add_auto_pin(hass, ent, target, scale, now):
     if len(samples) < truth_mod.MIN_SAMPLES:
         return False
     x, y = target["cords"]
-    store = await load_truth(hass)
-    marks = store.setdefault("marks", [])
-    mine = [m for m in marks if m.get("entity") == ent and str(m.get("source") or "").startswith(AUTO_PIN_SOURCE)]
-    if any(m.get("floor") == target["floor"] and math.hypot(m["x"] - x, m["y"] - y) < AUTO_PIN_MIN_GAP_M * scale for m in mine[-5:]):
-        return False
-    mark = {"id": int(store.get("next_id") or 1), "entity": ent, "floor": target["floor"], "x": round(float(x), 2),
-            "y": round(float(y), 2), "t": now, "samples": samples,
-            "source": f"{AUTO_PIN_SOURCE}:{'+'.join(_radar_names(target))}"}
-    store["next_id"] = mark["id"] + 1
-    marks.append(mark)
-    extra = len(mine) + 1 - AUTO_PIN_KEEP
-    if extra > 0:
-        drop = {id(m) for m in mine[:extra]}
-        store["marks"] = [m for m in marks if id(m) not in drop]
-    await save_truth(hass, store)
-    _set_truth_marks(store["marks"])
+    async with TRUTH_LOCK:  # the Tune page edits the same file
+        store = await load_truth(hass)
+        marks = store.setdefault("marks", [])
+        mine = [m for m in marks if m.get("entity") == ent and str(m.get("source") or "").startswith(AUTO_PIN_SOURCE)]
+        if any(m.get("floor") == target["floor"] and math.hypot(m["x"] - x, m["y"] - y) < AUTO_PIN_MIN_GAP_M * scale for m in mine[-5:]):
+            return False
+        mark = {"id": int(store.get("next_id") or 1), "entity": ent, "floor": target["floor"], "x": round(float(x), 2),
+                "y": round(float(y), 2), "t": now, "samples": samples,
+                "source": f"{AUTO_PIN_SOURCE}:{'+'.join(_radar_names(target))}"}
+        store["next_id"] = mark["id"] + 1
+        marks.append(mark)
+        extra = len(mine) + 1 - AUTO_PIN_KEEP
+        if extra > 0:
+            drop = {id(m) for m in mine[:extra]}
+            store["marks"] = [m for m in marks if id(m) not in drop]
+        await save_truth(hass, store)
+        _set_truth_marks(store["marks"])
     _LOGGER.info("mmWave pin for %s on %s at (%.0f, %.0f) from %s", ent, target["floor"], x, y,
                  ", ".join(_radar_names(target)))
     return True
@@ -4407,6 +4415,40 @@ def _presence_attrs(updated, now, layout):
     if isinstance(updated, (int, float)) and updated > 0:
         iso = datetime.fromtimestamp(updated, timezone.utc).isoformat(timespec="seconds")
     return {"presence": _presence_of(updated, now, layout), "last_heard": iso}
+
+
+def _heard_now(hass, readings, entity_ids):
+    """Things with a live, fresh distance this cycle, by the solver's own
+    staleness rule: a frozen value must not keep a departed phone "here"."""
+    if readings is None:  # entity mode: a distance sensor with a value
+        return {e.split("_distance_to_")[0].replace("sensor.", "") for e in entity_ids or []
+                if (st := hass.states.get(e)) is not None and st.state not in ("unknown", "unavailable", "")}
+    layout = get_layout(hass) or {}
+    max_age, factor = _reading_max_age(layout), _tuning(layout, "stale_interval_factor")
+    heard = set()
+    for (prefix, _scanner), r in readings.items():
+        if not isinstance(r, dict) or r.get("distance") is None:
+            continue
+        age, limit = r.get("age"), _stale_limit(r, max_age, factor)
+        if not (limit and isinstance(age, (int, float)) and age > limit):
+            heard.add(prefix)
+    return heard
+
+
+def _update_people(hass):
+    """Person sensors, rooms and the things' quiet/away presence. Also run on a
+    cycle with too few readings to solve: that is the house everyone has left,
+    and nothing else would ever tell their sensors they went."""
+    try:
+        _update_person_sensors(hass)
+    except Exception as e:  # noqa: BLE001 - a person's sensor must never stop the things'
+        _LOGGER.warning("Person locations not updated: %s", e)
+    _maintain_rooms(hass)
+    try:
+        layout = get_layout(hass)
+        _publish_presence(hass, layout if isinstance(layout, dict) else {})
+    except Exception as e:  # noqa: BLE001 - an attribute must never stop the things'
+        _LOGGER.debug("Presence not published: %s", e)
 
 
 def _publish_presence(hass, layout):
@@ -8160,6 +8202,9 @@ class SextantSaveAPIText(HomeAssistantView):
         # --- Inputs valid: persist. Map first (so the saved layout never names
         # a map that failed to write), then the layout, then delete the old map. ---
         if map_target is not None:
+            # A second editor adding the same floor: its upload must not replace the first's map.
+            if await hass.async_add_executor_job(_map_taken, maps_path, map_target.name):
+                return web.Response(status=409, text=f"A map named {map_target.name} is already there: pick another floor name")
             try:
                 async with aiofiles.open(map_target, "wb") as f:
                     await f.write(map_bytes)

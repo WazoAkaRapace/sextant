@@ -13,6 +13,7 @@ only that the cycle can read it. Pure: no Home Assistant imports.
 from __future__ import annotations
 
 import math
+import re
 
 # The lists a floor may carry, each of dicts.
 FLOOR_LISTS = ("receivers", "zones", "subzones", "pins", "remarks", "radars", "access_points")
@@ -84,10 +85,15 @@ def layout_problem(layout) -> str | None:
         return "layout.floor must be a list"
     if len(floors) > MAX_FLOORS:
         return f"more than {MAX_FLOORS} floors"
+    seen = set()
     for n, floor in enumerate(floors):
         if not isinstance(floor, dict) or not isinstance(floor.get("name"), str) or not floor["name"]:
             return f"floor {n + 1}: every floor needs a name"
         name = floor["name"]
+        key = re.sub(r"[\s_-]+", "", re.sub(r"\.[a-z0-9]+$", "", name.lower()))  # as the panel's mapUrlFor matches a floor to its map
+        if key in seen:
+            return f"two floors are named {name}: floors (and their maps) are told apart by name"
+        seen.add(key)
         scale = floor.get("scale")
         if scale is not None and not (_finite(scale) and scale > 0):
             return f"{name}: scale must be a positive number"
