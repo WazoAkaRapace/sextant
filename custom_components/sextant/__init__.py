@@ -333,6 +333,17 @@ def _admin_only(request):
 _PROTECTED_MAPS_FILES = {"bpsdata.txt", "sextant_calibration_state.json"}
 
 
+def _map_key(name):
+    """A map file or floor name as the panel's mapUrlFor matches them."""
+    return re.sub(r"[\s_-]+", "", re.sub(r"\.[a-z0-9]+$", "", str(name).lower()))
+
+
+def _map_taken(maps_path, filename):
+    """A map is already there for this name, under any extension."""
+    key = _map_key(filename)
+    return any(p.is_file() and _map_key(p.name) == key for p in Path(maps_path).iterdir())
+
+
 def _safe_maps_child(maps_path, raw_name, allowed_exts=None):
     """Resolve raw_name to a path guaranteed to sit directly inside maps_path.
 
@@ -1819,8 +1830,7 @@ async def update_tracked_entities(hass):
             if num_points < 3:
                 _LOGGER.info("There are not enough things with available data to track, sleep 10 seconds")
                 # Too few readings to solve, but a thing one proxy still hears is here, not leaving.
-                heard_now = {p for (p, _s), r in readings.items() if r.get("distance") is not None} \
-                    if tracked_prefixes is not None else set(unique_values)
+                heard_now = _heard_now(hass, readings if tracked_prefixes is not None else None, tracked_entities)
                 for ent in heard_now & set(unique_values):
                     _last_seen[ent] = {**(_last_seen.get(ent) or {}), "updated": time.time()}
                 _update_people(hass)
@@ -4405,6 +4415,24 @@ def _presence_attrs(updated, now, layout):
     if isinstance(updated, (int, float)) and updated > 0:
         iso = datetime.fromtimestamp(updated, timezone.utc).isoformat(timespec="seconds")
     return {"presence": _presence_of(updated, now, layout), "last_heard": iso}
+
+
+def _heard_now(hass, readings, entity_ids):
+    """Things with a live, fresh distance this cycle, by the solver's own
+    staleness rule: a frozen value must not keep a departed phone "here"."""
+    if readings is None:  # entity mode: a distance sensor with a value
+        return {e.split("_distance_to_")[0].replace("sensor.", "") for e in entity_ids or []
+                if (st := hass.states.get(e)) is not None and st.state not in ("unknown", "unavailable", "")}
+    layout = get_layout(hass) or {}
+    max_age, factor = _reading_max_age(layout), _tuning(layout, "stale_interval_factor")
+    heard = set()
+    for (prefix, _scanner), r in readings.items():
+        if not isinstance(r, dict) or r.get("distance") is None:
+            continue
+        age, limit = r.get("age"), _stale_limit(r, max_age, factor)
+        if not (limit and isinstance(age, (int, float)) and age > limit):
+            heard.add(prefix)
+    return heard
 
 
 def _update_people(hass):
@@ -8175,7 +8203,7 @@ class SextantSaveAPIText(HomeAssistantView):
         # a map that failed to write), then the layout, then delete the old map. ---
         if map_target is not None:
             # A second editor adding the same floor: its upload must not replace the first's map.
-            if await hass.async_add_executor_job(map_target.exists):
+            if await hass.async_add_executor_job(_map_taken, maps_path, map_target.name):
                 return web.Response(status=409, text=f"A map named {map_target.name} is already there: pick another floor name")
             try:
                 async with aiofiles.open(map_target, "wb") as f:

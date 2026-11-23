@@ -90,7 +90,7 @@ def layout_problem(layout) -> str | None:
         if not isinstance(floor, dict) or not isinstance(floor.get("name"), str) or not floor["name"]:
             return f"floor {n + 1}: every floor needs a name"
         name = floor["name"]
-        key = re.sub(r"[\s_-]+", "", name.lower())  # as the panel's mapUrlFor matches a floor to its map
+        key = re.sub(r"[\s_-]+", "", re.sub(r"\.[a-z0-9]+$", "", name.lower()))  # as the panel's mapUrlFor matches a floor to its map
         if key in seen:
             return f"two floors are named {name}: floors (and their maps) are told apart by name"
         seen.add(key)

@@ -138,9 +138,12 @@ def usage(dirpath: str):
 def _archived(path: str) -> bool:
     """The plain file's rows already end its gzip (a stop between the gzip
     landing and the plain file's removal), so appending them would log the hour twice."""
-    with open(path, "rb") as src, gzip.open(path + ".gz", "rb") as gz:
-        tail = src.read()
-        return gz.read().endswith(tail)
+    try:
+        with open(path, "rb") as src, gzip.open(path + ".gz", "rb") as gz:
+            tail = src.read()
+            return gz.read().endswith(tail)
+    except (OSError, EOFError):  # a truncated archive: keep the plain rows (appended, as before)
+        return False
 
 
 def compress_closed(dirpath: str, now: float):
