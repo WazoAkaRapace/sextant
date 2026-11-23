@@ -131,4 +131,6 @@ test("a room in a mode carries it, and the mode picks an icon", async () => {
   assert.equal(modeIcon("Movie"), "mdi:movie-open");
   assert.equal(modeIcon("Gaming"), "mdi:controller");
   assert.equal(modeIcon("Chill"), "mdi:tag");
+  assert.equal(modeIcon("Flowerbed"), "mdi:tag");
+  assert.equal(modeIcon("Work then Movie"), "mdi:briefcase");
 });

@@ -39,7 +39,8 @@ class SextantOccupancy extends LitElement {
     .room.on { background: color-mix(in srgb, var(--primary-color) 14%, transparent); border-color: var(--primary-color); }
     .room.pets { background: var(--secondary-background-color); border: 1px dashed var(--primary-color); }
     .room { position: relative; }
-    .room.mode { background: color-mix(in srgb, var(--accent-color, #ff9800) 18%, transparent); border-color: var(--accent-color, #ff9800); }
+    /* Background only: the border still says occupied (solid) or pets only (dashed). */
+    .room.mode { background: color-mix(in srgb, var(--accent-color, #ff9800) 18%, transparent); }
     .rn ha-icon { --mdc-icon-size: 16px; color: var(--accent-color, #ff9800); vertical-align: -3px; margin-right: 3px; }
     .rn .ml { font-weight: 400; color: var(--secondary-text-color); }
     .rn { font-size: 13px; font-weight: 500; margin-bottom: 6px; padding-right: 44px; }
@@ -125,7 +126,7 @@ class SextantOccupancy extends LitElement {
           ${f.pets ? html`<span class="pill">${f.pets} ${f.pets === 1 ? "pet" : "pets"}</span>` : nothing}</div>
         <div class="grid">${f.rooms.map((r) => html`
           <div class="room ${r.on ? (r.peopleOn ? "on" : "pets") : ""} ${r.mode ? "mode" : ""}">
-            ${f === this._outside ? nothing : html`<div class="rn">${r.mode ? html`<ha-icon icon=${modeIcon(r.mode)} title=${r.mode}></ha-icon>` : nothing}${r.room}${r.mode ? html`<span class="ml"> · ${r.mode}</span>` : nothing}</div>`}
+            ${f === this._outside ? nothing : html`<div class="rn">${r.mode ? html`<ha-icon icon=${modeIcon(r.mode)} aria-hidden="true"></ha-icon>` : nothing}${r.room}${r.mode ? html`<span class="ml"> · ${r.mode}</span>` : nothing}</div>`}
             ${r.people.map((p) => this._chip(r, p, "mdi:account", firstName(p)))}
             ${r.pets.map((p) => this._chip(r, p, "mdi:paw"))}
             ${r.on && r.sources.length ? html`<div class="src">${r.sources.map((x) => html`<ha-icon icon=${SOURCE_ICON[x] || "mdi:help-circle-outline"} title=${SOURCE_LABEL[x] || x}></ha-icon>`)}</div>` : nothing}

@@ -4,11 +4,14 @@ import { sortFloors } from "./sextant-floors.js";
 export const SOURCE_LABEL = { bluetooth: "Bluetooth", radar: "Radar", media_player: "Media playing", sensor: "Sensor", forced: "Forced on", door: "Door held", restored: "Carried over restart", hold: "Holding" };
 export const SOURCE_ICON = { bluetooth: "mdi:bluetooth", radar: "mdi:radar", media_player: "mdi:television-play", sensor: "mdi:motion-sensor", forced: "mdi:toggle-switch", door: "mdi:door", restored: "mdi:restart", hold: "mdi:timer-sand" };
 
-// A room's mode (Movie, Gaming, ...) picks its icon by the first word that names one; anything else gets a tag.
-const MODE_ICONS = [[/movie|film|cinema|theat/, "mdi:movie-open"], [/tv|watch/, "mdi:television-play"], [/game|gaming/, "mdi:controller"],
-  [/music|party|listen/, "mdi:music"], [/sleep|night|bed/, "mdi:sleep"], [/read/, "mdi:book-open-variant"], [/work|meeting|call|office/, "mdi:briefcase"],
-  [/cook|dinner|meal/, "mdi:silverware-fork-knife"], [/away|vacation/, "mdi:airplane"], [/guest/, "mdi:account-multiple"]];
-export const modeIcon = (mode) => (MODE_ICONS.find(([re]) => re.test(String(mode).toLowerCase())) || [, "mdi:tag"])[1];
+// A room's mode (Movie, Gaming, ...) picks its icon by its first word that starts like one; anything else gets a tag.
+const MODE_ICONS = [[/^(movie|film|cinema|theat)/, "mdi:movie-open"], [/^(tv|watch)/, "mdi:television-play"], [/^gam/, "mdi:controller"],
+  [/^(music|party|listen)/, "mdi:music"], [/^(sleep|night|bed)/, "mdi:sleep"], [/^read/, "mdi:book-open-variant"], [/^(work|meeting|call|office)/, "mdi:briefcase"],
+  [/^(cook|dinner|meal|bak)/, "mdi:silverware-fork-knife"], [/^(away|vacation)/, "mdi:airplane"], [/^guest/, "mdi:account-multiple"]];
+export function modeIcon(mode) {
+  for (const w of String(mode).toLowerCase().split(/[^a-z0-9]+/)) { const hit = MODE_ICONS.find(([re]) => re.test(w)); if (hit) return hit[1]; }
+  return "mdi:tag";
+}
 
 export function occupancyByFloor(states, planFloors) {
   const rooms = new Map(), people = new Map();
