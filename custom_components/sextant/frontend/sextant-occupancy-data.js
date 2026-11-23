@@ -4,6 +4,12 @@ import { sortFloors } from "./sextant-floors.js";
 export const SOURCE_LABEL = { bluetooth: "Bluetooth", radar: "Radar", media_player: "Media playing", sensor: "Sensor", forced: "Forced on", door: "Door held", restored: "Carried over restart", hold: "Holding" };
 export const SOURCE_ICON = { bluetooth: "mdi:bluetooth", radar: "mdi:radar", media_player: "mdi:television-play", sensor: "mdi:motion-sensor", forced: "mdi:toggle-switch", door: "mdi:door", restored: "mdi:restart", hold: "mdi:timer-sand" };
 
+// A room's mode (Movie, Gaming, ...) picks its icon by the first word that names one; anything else gets a tag.
+const MODE_ICONS = [[/movie|film|cinema|theat/, "mdi:movie-open"], [/tv|watch/, "mdi:television-play"], [/game|gaming/, "mdi:controller"],
+  [/music|party|listen/, "mdi:music"], [/sleep|night|bed/, "mdi:sleep"], [/read/, "mdi:book-open-variant"], [/work|meeting|call|office/, "mdi:briefcase"],
+  [/cook|dinner|meal/, "mdi:silverware-fork-knife"], [/away|vacation/, "mdi:airplane"], [/guest/, "mdi:account-multiple"]];
+export const modeIcon = (mode) => (MODE_ICONS.find(([re]) => re.test(String(mode).toLowerCase())) || [, "mdi:tag"])[1];
+
 export function occupancyByFloor(states, planFloors) {
   const rooms = new Map(), people = new Map();
   for (const [id, s] of Object.entries(states || {})) {
@@ -11,7 +17,7 @@ export function occupancyByFloor(states, planFloors) {
     if (!id.startsWith("binary_sensor.") || a.room == null || a.floor == null) continue;
     const key = `${a.floor}\u0000${a.room}`;
     if (a.people_only) people.set(key, s.state === "on");
-    else rooms.set(key, { room: a.room, floor: a.floor, on: s.state === "on", people: a.people || [], pets: a.pets || [], things: a.things || [], ids: a.ids || {}, sources: a.sources || [] });
+    else rooms.set(key, { room: a.room, floor: a.floor, on: s.state === "on", people: a.people || [], pets: a.pets || [], things: a.things || [], ids: a.ids || {}, sources: a.sources || [], mode: a.mode || null });
   }
   const byFloor = new Map();
   for (const [key, r] of rooms) {
