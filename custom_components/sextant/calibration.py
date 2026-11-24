@@ -191,7 +191,6 @@ async def save_calibration_state(hass) -> None:
         "saved_at": time.time(),
         "results": cal["results"],
         "applied": cal["applied"],
-        "auto_decisions": cal.get("auto_decisions") or {},
         # To the millimetre: the readings are RSSI-derived and good to decimetres
         # at best, and 17-digit floats made this file 5 MB for a 58-proxy house.
         "samples": {
@@ -218,8 +217,6 @@ async def async_restore_calibration_state(hass) -> None:
         cal["results"] = payload["results"]
     if isinstance(payload.get("applied"), dict):
         cal["applied"] = payload["applied"]
-    if isinstance(payload.get("auto_decisions"), dict):
-        cal["auto_decisions"] = payload["auto_decisions"]
 
     saved_at = payload.get("saved_at")
     fresh = isinstance(saved_at, (int, float)) and time.time() - saved_at <= STATE_MAX_AGE
@@ -1012,7 +1009,9 @@ async def _auto_solve_and_apply_locked(hass, cal: dict) -> None:
         elif action == "revert":
             # Kept with the layout (and its snapshots): why they went, and what
             # they were, so a removal can be explained and undone afterwards.
-            removed = {str(r.get("entity_id")): r.pop("correction") for r in floor.get("receivers", []) if "correction" in r}
+            # Not a proxy taken out of calibration: its correction is the user's.
+            removed = {str(r.get("entity_id")): r.pop("correction") for r in floor.get("receivers", [])
+                       if "correction" in r and r.get("calibrate") is not False}
             floor["calibration"] = {**(floor.get("calibration") or {}), "applied_at": now_iso, "auto": True, "reverted": True,
                                     "reason": reason, "selftest": result.get("selftest"), "removed": removed}
             cal["applied"].pop(floor_name, None)
