@@ -276,6 +276,35 @@ def test_thing_names_come_from_bermuda_tidied_and_user_renames_win(tmp_path, mon
     assert ws._tidy_device_name("Fry") == "Fry"
 
 
+def test_pin_health_names_the_pin_that_drags_its_neighbours(tmp_path, monkeypatch):
+    import math
+    import time as _time
+    from sextant import truth
+    pts = [(0.0, 0.0), (1000.0, 0.0), (1000.0, 1000.0), (0.0, 1000.0)]
+    layout = {"floor": [{"name": "F", "scale": 100.0, "receivers": [{"entity_id": f"r{i}", "cords": {"x": x, "y": y}} for i, (x, y) in enumerate(pts)],
+                         "zones": [], "subzones": []}], "thing_fp_weights": {"phone": 1.0}}
+    hass = _hass_with_layout(tmp_path, layout)
+    hass.async_add_executor_job = lambda fn, *a: asyncio.sleep(0, result=fn(*a))
+    buf = truth.Buffer()
+    monkeypatch.setattr(sextant, "_truth_buffer", buf)
+    conn, start = _Conn(), _time.time() - 100
+    weighted = [(px, py, math.hypot(px - 500, py - 500), 1.0, math.hypot(px - 500, py - 500)) for px, py in pts]
+    # The phone never leaves the middle of the floor. It is pinned there, then 2.8 m off, then there again.
+    for n, (x, y) in enumerate([(500.0, 500.0), (700.0, 700.0), (500.0, 500.0)]):
+        for i in range(4):
+            buf.remember("phone", [{"floor": "F", "weighted": weighted, "bounds": (-100, -100, 1100, 1100), "min_wr": 50.0, "scale": 100.0}],
+                         {"a": 5.0, "b": 5.0}, 1.0, "fingerprint", now=start + n * 10 + i)
+        run(ws.ws_truth_mark(hass, conn, {"id": n, "type": "sextant/truth/mark", "entity": "phone", "floor": "F", "x": x, "y": y, "window_secs": 300}))
+    assert not conn.errors, conn.errors
+    assert [m["id"] for m in sextant._truth_marks] == [1, 2, 3]      # the same point from new cycles is a new pin
+    run(ws.ws_truth_health(hass, conn, {"id": 9, "type": "sextant/truth/health"}))
+    health = conn.results[-1][1]
+    # Pins 1 and 3 each land 1.4 m off with pin 2 among their matches and on the spot without it.
+    assert [(p["id"], p["reasons"], p["hurts"], p["helps"], p["used_by"]) for p in health["pins"]] == [(2, ["hurts"], 2, 0, 2)]
+    assert 1.3 < health["pins"][0]["net_m"] < 1.5 and health["checked"] == 3 and health["gaps"] == []
+    sextant._set_truth_marks([])
+
+
 def test_truth_marks_are_recorded_evaluated_listed_applied_and_deleted(tmp_path, monkeypatch):
     import math
     from sextant import truth
@@ -299,6 +328,18 @@ def test_truth_marks_are_recorded_evaluated_listed_applied_and_deleted(tmp_path,
     assert conn.errors and "cycle" in conn.errors[-1][2]
     run(ws.ws_truth_list(hass, conn, {"id": 3, "type": "sextant/truth/list", "entity": "phone"}))
     assert [m["id"] for m in conn.results[-1][1]["marks"]] == [1] and "samples" in conn.results[-1][1]["marks"][0]
+    # The same pin submitted again from the same cycles is that pin; a copy would take every match slot.
+    run(ws.ws_truth_mark(hass, conn, {"id": 40, "type": "sextant/truth/mark", "entity": "phone", "floor": "F", "x": 500.0, "y": 500.0, "window_secs": 300}))
+    assert conn.results[-1][1]["mark"]["id"] == 1 and [m["id"] for m in sextant._truth_marks] == [1]
+    # Pin health: one pin, nothing to flag; three hours resting 2.1 m from it is a place without a pin.
+    import time as _time
+    hist, now = sextant.get_position_history(hass), _time.time()
+    for dt in range(-3 * 3600, 1, 60):
+        hist.record("phone", now + dt, 3.5, 3.5, "F", 100.0, "Room", None)
+    run(ws.ws_truth_health(hass, conn, {"id": 41, "type": "sextant/truth/health"}))
+    health = conn.results[-1][1]
+    assert health["pins"] == [] and health["checked"] == 1 and 2.9 < health["history_hours"] < 3.1
+    assert [(g["entity"], g["room"], g["hours"], g["nearest_pin_m"]) for g in health["gaps"]] == [("phone", "Room", 3.0, 2.1)]
     run(ws.ws_truth_evaluate(hass, conn, {"id": 4, "type": "sextant/truth/evaluate"}))
     summary = conn.results[-1][1]
     assert summary["things"]["phone"]["marks"] == 1 and summary["things"]["phone"]["mean_m"] < 0.2

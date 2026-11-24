@@ -354,7 +354,7 @@ class SextantEdit extends LitElement {
     if (changed.has("hass")) this._map.setAreas(this.hass?.areas);
     if (changed.has("data")) this._map.setAccessPoints(Array.isArray(this.data?.access_points) ? this.data.access_points : null);
     if (changed.has("floor") || changed.has("data")) this._loadBiasView();
-    if (changed.has("spots") || changed.has("floor")) this._map.setSuggestions((this.spots || []).filter((s) => s.floor === this.floor).map((s) => ({ x: s.x, y: s.y, label: `add a proxy here · ${s.room}` })));
+    if (changed.has("spots") || changed.has("floor")) this._map.setSuggestions((this.spots || []).filter((s) => s.floor === this.floor).map((s) => ({ x: s.x, y: s.y, label: s.label || `add a proxy here · ${s.room}` })));
     if (changed.has("_tool")) { this._map.setTool(["measure", "receiver", "pin", "remark", "radar", "ap"].includes(this._tool) ? "select" : this._tool); }
     if (changed.has("_selection")) this._watchRadar();
   }

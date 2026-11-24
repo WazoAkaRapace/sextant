@@ -156,6 +156,7 @@ class SextantHealth extends LitElement {
     _advice: { state: true },
     _kpi: { state: true },
     _accuracy: { state: true },
+    _pinHealth: { state: true },
     _kpiHours: { state: true },
     _replay: { state: true },
     _replayKey: { state: true },
@@ -389,7 +390,7 @@ class SextantHealth extends LitElement {
         return html`<div class="page"><div class="cols">${this._renderKpi()}${this._renderTuning()}
           <details class="fold"><summary>Experiments and history: accuracy against pins, try a setting, forget history</summary><div class="cols">${this._renderAccuracy()}${this._renderReplay()}${this._renderHistory()}</div></details></div></div>`;
       case "advice":
-        return html`<div class="page"><div class="cols">${this._renderAdvice()}</div></div>`;
+        return html`<div class="page"><div class="cols">${this._renderAdvice()}${this._isAdmin() ? this._renderPinHealth() : nothing}</div></div>`;
       default:
         return html`<div class="page"><div class="cols">${this._renderReceivers()}
           <details class="fold" ?hidden=${!this.expert}><summary>Diagnostics: proxy self-test, proxies against real fixes, Wi-Fi signal by room</summary><div class="cols">${this._renderSelftest()}${this._renderReport()}${this._renderWifiRooms()}</div></details></div></div>`;
@@ -550,7 +551,7 @@ class SextantHealth extends LitElement {
   _showSpots(floor, spots) {
     // sextant-edit labels each ring "add a proxy here · <room>" itself, so
     // several rooms' spots read fine together on one floor's plan.
-    this.dispatchEvent(new CustomEvent("show-spots", { detail: { floor, spots: spots.map((s) => ({ floor, room: s.room, x: s.x, y: s.y })) }, bubbles: true, composed: true }));
+    this.dispatchEvent(new CustomEvent("show-spots", { detail: { floor, spots: spots.map((s) => ({ floor, room: s.room, x: s.x, y: s.y, label: s.label })) }, bubbles: true, composed: true }));
   }
 
   /** advice rows grouped into one change plan per floor, worst floor first
@@ -788,6 +789,57 @@ class SextantHealth extends LitElement {
     const r = await callWS(this, this.hass, { type: "sextant/truth/evaluate" });
     this._busy = null;
     if (r) this._accuracy = r;
+  }
+
+  async _runPinHealth() {
+    this._busy = "pins";
+    const r = await callWS(this, this.hass, { type: "sextant/truth/health" });
+    this._busy = null;
+    if (r) this._pinHealth = r;
+  }
+
+  /** Forget the given flagged pins (after one confirmation), then check again:
+   * every other row was worked out with those pins in place. */
+  async _forgetPins(ids, what) {
+    if (!(await confirmAsync(`Forget ${what}? This cannot be undone.`, { ok: "Forget", danger: true }))) return;
+    this._busy = "pins";
+    const gone = [];
+    for (const id of ids) if (await callWS(this, this.hass, { type: "sextant/truth/delete", mark_id: id })) gone.push(id);
+    if (gone.length) toast(this, `${gone.length} pin${gone.length === 1 ? "" : "s"} forgotten`);
+    // Off the card now: the check below can fail, and a forgotten pin must not stay listed.
+    if (this._pinHealth) this._pinHealth = { ...this._pinHealth, pins: (this._pinHealth.pins || []).filter((p) => !gone.includes(p.id)) };
+    await this._runPinHealth();
+  }
+
+  _renderPinHealth() {
+    const h = this._pinHealth;
+    const why = (p) => [
+      p.reasons.includes("hurts") ? `${p.hurts} of the ${p.used_by} pin${p.used_by === 1 ? "" : "s"} it guides land${p.hurts === 1 ? "s" : ""} further off with it, ${fmtLen(p.net_m, this.hass, 1)} on average${p.worst ? ` (pin ${p.worst.id} by ${fmtLen(p.worst.m, this.hass, 1)})` : ""}. One of them may be in the wrong place, or the two places look alike to Bluetooth: check both.` : "",
+      p.reasons.includes("far") ? `Its own readings put it ${fmtLen(p.own_m, this.hass, 1)} from the pin, far more than your other pins: it was probably not there the whole time.` : "",
+      p.reasons.includes("duplicate") ? `A copy of pin ${p.duplicate_of}, from the same readings.` : "",
+    ].filter(Boolean).join(" ");
+    const copies = (h?.pins || []).filter((p) => p.reasons.length === 1 && p.reasons[0] === "duplicate").map((p) => p.id);
+    const where = (g) => `${g.room || "outside every room"} (${g.floor})`;
+    return html`<section class="card wide">
+      <h3>Location pins</h3>
+      <p class="small muted">A pin (Live page, "It's actually here…") is the best help a place can get: fixes within about ${fmtLen(2, this.hass, 0)} of one land much closer. A pin in the wrong place does the opposite and pulls everything near it the wrong way. (A pin only guides a thing whose position uses the fingerprint match: "Apply best fit" after pinning turns that on when it lands closer.) The check looks for both: pins that make their neighbours land worse, and places where a thing rests with no pin near.</p>
+      <div class="row">${uiButton({ label: this._busy === "pins" ? "Checking…" : h ? "Check again" : "Check pins", kind: h ? "outline" : "primary", disabled: this._busy === "pins", onClick: () => this._runPinHealth() })}
+        ${h ? html`<span class="muted small">${h.checked} pin${h.checked === 1 ? "" : "s"} checked · ${h.pins.length ? `${h.pins.length} to look at again` : "none to look at again"} · ${h.gaps.length ? `${h.gaps.length} place${h.gaps.length === 1 ? "" : "s"} without a pin` : "no resting place without a pin"}</span>` : nothing}</div>
+      ${h?.pins.length ? html`<h4>Pins to look at again</h4><div class="wrap"><table>
+        <tr><th class="num">Pin</th><th>Thing</th><th>Floor</th><th>Placed</th><th>Why</th><th></th></tr>
+        ${h.pins.map((p) => html`<tr><td class="num">${p.id}</td><td>${thingName(this.data, p.entity)}</td><td>${p.floor}</td><td>${p.t ? new Date(p.t * 1000).toLocaleDateString() : "—"}</td>
+          <td class="small">${why(p)}</td><td>${uiButton({ label: "Forget", kind: "text", disabled: this._busy === "pins", onClick: () => this._forgetPins([p.id], `pin ${p.id}`) })}</td></tr>`)}
+      </table></div>
+      ${copies.length > 1 ? html`<div class="row">${uiButton({ label: `Forget the ${copies.length} copies`, kind: "outline", disabled: this._busy === "pins", onClick: () => this._forgetPins(copies, `the ${copies.length} copies`) })}</div>` : nothing}` : nothing}
+      ${h?.gaps.length ? html`<h4>Places without a pin <span class="muted small">from the last ${fmtAge(h.history_hours * 3600)} of history</span></h4>
+      <p class="small muted">The ring on the plan is where Sextant put the thing, which is only roughly where it was. Next time it is there, pin it at its real spot on the Live page.</p>
+      <div class="wrap"><table>
+        <tr><th>Thing</th><th>Rests in</th><th class="num">Time there</th><th class="num">Nearest pin</th><th></th></tr>
+        ${h.gaps.map((g) => html`<tr><td>${thingName(this.data, g.entity)}</td><td>${where(g)}</td><td class="num">${fmtAge(g.hours * 3600)}</td>
+          <td class="num">${g.nearest_pin_m != null ? fmtLen(g.nearest_pin_m, this.hass, 1) : "none on this floor"}</td>
+          <td>${uiButton({ label: "Show on plan", kind: "text", onClick: () => this._showSpots(g.floor, [{ x: g.x, y: g.y, room: g.room, label: `pin ${thingName(this.data, g.entity)} when it is here` }]) })}</td></tr>`)}
+      </table></div>` : nothing}
+    </section>`;
   }
 
   _renderAccuracy() {

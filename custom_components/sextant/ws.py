@@ -579,8 +579,9 @@ def _mark_public(mark):
     return {k: v for k, v in mark.items() if k != "samples"} | {"samples": len(mark.get("samples") or [])}
 
 
-async def _evaluate_mark(hass, core, mark, weights=None, gains=None):
-    """Re-solve one mark's samples under the sweep (or the current settings only)."""
+def _mark_setup(hass, core, mark, exclude=()):
+    """What re-solving one mark needs: layout, scale, room lookup, its gain and
+    its fingerprint references by gain (never its own, nor the pins in ``exclude``)."""
     layout = get_layout(hass)
     layout = layout if isinstance(layout, dict) else {}
     # The positioning helpers take the per-cycle list of {entity, data}; one entry is enough here.
@@ -594,12 +595,29 @@ async def _evaluate_mark(hass, core, mark, weights=None, gains=None):
     vectors = core._fingerprint_db.vectors()
     extra = core._mark_refs(layout, mark["entity"])
     # A mark must not match its own reference, or the score would be circular.
-    own = f"mark:{mark['id']}"
-    extra = [r for r in extra if r.get("slug") != own] if extra else None
+    skip = {f"mark:{mark['id']}", *(f"mark:{i}" for i in exclude)}
+    extra = [r for r in extra if r.get("slug") not in skip] if extra else None
 
     def refs_for_gain(gain):
         return fingerprint_mod.build_references(layout, vectors, gain, extra=extra).get(floor)
 
+    return layout, scale, zone_of, base_gain, refs_for_gain
+
+
+async def _mark_guides(hass, core, mark):
+    """Ids of the pins the fingerprint match leans on for this mark's samples."""
+    layout, _scale, _zone_of, base_gain, refs_for_gain = _mark_setup(hass, core, mark)
+    refs = refs_for_gain(base_gain)   # here, not in the executor: the reference cache belongs to the loop
+    return await hass.async_add_executor_job(
+        lambda: truth_mod.influencers(
+            core._rebased_samples(layout, mark), refs,
+            core._tuning(layout, "fingerprint_k"), core._tuning(layout, "fingerprint_missing_m")))
+
+
+async def _evaluate_mark(hass, core, mark, weights=None, gains=None, exclude=()):
+    """Re-solve one mark's samples under the sweep (or the current settings only)."""
+    layout, scale, zone_of, base_gain, refs_for_gain = _mark_setup(hass, core, mark, exclude)
+    floor = mark["floor"]
     kwargs = {"k": core._tuning(layout, "fingerprint_k"), "missing_m": core._tuning(layout, "fingerprint_missing_m"), "base_gain": base_gain}
     if weights is not None:
         kwargs["weights"] = weights
@@ -645,14 +663,23 @@ async def ws_truth_mark(hass, connection, msg):
         return _error(connection, msg, f"Only {len(samples)} recent cycle(s) placed this thing on {msg['floor']}; wait a minute with it in place and try again")
     async with TRUTH_LOCK:
         store = await load_truth(hass)
-        mark = {
-            "id": int(store.get("next_id") or 1), "entity": msg["entity"], "floor": msg["floor"],
-            "x": round(float(msg["x"]), 2), "y": round(float(msg["y"]), 2), "t": time.time(), "samples": samples,
-        }
-        store["next_id"] = mark["id"] + 1
-        store.setdefault("marks", []).append(mark)
-        await save_truth(hass, store)
-        _refresh_mark_refs(core, store)
+        x, y = round(float(msg["x"]), 2), round(float(msg["y"]), 2)
+        # The same thing pinned at the same point from the very same cycles (a
+        # repeated submit) is that pin, untouched, not a copy of it: copies
+        # take every one of the k match slots and add nothing. New cycles make
+        # a new pin, so Undo on the Live page only ever removes what it added.
+        span = (samples[0].get("t"), samples[-1].get("t"))
+        mark = next((
+            m for m in store.get("marks", [])
+            if (m.get("entity"), m.get("floor"), m.get("x"), m.get("y")) == (msg["entity"], msg["floor"], x, y)
+            and m.get("samples") and (m["samples"][0].get("t"), m["samples"][-1].get("t")) == span
+        ), None)
+        if mark is None:
+            mark = {"id": int(store.get("next_id") or 1), "entity": msg["entity"], "floor": msg["floor"], "x": x, "y": y, "t": time.time(), "samples": samples}
+            store["next_id"] = mark["id"] + 1
+            store.setdefault("marks", []).append(mark)
+            await save_truth(hass, store)
+            _refresh_mark_refs(core, store)
     rows = await _evaluate_mark(hass, core, mark)
     connection.send_result(msg["id"], {"mark": _mark_public(mark), "rows": rows, "current_weight": _current_weight(core, get_layout(hass), mark["entity"])})
 
@@ -704,6 +731,56 @@ async def ws_truth_evaluate(hass, connection, msg):
         by_mark[mark["id"]] = (mark["entity"], row)
         per_mark.append({**_mark_public(mark), "current": row})
     connection.send_result(msg["id"], {"things": truth_mod.summarize(by_mark), "marks": per_mark})
+
+
+@websocket_api.websocket_command({vol.Required("type"): "sextant/truth/health"})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_truth_health(hass, connection, msg):
+    """The pins worth a second look (truth.pin_health): each pin re-solved at
+    its thing's current settings with and without every pin that guides it.
+    And where a pin is missing: the places things rest with none near."""
+    core = _core()
+    store = await load_truth(hass)
+    data = get_layout(hass)
+    marks = list(store.get("marks", []))   # a copy: a pin can be forgotten while this awaits
+    effects = {}
+    for mark in marks:
+        w = _current_weight(core, data, mark["entity"])
+        rows = {r["weight"]: r for r in await _evaluate_mark(hass, core, mark, weights=(0.0, w) if w > 0 else (0.0,), gains=(1.0,))}
+        effect = effects[mark["id"]] = {"own_m": (rows.get(0.0) or {}).get("mean_m"), "without": {}}
+        if w <= 0 or w not in rows:
+            continue
+        for pin_id in await _mark_guides(hass, core, mark):
+            without = await _evaluate_mark(hass, core, mark, weights=(w,), gains=(1.0,), exclude=(pin_id,))
+            # Only the same cycles compare: one that cannot be placed without the pin would skew the mean.
+            # shortcut: the count is compared, not the cycles; upgrade if truth.evaluate ever returns which were placed.
+            if without and without[0]["samples"] == rows[w]["samples"]:
+                effect["without"][pin_id] = round(rows[w]["mean_m"] - without[0]["mean_m"], 2)
+    connection.send_result(msg["id"], {"pins": truth_mod.pin_health(marks, effects), "checked": len(marks), **await _pin_gaps(hass, core, data)})
+
+
+async def _pin_gaps(hass, core, layout):
+    """Where things rest with no pin near (advice.pin_gaps), and the hours of history that is from."""
+    from .advice import pin_gaps  # noqa: PLC0415 - shapely and numpy, only when asked
+
+    if not isinstance(layout, dict):
+        return {"gaps": [], "history_hours": 0.0}
+    hist, now = core.get_position_history(hass), time.time()
+    # Copies of the tracks (cheap on the loop), read in the executor. Only the
+    # things Bluetooth places: a robot rests on its dock and takes no pin. A
+    # thing on the geometric fit alone is listed too: its first pin is how it
+    # finds out whether the fingerprint would place it better (Apply best fit).
+    wins = {ent: win[0] for ent in core._truth_buffer.entities() if (win := hist.window(ent, 0.0, now))}
+    scales = {f.get("name"): f.get("scale") for f in layout.get("floor", [])}
+    pins = {
+        ent: [(r["floor"], r["x"] / scales[r["floor"]], r["y"] / scales[r["floor"]]) for r in core._mark_refs(layout, ent) or [] if scales.get(r["floor"])]
+        for ent in wins
+    }
+    gaps = await hass.async_add_executor_job(
+        lambda: pin_gaps(layout, {ent: history_mod._PointView(w, 0, len(w.t)) for ent, w in wins.items()}, pins))
+    oldest = min((w.t[0] for w in wins.values()), default=now)
+    return {"gaps": gaps, "history_hours": round((now - oldest) / 3600, 1)}
 
 
 @websocket_api.websocket_command({
@@ -2246,7 +2323,7 @@ COMMANDS = (
     ws_calibration_status, ws_calibration_action, ws_selftest, ws_replay, ws_scanner_linking, ws_receivers, ws_beacon_links,
     ws_proxy_info,
     ws_adjust_zones, ws_registration, ws_scanner_ignore, ws_kpi, ws_kpi_baselines, ws_kpi_baseline_save, ws_kpi_baseline_delete,
-    ws_truth_mark, ws_truth_list, ws_truth_delete, ws_truth_evaluate, ws_truth_apply,
+    ws_truth_mark, ws_truth_list, ws_truth_delete, ws_truth_evaluate, ws_truth_health, ws_truth_apply,
     ws_bermuda_candidates, ws_bermuda_tracked, ws_bermuda_track, ws_bermuda_findmy, ws_bermuda_findmy_add,
     ws_bermuda_findmy_remove, ws_bermuda_options, ws_bermuda_options_set, ws_bermuda_scanners, ws_bermuda_tiles,
     ws_bermuda_scanner_ranging, ws_bermuda_tile_identities, ws_bermuda_tile_bind, ws_bermuda_tile_adopt,
