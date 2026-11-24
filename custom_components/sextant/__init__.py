@@ -3561,7 +3561,9 @@ async def carry_renamed_thing_settings(hass, tracked, ids):
         return
     # shortcut: thing_ids keeps every slug ever seen and never shrinks; prune it if a layout ever nears MAX_ITEMS_PER_LIST-sized tables.
     known = {s: u for s, u in (layout.get("thing_ids") or {}).items() if isinstance(s, str) and isinstance(u, str)}
-    tracked = tracked if isinstance(tracked, set) else set(tracked)
+    # Every slug Bermuda reports now counts as tracked, even one the caller's set
+    # has not caught up with, or one two devices share (its id is None).
+    tracked = set(tracked) | set(ids)
 
     seated = {ent for table in _thing_settings_tables(layout).values() for ent in table}
     # A slug still holding another device's settings keeps that device's
@@ -3592,12 +3594,12 @@ async def carry_renamed_thing_settings(hass, tracked, ids):
             return
         table = dict(layout.get("thing_ids") or {})
         table.update(fresh)
-        # A slug whose old settings move out this cycle is the newcomer's from now on.
-        table.update({d: ids[d] for donors in moves.values() for d in donors if d in tracked and ids.get(d)})
-        layout["thing_ids"] = table
         # Read again under the lock: a name set since the check above stands.
         seated = {ent for t in _thing_settings_tables(layout).values() for ent in t}
         moves = {r: d for r, d in moves.items() if r not in seated}
+        # A slug whose old settings do move out now is the newcomer's from now on.
+        table.update({d: ids[d] for donors in moves.values() for d in donors if d in tracked and ids.get(d)})
+        layout["thing_ids"] = table
         for receiver, donors in moves.items():
             for settings in _thing_settings_tables(layout).values():
                 for donor in donors:

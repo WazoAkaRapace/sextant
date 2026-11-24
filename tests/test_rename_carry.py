@@ -132,7 +132,7 @@ def test_two_devices_under_one_slug_have_no_identity(monkeypatch):
     monkeypatch.setattr(bermuda_source, "async_get_tracked_devices", lambda h: {
         "aa": {"slug": "tag", "unique_id": "u1"}, "bb": {"slug": "tag", "unique_id": "u2"}, "cc": {"slug": "p", "unique_id": "u3"},
         "dd": {"slug": "q", "unique_id": "u4"}, "ee": {"slug": "q"}})
-    assert bermuda_source.async_get_tracked_unique_ids(None) == {"p": "u3"}
+    assert bermuda_source.async_get_tracked_unique_ids(None) == {"p": "u3", "tag": None, "q": None}
 
 
 def test_a_newcomer_on_the_old_slug_before_the_rename_shows_takes_nothing(tmp_path):
@@ -149,7 +149,7 @@ def test_a_newcomer_on_the_old_slug_before_the_rename_shows_takes_nothing(tmp_pa
 def test_a_slug_two_devices_share_is_never_a_donor(tmp_path):
     # old_name (irk_1) is now shared by two devices, so Bermuda's ids leave it out.
     hass = _hass(tmp_path)
-    run(sextant.carry_renamed_thing_settings(hass, {"old_name", "new_name"}, {"new_name": "irk_1"}))
+    run(sextant.carry_renamed_thing_settings(hass, {"new_name"}, {"new_name": "irk_1", "old_name": None}))
     assert st.get_layout(hass)["thing_names"] == {"old_name": "David"}
 
 
@@ -157,3 +157,18 @@ def test_a_damaged_identity_memory_is_ignored(tmp_path):
     hass = _hass(tmp_path)
     run(st.save_layout(hass, {**st.get_layout(hass), "thing_ids": {"old_name": [], "x": "irk_3"}}))
     run(sextant.carry_renamed_thing_settings(hass, {"new_name"}, {"new_name": "irk_1"}))
+
+
+def test_a_name_set_while_waiting_keeps_the_old_slug_s_identity(tmp_path, monkeypatch):
+    # The move to new_name is cancelled because new_name got settings meanwhile:
+    # old_name must not be relabelled as the newcomer's, or it would later take them.
+    hass = _hass(tmp_path)
+    real = sextant.get_layout_for_edit
+    def edited(h):
+        lay = real(h)
+        lay.setdefault("thing_names", {})["new_name"] = "Manual"
+        return lay
+    monkeypatch.setattr(sextant, "get_layout_for_edit", edited)
+    run(sextant.carry_renamed_thing_settings(hass, {"old_name", "new_name"}, {"old_name": "irk_9", "new_name": "irk_1"}))
+    lay = st.get_layout(hass)
+    assert lay["thing_ids"]["old_name"] == "irk_1" and lay["thing_names"]["old_name"] == "David"

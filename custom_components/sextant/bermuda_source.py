@@ -523,7 +523,8 @@ def async_get_tracked_devices(hass) -> dict | None:
 
 
 def async_get_tracked_unique_ids(hass) -> dict[str, str] | None:
-    """The tracked set as ``{slug: unique_id}``, or None without the API.
+    """The tracked set as ``{slug: unique_id}``, or None without the API. A slug
+    two devices share maps to None: it is tracked, but no one device's.
 
     A slug is Bermuda's mutable display name for a device (it can change
     across a restart); the unique_id is the device itself, forever. This is
@@ -541,7 +542,7 @@ def async_get_tracked_unique_ids(hass) -> dict[str, str] | None:
         seen.add(slug)
         if slug and uid:
             out[slug] = uid
-    return {s: u for s, u in out.items() if s not in clash}
+    return {**{s: u for s, u in out.items() if s not in clash}, **{s: None for s in clash if s}}
 
 
 async def async_set_tracked_devices(hass, add=(), remove=()) -> list | None:
