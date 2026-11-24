@@ -41,8 +41,10 @@ swap, a Tile whose ID rotated - would otherwise live on in the list on the
 owner. **If the device is still tracked under its new name, its settings
 follow it there first**: Sextant remembers which slug is which device by
 Bermuda's stable unique id, and a rename moves the name, class, colour,
-owner and remembered sighting to the new slug in one cycle - a rename costs
-nothing. Only a slug whose device is gone entirely is forgotten, and after
+owner, remembered sighting and pins to the new slug in one cycle. Its
+sensors do get new entity ids under the new slug, so an automation that
+names the old ones needs updating, and their history stays with the old
+ids. Only a slug whose device is gone entirely is forgotten, and after
 an hour of Bermuda not naming the slug at that: its settings, its
 remembered last sighting and its history go (the same as selecting it on
 the Live page and choosing **Forget**). The hour is a

@@ -3559,6 +3559,7 @@ async def carry_renamed_thing_settings(hass, tracked, ids):
     layout = get_layout(hass)
     if not isinstance(layout, dict):
         return
+    # shortcut: thing_ids keeps every slug ever seen and never shrinks; prune it if a layout ever nears MAX_ITEMS_PER_LIST-sized tables.
     known = dict(layout.get("thing_ids") or {})
     fresh = {slug: uid for slug, uid in ids.items() if uid and known.get(slug) != uid}
     tracked = tracked if isinstance(tracked, set) else set(tracked)
@@ -3583,6 +3584,9 @@ async def carry_renamed_thing_settings(hass, tracked, ids):
         table = dict(layout.get("thing_ids") or {})
         table.update(fresh)
         layout["thing_ids"] = table
+        # Read again under the lock: a name set since the check above stands.
+        seated = {ent for t in _thing_settings_tables(layout).values() for ent in t}
+        moves = {r: d for r, d in moves.items() if r not in seated}
         for receiver, donors in moves.items():
             for settings in _thing_settings_tables(layout).values():
                 for donor in donors:
@@ -3602,6 +3606,17 @@ async def carry_renamed_thing_settings(hass, tracked, ids):
             _LOGGER.info("%s is a device Bermuda renamed (%s); its settings followed it across",
                          receiver, ", ".join(donors))
         await save_layout(hass, layout)
+    if moves:
+        # Its pins are the same device's too.
+        renamed = {d: r for r, donors in moves.items() for d in donors}
+        async with TRUTH_LOCK:
+            store = await load_truth(hass)
+            hit = [m for m in store.get("marks", []) if m.get("entity") in renamed]
+            for m in hit:
+                m["entity"] = renamed[m["entity"]]
+            if hit:
+                await save_truth(hass, store)
+                _set_truth_marks(store["marks"])
 
 
 def _findmy_not_all_tracked(hass):

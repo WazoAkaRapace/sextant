@@ -100,3 +100,12 @@ def test_the_sweep_never_takes_the_identity_memory(tmp_path, monkeypatch):
     lay = st.get_layout(hass)
     assert lay["thing_ids"].get("old_name") == "irk_1", "the identity memory survives the sweep"
     assert "old_name" not in lay["thing_names"], "the settings still go"
+
+
+def test_pins_follow_the_rename(tmp_path):
+    hass = _hass(tmp_path)
+    run(st.save_truth(hass, {"marks": [{"id": 1, "entity": "old_name", "floor": "F", "x": 1.0, "y": 2.0},
+                                       {"id": 2, "entity": "phone", "floor": "F", "x": 3.0, "y": 4.0}], "next_id": 3}))
+    run(sextant.carry_renamed_thing_settings(hass, {"new_name"}, {"new_name": "irk_1"}))
+    marks = run(st.load_truth(hass))["marks"]
+    assert [m["entity"] for m in marks] == ["new_name", "phone"]
