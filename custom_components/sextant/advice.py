@@ -281,17 +281,21 @@ def pin_gaps(layout, tracks, pins):
                     acc[2] += last[3] * dt
             last = (t, floor, x, y)
         places = []
-        for (floor, *_cell), (secs, sx, sy) in sorted(cells.items(), key=lambda kv: -kv[1][0]):
+        for (floor, ox, oy, i, j), (secs, sx, sy) in sorted(cells.items(), key=lambda kv: -kv[1][0]):
             if secs < REST_MIN_HOURS * 3600 or len(places) >= REST_PER_THING:
                 break
             if floor not in floors:
                 continue
             x, y = sx / secs, sy / secs
             near = min((math.hypot(x - px, y - py) for f, px, py in pins.get(entity) or () if f == floor), default=None)
-            # Covered by a pin, or a place already listed, seen through another grid.
-            if (near is not None and near < PIN_NEAR_M) or any(f == floor and math.hypot(x - px, y - py) < PIN_NEAR_M for f, px, py in places):
+            # Covered by a pin, or a place already listed, seen through another
+            # grid: a cell that overlaps a listed one holds some of the same time.
+            cx, cy = (i - ox) * REST_CELL_M, (j - oy) * REST_CELL_M
+            if (near is not None and near < PIN_NEAR_M) or any(
+                    f == floor and (math.hypot(x - px, y - py) < PIN_NEAR_M or (abs(cx - qx) < REST_CELL_M and abs(cy - qy) < REST_CELL_M))
+                    for f, px, py, qx, qy in places):
                 continue
-            places.append((floor, x, y))
+            places.append((floor, x, y, cx, cy))
             scale = floors[floor]["scale"]
             at = Point(x * scale, y * scale)
             rows.append({

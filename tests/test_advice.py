@@ -89,6 +89,17 @@ def test_a_resting_place_with_no_pin_near_is_reported():
     assert [(r["room"], r["hours"]) for r in out] == [("Den", 4.0), ("Den", 3.0)]
 
 
+def test_time_between_two_resting_places_is_counted_once():
+    layout = _layout([], [_rect("Den", 0, 0, 800, 800)])
+    # Ten hours at one place, two between, ten at the next: on one grid the
+    # two hours fall in with the first place, on a shifted grid with the second.
+    a = [(t, "F", 0.1, 0.1, 0) for t in range(0, 10 * 3600, 60)]
+    mid = [(t, "F", 1.1, 1.1, 0) for t in range(10 * 3600, 12 * 3600, 60)]
+    b = [(t, "F", 2.1, 2.1, 0) for t in range(12 * 3600, 22 * 3600 + 1, 60)]
+    out = advice.pin_gaps(layout, {"cat": a + mid + b}, {})
+    assert [r["hours"] for r in out] == [12.0, 10.0]
+
+
 def test_short_stays_silences_and_unknown_floors_are_not_resting_places():
     layout = _layout([], [_rect("Den", 0, 0, 400, 400)])
     hour = [(t, "F", 1.0, 1.0, 0) for t in range(0, 3601, 60)]

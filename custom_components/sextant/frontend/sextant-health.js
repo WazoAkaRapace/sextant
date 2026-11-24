@@ -803,9 +803,11 @@ class SextantHealth extends LitElement {
   async _forgetPins(ids, what) {
     if (!(await confirmAsync(`Forget ${what}? This cannot be undone.`, { ok: "Forget", danger: true }))) return;
     this._busy = "pins";
-    let gone = 0;
-    for (const id of ids) if (await callWS(this, this.hass, { type: "sextant/truth/delete", mark_id: id })) gone += 1;
-    if (gone) toast(this, `${gone} pin${gone === 1 ? "" : "s"} forgotten`);
+    const gone = [];
+    for (const id of ids) if (await callWS(this, this.hass, { type: "sextant/truth/delete", mark_id: id })) gone.push(id);
+    if (gone.length) toast(this, `${gone.length} pin${gone.length === 1 ? "" : "s"} forgotten`);
+    // Off the card now: the check below can fail, and a forgotten pin must not stay listed.
+    if (this._pinHealth) this._pinHealth = { ...this._pinHealth, pins: (this._pinHealth.pins || []).filter((p) => !gone.includes(p.id)) };
     await this._runPinHealth();
   }
 

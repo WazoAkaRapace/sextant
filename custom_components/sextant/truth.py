@@ -348,7 +348,7 @@ def pin_health(marks, effects):
         for pin_id, delta in (effect.get("without") or {}).items():
             by_pin.setdefault(pin_id, []).append((delta, mark_id))
     owns = sorted(e["own_m"] for e in effects.values() if e.get("own_m") is not None)
-    usual = owns[len(owns) // 2] if owns else 0.0
+    usual = owns[(len(owns) - 1) // 2] if owns else 0.0   # the lower middle: of two pins, the nearer
     first, rows = {}, []
     for mark in sorted(marks, key=lambda m: m["id"]):
         reasons = []

@@ -232,4 +232,6 @@ def test_pin_health_flags_copies_far_pins_and_pins_that_hurt_their_neighbours():
     assert "samples" not in copy
     # With few proxies every pin reads far: none stands out, so none is "far".
     assert truth.pin_health(marks[3:5], {4: {"own_m": 7.0, "without": {}}, 5: {"own_m": 6.5, "without": {}}}) == []
+    # With two pins the usual error is the lower one, so the far one of the pair still shows.
+    assert [r["id"] for r in truth.pin_health(marks[3:5], {4: {"own_m": 10.0, "without": {}}, 5: {"own_m": 1.0, "without": {}}})] == [4]
     assert truth.pin_health([], {}) == []

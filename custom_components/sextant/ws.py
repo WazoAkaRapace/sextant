@@ -754,6 +754,7 @@ async def ws_truth_health(hass, connection, msg):
         for pin_id in await _mark_guides(hass, core, mark):
             without = await _evaluate_mark(hass, core, mark, weights=(w,), gains=(1.0,), exclude=(pin_id,))
             # Only the same cycles compare: one that cannot be placed without the pin would skew the mean.
+            # shortcut: the count is compared, not the cycles; upgrade if truth.evaluate ever returns which were placed.
             if without and without[0]["samples"] == rows[w]["samples"]:
                 effect["without"][pin_id] = round(rows[w]["mean_m"] - without[0]["mean_m"], 2)
     connection.send_result(msg["id"], {"pins": truth_mod.pin_health(marks, effects), "checked": len(marks), **await _pin_gaps(hass, core, data)})
