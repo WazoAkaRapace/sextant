@@ -58,7 +58,10 @@ class Buffer:
         self._by_entity = {}
         self._maxlen = maxlen
 
-    def remember(self, entity, jobs, thing_vec, gain, estimator, now=None, raw_vec=None):
+    def remember(self, entity, jobs, thing_vec, gain, estimator, now=None, raw_vec=None, cross=None):
+        """``cross`` is {floor: (points, heard)}: the other floors' proxies as
+        solver points on that floor (``_cross_floor_points``), kept so a mark
+        can say whether borrowing them would have landed nearer."""
         floors = {}
         for job in jobs:
             # Tuples of floats, not lists: CPython's cyclic collector stops
@@ -76,6 +79,9 @@ class Buffer:
                 "min_wr": float(job.get("min_wr") or 1e-3),
                 "scale": float(job.get("scale") or 0.0),
             }
+            borrowed = ((cross or {}).get(job["floor"]) or ((),))[0]
+            if borrowed:
+                floors[job["floor"]]["cross"] = tuple(tuple(float(v) for v in pt) for pt in borrowed)
         if not floors:
             return
         sample = {
@@ -96,6 +102,10 @@ class Buffer:
             s for s in self._by_entity.get(entity, ())
             if (since is None or s["t"] >= since) and (floor is None or floor in s["floors"])
         ]
+
+    def entities(self):
+        """The things with samples: the ones a pin can be made for."""
+        return [e for e, samples in self._by_entity.items() if samples]
 
     def forget(self, entity=None):
         if entity is None:
@@ -158,7 +168,7 @@ def rebase(samples, mult, rx_at, min_radius_m):
 
 
 def evaluate(samples, floor, mark, scale, zone_of, solve, refs_for_gain, k=3, missing_m=12.0,
-             base_gain=1.0, weights=WEIGHTS, gains=GAIN_STEPS):
+             base_gain=1.0, weights=WEIGHTS, gains=GAIN_STEPS, cross=False):
     """Re-solve ``samples`` (Buffer samples holding ``floor``) under every
     blend weight and gain multiplier, scored against ``mark`` (x, y in
     floor pixels; ``scale`` px per metre).
@@ -169,6 +179,11 @@ def evaluate(samples, floor, mark, scale, zone_of, solve, refs_for_gain, k=3, mi
     None. Returns rows sorted best first: weight, gain multiplier, the
     estimator that weight means, samples used, mean and median error in
     metres, and the share of cycles that landed in the mark's room.
+
+    With ``cross``, one more row (``"cross": True``, estimator "cross-floor"):
+    the geometric fit with the other floors' proxies helping, over the samples
+    that recorded them. It is a comparison only: nothing places a thing this
+    way, so it cannot be applied. Its partner is the geometric row.
     """
     usable = [s for s in samples if floor in s.get("floors", {})]
     if not usable or not scale:
@@ -196,26 +211,45 @@ def evaluate(samples, floor, mark, scale, zone_of, solve, refs_for_gain, k=3, mi
                     "min_wr": fj["min_wr"], "stable_hint": None, "scale": fj["scale"] or scale,
                     "zone_polys": [], "fingerprint": spec,
                 })
-            errors, right = [], 0
-            for outcome in solve(jobs):
-                if outcome is None:
-                    continue
-                fix = outcome[0]
-                errors.append(math.hypot(fix[0] - mark[0], fix[1] - mark[1]) / scale)
-                if mark_zone is not None and zone_of(fix) == mark_zone:
-                    right += 1
-            if not errors:
-                continue
-            errors.sort()
-            rows.append({
-                "weight": w, "gain": round(g, 2), "estimator": estimator_for(w),
-                "samples": len(errors),
-                "mean_m": round(sum(errors) / len(errors), 2),
-                "median_m": round(errors[len(errors) // 2], 2),
-                "room_ok": round(right / len(errors), 2),
-            })
+            row = _score(solve(jobs), mark, scale, zone_of, mark_zone)
+            if row:
+                rows.append({"weight": w, "gain": round(g, 2), "estimator": estimator_for(w), **row})
+    if cross:
+        # Only the cycles some other floor heard, solved with and without the
+        # borrowed points: the same cycles, or the comparison measures which
+        # cycles were easy rather than what borrowing did.
+        heard = [fj for fj in (s["floors"][floor] for s in usable) if fj.get("cross")]
+
+        def _fit(borrow):
+            return _score(solve([{
+                "floor": floor, "weighted": [tuple(pt) for pt in fj["weighted"]] + ([tuple(pt) for pt in fj["cross"]] if borrow else []),
+                "bounds": None if fj.get("bounds") is None else tuple(fj["bounds"]),
+                "min_wr": fj["min_wr"], "stable_hint": None, "scale": fj["scale"] or scale,
+                "zone_polys": [], "fingerprint": None,
+            } for fj in heard]), mark, scale, zone_of, mark_zone) if heard else None
+        row, alone = _fit(True), _fit(False)
+        if row:
+            rows.append({"weight": 0.0, "gain": 1.0, "estimator": "cross-floor", "cross": True, **row,
+                         "alone_m": alone and alone["mean_m"], "alone_room_ok": alone and alone["room_ok"]})
     rows.sort(key=lambda r: (r["mean_m"], -r["room_ok"]))
     return rows
+
+
+def _score(outcomes, mark, scale, zone_of, mark_zone):
+    """Samples used, mean and median error (m) and the share in the mark's room, or None."""
+    errors, right = [], 0
+    for outcome in outcomes:
+        if outcome is None:
+            continue
+        fix = outcome[0]
+        errors.append(math.hypot(fix[0] - mark[0], fix[1] - mark[1]) / scale)
+        if mark_zone is not None and zone_of(fix) == mark_zone:
+            right += 1
+    if not errors:
+        return None
+    errors.sort()
+    return {"samples": len(errors), "mean_m": round(sum(errors) / len(errors), 2),
+            "median_m": round(errors[len(errors) // 2], 2), "room_ok": round(right / len(errors), 2)}
 
 
 def mark_reference(mark, samples=None):
@@ -259,3 +293,86 @@ def summarize(rows_by_mark):
         acc["mean_m"] = round(acc["mean_m"] / acc["marks"], 2)
         acc["room_ok"] = round(acc["room_ok"] / acc["marks"], 2)
     return per_entity
+
+
+# --- pin health ("which pins should I look at again") -------------------------
+
+# A pin guides another when it is among that pin's matches in this share of its cycles.
+INFLUENCE_SHARE = 0.2
+# A neighbour counts as hurt (or helped) when the pin moves its error this far.
+HURT_M = 0.25
+# The pin is flagged when the pins it guides are this much worse with it, on average.
+SUSPECT_NET_M = 0.5
+# A pin whose own ranges solve this far from it, and this many times further
+# than the house's pins usually do: the thing was probably not there for the
+# whole window. The worst honest pin in a 100-proxy house reads 5 m; with three
+# proxies on a floor every pin can read further, which is why it is relative too.
+FAR_M = 6.0
+FAR_RATIO = 2.0
+
+
+def influencers(samples, refs, k=3, missing_m=12.0):
+    """Ids of the pins among ``refs`` that the fingerprint match picks in at
+    least INFLUENCE_SHARE of ``samples``: the pins whose removal could move
+    where these samples land."""
+    seen, n = {}, 0
+    for s in samples or []:
+        if not s.get("thing_vec"):
+            continue
+        n += 1
+        hit = fingerprint.match(s["thing_vec"], refs, k=k, missing_m=missing_m)
+        for slug, _score in (hit or {}).get("refs", ()):
+            if str(slug).startswith("mark:"):
+                seen[slug] = seen.get(slug, 0) + 1
+    return sorted(int(slug.split(":", 1)[1]) for slug, c in seen.items() if c >= INFLUENCE_SHARE * n)
+
+
+def pin_health(marks, effects):
+    """The pins worth a second look, worst first.
+
+    ``marks`` are the stored marks; ``effects`` is {mark id: {"own_m": the
+    mark's error by ranges alone (or None), "without": {pin id: metres this
+    mark's error is HIGHER with that pin as a reference than without it}}}.
+
+    A row carries ``reasons``, any of: "duplicate" (the same thing at the
+    same point from exactly the same cycles as an older pin, ``duplicate_of``: copies
+    take every one of the k match slots and add nothing), "far" (its own
+    ranges put it ``own_m`` away, FAR_RATIO times what the pins usually read) and "hurts" (the ``used_by`` pins it guides
+    are ``net_m`` worse with it; ``hurts`` and ``helps`` count them, ``worst``
+    is the pin it hurts most and by how much). It is evidence, never proof:
+    the pin can be right and the neighbour wrong, or both right in two places
+    that look alike to Bluetooth.
+    """
+    by_pin = {}
+    for mark_id, effect in effects.items():
+        for pin_id, delta in (effect.get("without") or {}).items():
+            by_pin.setdefault(pin_id, []).append((delta, mark_id))
+    owns = sorted(e["own_m"] for e in effects.values() if e.get("own_m") is not None)
+    usual = owns[(len(owns) - 1) // 2] if owns else 0.0   # the lower middle: of two pins, the nearer
+    first, rows = {}, []
+    for mark in sorted(marks, key=lambda m: m["id"]):
+        reasons = []
+        samples = mark.get("samples")
+        took = (samples[0].get("t"), samples[-1].get("t")) if isinstance(samples, list) and samples else mark.get("t")
+        spot = (mark.get("entity"), mark.get("floor"), mark.get("x"), mark.get("y"), took)
+        if spot in first:
+            reasons.append("duplicate")
+        guided = by_pin.get(mark["id"], [])
+        net = sum(d for d, _ in guided) / len(guided) if guided else 0.0
+        hurts, helps = sum(d > HURT_M for d, _ in guided), sum(d < -HURT_M for d, _ in guided)
+        own = (effects.get(mark["id"]) or {}).get("own_m")
+        if own is not None and own >= max(FAR_M, FAR_RATIO * usual):
+            reasons.append("far")
+        if net >= SUSPECT_NET_M and hurts > helps:
+            reasons.append("hurts")
+        if reasons:
+            worst = max(guided, default=None)
+            rows.append({
+                "id": mark["id"], "entity": mark.get("entity"), "floor": mark.get("floor"), "t": mark.get("t"),
+                "reasons": reasons, "duplicate_of": first.get(spot), "own_m": own,
+                "net_m": round(net, 2), "hurts": hurts, "helps": helps, "used_by": len(guided),
+                "worst": {"id": worst[1], "m": worst[0]} if worst and worst[0] > 0 else None,
+            })
+        first.setdefault(spot, mark["id"])
+    rows.sort(key=lambda r: ("hurts" not in r["reasons"], "far" not in r["reasons"], -r["net_m"], r["id"]))
+    return rows

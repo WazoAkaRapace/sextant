@@ -236,3 +236,72 @@ def advise(layout, selftest, unplaced=None):
     return {"rooms": rows, "unplaced": unplaced,
             "summary": {"rooms": len(rows), "to_add": sum(r["add"] for r in rows),
                         "issues": {k: sum(1 for r in rows if r["issue"] == k) for k in rank if any(r["issue"] == k for r in rows)}}}
+
+
+# --- where a location pin would help -------------------------------------------
+
+REST_CELL_M = 2.0        # stays are pooled in cells this size: a resting thing's fix wanders about this far
+# Four grids, each shifted half a cell: a place on one grid's line sits inside a
+# cell of another, so a stay is never split in two and missed.
+_REST_GRIDS = ((0.0, 0.0), (0.5, 0.0), (0.0, 0.5), (0.5, 0.5))
+REST_MIN_HOURS = 2.0     # a place counts once a thing has spent this long there in the history kept
+REST_MAX_STEP_S = 600.0  # two points further apart than this are a silence, not a stay
+PIN_NEAR_M = 2.0         # a pin this near already covers the place (measured: a pin helps within about 2 m)
+REST_PER_THING = 2
+REST_MAX_ROWS = 12
+
+
+def pin_gaps(layout, tracks, pins):
+    """Where things rest with no location pin near, most hours first.
+
+    ``tracks`` is {entity: points (t, floor name, x_m, y_m, gap), oldest
+    first} from the position history; ``pins`` is {entity: [(floor name,
+    x_m, y_m), ...]}, the pins that guide that thing. A row is the thing,
+    the floor and room, the place in floor pixels, the hours spent there
+    and the nearest pin's distance (None with no pin on the floor). The
+    place is where Sextant PUT the thing, so it is only roughly where it
+    was: the advice is to pin the thing next time it is there, never to
+    pin that point.
+    """
+    floors = {f.get("name"): f for f in layout.get("floor", []) if f.get("scale")}
+    rooms = {name: _rooms_of(f) for name, f in floors.items()}
+    rows = []
+    for entity, points in tracks.items():
+        cells, last = {}, None
+        for t, floor, x, y, gap in points:
+            # A stay is a step that ends where it began: the time of a trip
+            # between two places belongs to neither.
+            if (last is not None and not gap and floor == last[1] and 0 < t - last[0] <= REST_MAX_STEP_S
+                    and math.hypot(x - last[2], y - last[3]) < REST_CELL_M):
+                dt = t - last[0]
+                for ox, oy in _REST_GRIDS:
+                    acc = cells.setdefault((floor, ox, oy, math.floor(last[2] / REST_CELL_M + ox), math.floor(last[3] / REST_CELL_M + oy)), [0.0, 0.0, 0.0])
+                    acc[0] += dt
+                    acc[1] += last[2] * dt
+                    acc[2] += last[3] * dt
+            last = (t, floor, x, y)
+        places = []
+        for (floor, ox, oy, i, j), (secs, sx, sy) in sorted(cells.items(), key=lambda kv: -kv[1][0]):
+            if secs < REST_MIN_HOURS * 3600 or len(places) >= REST_PER_THING:
+                break
+            if floor not in floors:
+                continue
+            x, y = sx / secs, sy / secs
+            near = min((math.hypot(x - px, y - py) for f, px, py in pins.get(entity) or () if f == floor), default=None)
+            # Covered by a pin, or a place already listed, seen through another
+            # grid: a cell that overlaps a listed one holds some of the same time.
+            cx, cy = (i - ox) * REST_CELL_M, (j - oy) * REST_CELL_M
+            if (near is not None and near < PIN_NEAR_M) or any(
+                    f == floor and (math.hypot(x - px, y - py) < PIN_NEAR_M or (abs(cx - qx) < REST_CELL_M and abs(cy - qy) < REST_CELL_M))
+                    for f, px, py, qx, qy in places):
+                continue
+            places.append((floor, x, y, cx, cy))
+            scale = floors[floor]["scale"]
+            at = Point(x * scale, y * scale)
+            rows.append({
+                "entity": entity, "floor": floor, "room": next((name for name, poly in rooms[floor] if poly.covers(at)), None),
+                "x": round(at.x, 1), "y": round(at.y, 1), "hours": round(secs / 3600, 1),
+                "nearest_pin_m": None if near is None else round(near, 1),
+            })
+    rows.sort(key=lambda r: -r["hours"])
+    return rows[:REST_MAX_ROWS]

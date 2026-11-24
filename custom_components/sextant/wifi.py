@@ -18,6 +18,7 @@ Pure: no Home Assistant imports. __init__ does the registry lookups.
 """
 from __future__ import annotations
 
+import math
 import re
 
 ROUTER = "router"
@@ -156,6 +157,12 @@ def best_place(store: dict, ap, fallback=(None, None)) -> tuple:
     return tuple(fallback) if fallback else (None, None)
 
 
+def is_watch(entity, name=None) -> bool:
+    """A Wi-Fi tracker that is a watch, by its entity id or name.
+    shortcut: a name match, so a watch named without "watch" still counts; upgrade to the device model if one slips through."""
+    return "watch" in f"{entity or ''} {name or ''}".lower()
+
+
 def floor_factor(odds: dict | None, floor, weight: float) -> float:
     """The multiplier a floor's election score gets from the Wi-Fi hint:
     1 for the floor the access point most means, down to 1 - weight for a
@@ -279,6 +286,25 @@ def norm_mac(mac) -> str | None:
     """A MAC address as lower-case colon pairs, or None if it is not one."""
     text = str(mac or "").strip().lower().replace("-", ":")
     return text if _MAC.match(text) else None
+
+
+def heard_at(raw) -> float | None:
+    """When the access point last heard a UniFi client, epoch seconds, or None.
+    ``last_seen`` is when the AP last listed the client in a report, and it keeps
+    listing one for minutes after the phone has gone; ``idletime`` is how long
+    the AP had heard nothing from it by then, so the difference is the true sighting."""
+    if not isinstance(raw, dict):
+        return None
+    seen, idle = raw.get("last_seen"), raw.get("idletime")
+    if isinstance(seen, bool) or not isinstance(seen, (int, float)) or not math.isfinite(seen):
+        return None
+    if isinstance(idle, bool) or not isinstance(idle, (int, float)) or not math.isfinite(idle) or idle < 0:
+        return float(seen)
+    # Never idle for longer than it has been associated: an idle that is not the seconds of this report is ignored.
+    up = raw.get("uptime")
+    if not isinstance(up, bool) and isinstance(up, (int, float)) and math.isfinite(up) and 0 <= up < idle:
+        return float(seen)
+    return float(seen) - float(idle)
 
 
 def _mac_key(value) -> str | None:

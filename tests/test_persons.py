@@ -158,6 +158,27 @@ def test_a_thing_on_its_charger_does_not_speak_for_its_owner():
     assert why[0]["on_charger"] is True and "on_charger" not in why[1]
 
 
+def test_a_full_watch_stays_on_its_charger_until_it_moves():
+    # Charging: on, and the time is noted.
+    assert persons.still_on_charger(True, 100, None, 200) == (True, 200)
+    # The sensor reads NotCharging at the charge limit, the watch has not moved: still on.
+    assert persons.still_on_charger(False, 100, 200, 5000) == (True, 200)
+    # It arrived somewhere after it last charged: on a wrist again.
+    assert persons.still_on_charger(False, 300, 200, 5000) == (False, 200)
+    # A reading that lags a watch carried off at 250 (charging since 200) does not hold it where it lands.
+    assert persons.still_on_charger(True, 250, 200, 200) == (True, 200)
+    assert persons.still_on_charger(False, 250, 200, 5000) == (False, 200)
+    # Never seen charging, or no arrival to go by: not on a charger.
+    assert persons.still_on_charger(False, 100, None, 5000) == (False, None)
+    # "Charged" is not "charging": it holds a watch that has not moved since, and lets go of one that has
+    assert not persons.charging_now("Charged") and persons.charging_now("Charging") and not persons.charging_now(None)
+    assert persons.still_on_charger(False, 100, 200, 5000, full=True) == (True, 5000)
+    assert persons.still_on_charger(False, 300, 200, 250, full=True) == (False, 250)
+    assert persons.still_on_charger(False, 300, 200, 150, full=True) == (False, 200)
+    assert persons.still_on_charger(False, 100, None, 250, full=True) == (True, 250)
+    assert persons.still_on_charger(False, None, 200, 5000) == (False, 200)
+
+
 def test_what_counts_as_on_the_charger():
     for s in ("Charging", "charging", "Charged", "Full", "on", " Charging "):
         assert persons.on_charger(s), s
@@ -213,3 +234,119 @@ def test_should_ask_gps_once_per_quiet_spell():
     assert not ask("away", False, NOW - 1000, None)
     assert not ask("quiet", True, NOW - 130, None)
     assert not ask("quiet", False, None, None)
+
+
+def test_room_changes_need_two_cycles_and_compare_floor():
+    from sextant import persons
+    K, O, H1, H2 = ("Kitchen", "G"), ("Office", "G"), ("Hall", "G"), ("Hall", "U")
+    base, pend = {"a": K, "b": K, "c": H1, "gone": K}, {}
+    now = {"a": O, "b": K, "c": H2, "d": K, "pet": O}
+    base, pend, ev = persons.room_changes(base, pend, now, pets=("pet",))
+    assert ev == [] and pend == {"a": O, "c": H2} and base["a"] == K and "gone" not in base and "pet" not in base
+    base, pend, ev = persons.room_changes(base, pend, now, pets=("pet",))
+    assert [e[1]["person"] for e in ev] == ["a", "c"] and ev[1][1]["from_floor"] == "G" and ev[1][1]["floor"] == "U"
+    assert base["a"] == O and pend == {}
+    # a stray fix then back: nothing
+    base, pend, ev = persons.room_changes(base, {}, {**now, "a": K}, pets=("pet",))
+    base, pend, ev = persons.room_changes(base, pend, now, pets=("pet",))
+    assert ev == [] and base["a"] == O
+    # leaving and arriving make no room change
+    base, pend, ev = persons.room_changes(base, {}, {**now, "a": None}, pets=("pet",))
+    base, pend, ev = persons.room_changes(base, pend, {**now, "a": None}, pets=("pet",))
+    assert ev == [] and base["a"] is None
+
+
+def test_keep_since_holds_the_persons_time_across_a_device_handover():
+    from sextant.persons import keep_since
+    prev = {"floor": "Up", "room": "Office", "spot": "Desk", "since": 100.0, "spot_since": 200.0}
+    # The phone takes over from the watch: same room and spot, the phone's own times are later.
+    a = keep_since(prev, {"floor": "Up", "room": "Office", "spot": "Desk", "since": 900.0, "spot_since": 950.0})
+    assert (a["since"], a["spot_since"]) == (100.0, 200.0)
+    # Off the spot, still in the room: the room time stays, the spot time is the new one.
+    b = keep_since(prev, {"floor": "Up", "room": "Office", "spot": None, "since": 900.0, "spot_since": 950.0})
+    assert (b["since"], b["spot_since"]) == (100.0, 950.0)
+    # A new room: the new times.
+    c = keep_since(prev, {"floor": "Up", "room": "Hall", "spot": None, "since": 900.0})
+    assert c["since"] == 900.0
+    assert keep_since(None, {"room": "Hall", "since": 5.0})["since"] == 5.0
+    # Away and back to the same room: the held fix's times are from before this visit home.
+    d = keep_since(prev, {"floor": "Up", "room": "Office", "spot": "Desk", "since": 900.0, "spot_since": 950.0}, arrived=800.0)
+    assert (d["since"], d["spot_since"]) == (900.0, 950.0)
+
+
+def test_has_exit_finds_the_rooms_outside_door():
+    layout = {"floor": [{"name": "Ground", "zones": [{"entity_id": "Laundry Room", "exit": True}, {"entity_id": "Kitchen"},
+                                                     {"entity_id": "Void", "exit": True, "no_go": True}]}]}
+    assert persons.has_exit(layout, "Ground", "Laundry Room")
+    assert not persons.has_exit(layout, "Ground", "Kitchen")
+    assert not persons.has_exit(layout, "Ground", "Void")
+    assert not persons.has_exit(layout, "Upper", "Laundry Room")
+    assert not persons.has_exit(None, "Ground", "Laundry Room")
+    # Out fast: the room still held is the Kitchen, the last fix already in the Laundry Room.
+    assert persons.held_by_exit(layout, {"floor": "Ground", "zone": "Kitchen", "zone_raw": "Laundry Room"})
+    assert persons.held_by_exit(layout, {"floor": "Ground", "zone": "Laundry Room"})
+    assert not persons.held_by_exit(layout, {"floor": "Ground", "zone": "Kitchen", "zone_raw": "Kitchen"})
+    # Held outside: the location reads Outside, out since the last sighting.
+    out = persons.fuse(None, [], "quiet", {"ent": "phone", "zone": "Laundry Room", "floor": "Ground", "outside": True, "since": 100.0},
+                       None, [])
+    state, attrs = out["sextant_person_location"]
+    assert state == "Outside" and attrs["kind"] == "outside" and attrs["since"] == 100.0 and attrs["source"] == "held"
+
+
+def test_slept_in_is_the_room_with_most_of_the_night_and_survives_a_restart():
+    import json
+    from datetime import datetime, timezone
+    from sextant import runtime
+    tz = timezone.utc
+    at = lambda h, m=0, d=20: datetime(2026, 11, d, h, m, tzinfo=tz).timestamp()  # noqa: E731
+    bed, sofa = ("Bedroom", "Second Floor"), ("Great Room", "Ground Floor")
+    t = persons.sleep_tally(None, sofa, at(21, 50), tz, 22, 6)
+    assert t is None, "before the night: nothing counted"
+    for m in range(0, 60, 5):                       # 22:00-23:00 on the sofa
+        t = persons.sleep_tally(t, sofa, at(22, m), tz, 22, 6)
+    t = persons.sleep_tally(t, bed, at(23, 0), tz, 22, 6)
+    saved = json.loads(json.dumps(runtime.snapshot(at(23, 30), sleep={"person.alex": t})))
+    t = runtime.restore(saved, at(2, 0, 21))["sleep"]["person.alex"]   # down until 2 am: the gap counts 5 min at most
+    for m in range(0, 240, 5):                      # 02:00-05:55 in bed
+        t = persons.sleep_tally(t, bed, at(2 + m // 60, m % 60, 21), tz, 22, 6)
+    state, attrs = persons.sleep_state(t)
+    assert state == "Bedroom" and attrs["night"] == "2026-11-20" and attrs["floor"] == "Second Floor" and attrs["tonight"]
+    assert attrs["minutes"] == {"Bedroom (Second Floor)": 240, "Great Room (Ground Floor)": 60}
+    t = persons.sleep_tally(t, sofa, at(9, 0, 21), tz, 22, 6)         # morning: last night stands
+    assert persons.sleep_state(t)[0] == "Bedroom" and not persons.sleep_state(t)[1]["tonight"]
+    t = persons.sleep_tally(t, sofa, at(22, 0, 21), tz, 22, 6)        # the next night starts afresh
+    assert persons.sleep_state(t) == ("unknown", {"night": "2026-11-21", "floor": None, "tonight": True, "minutes": {}})
+    # Same name on two floors: two rooms. Equal hours: off.
+    t = persons.sleep_tally(None, bed, at(23, 0), tz, 22, 6)
+    t = persons.sleep_tally(t, ("Bedroom", "Ground Floor"), at(23, 5), tz, 22, 6)
+    t = persons.sleep_tally(t, None, at(23, 6), tz, 22, 6)
+    assert persons.sleep_state(t)[1]["minutes"] == {"Bedroom (Second Floor)": 5, "Bedroom (Ground Floor)": 1}
+    assert persons.sleep_tally(None, bed, at(23, 0), tz, 22, 22) is None
+    # A damaged save drops that person, not the restore.
+    bad = {"saved_at": at(23, 0), "things": {}, "sleep": {"a": {"night": "x", "rooms": {"R (F)": 10 ** 400}, "places": {}}, "b": "junk"}}
+    assert runtime.restore(bad, at(23, 1))["sleep"] == {}
+
+
+def test_the_last_charge_is_read_from_the_sensors_history():
+    from datetime import datetime, timezone
+    from types import SimpleNamespace as S
+    at = lambda h: datetime(2026, 11, 21, h, tzinfo=timezone.utc)   # noqa: E731
+    rows = [S(state="NotCharging", last_changed=at(3)), S(state="Charging", last_changed=at(4)),
+            S(state="NotCharging", last_changed=at(5)), S(state="unavailable", last_changed=at(8))]
+    began = persons.last_charge_began(rows)
+    assert began == at(4).timestamp()
+    # the watch sat down at 03:59, charged at 04:00 and stopped at its limit: still on the puck
+    assert persons.still_on_charger(False, at(4).timestamp() - 60, began, 0)[0] is True
+    full = rows[:2] + [S(state="Full", last_changed=at(6)), S(state="NotCharging", last_changed=at(7))]
+    assert persons.last_charge_began(full) == at(4).timestamp()     # Charging then Full is one charge
+    assert persons.last_charge_began(rows[:1]) is None and persons.last_charge_began(None) is None
+
+
+def test_a_dog_unheard_with_her_collar_at_home_is_outside():
+    gps = {"zone": "home", "latitude": 1.0, "longitude": 2.0, "gps_accuracy": 5, "tracker": "device_tracker.collar"}
+    out = persons.fuse(None, [], "away", None, gps, [], dog=True)
+    assert out["sextant_person_location"][0] == "Outside" and out["sextant_person_location"][1]["kind"] == "outside"
+    assert out["sextant_person_room"][0] == "Outside"
+    assert persons.fuse(None, [], "away", None, gps, [])["sextant_person_location"][0] == "home"      # a cat or a person
+    away = {**gps, "zone": "not_home"}
+    assert persons.fuse(None, [], "away", None, away, [], dog=True)["sextant_person_location"][0] == "away"

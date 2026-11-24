@@ -40,9 +40,11 @@ This is the short version. [Getting started](getting-started.md) is the
 same thing step by step, with what to check when a thing lands in the
 wrong room.
 
-1. HACS → Integrations → ⋮ → **Custom repositories**. Add
-   `davidcoulson/sextant` as an Integration, then install **Sextant** and
-   restart Home Assistant.
+1. **Settings → Marketplace → Add from link**. Enter
+   `davidcoulson/sextant`, then install **Sextant** (restart Home Assistant
+   if it asks). Adding from a link needs a one-time GitHub sign-in. On
+   Home Assistant 2026.9 or 2026.10, use HACS → ⋮ → **Custom
+   repositories**, add it as an Integration, download it and restart.
 2. **Settings → Devices & Services → Add Integration → Sextant**. Bermuda
    must already be set up.
 3. Open **Sextant** in the sidebar. On the **Edit** page add a floor from a

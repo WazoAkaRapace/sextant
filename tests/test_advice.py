@@ -71,3 +71,42 @@ def test_two_bad_proxies_among_three_are_both_named():
     out = advice.advise(layout, _selftest([("a", "Jamie", 4.1), ("b", "Jamie", 4.9), ("c", "Jamie", 4.7)]))
     room = out["rooms"][0]
     assert room["issue"] == "noisy" and room["add"] == 1 and len(room["spots"]) == 1
+
+
+def test_a_resting_place_with_no_pin_near_is_reported():
+    layout = _layout([], [_rect("Den", 0, 0, 400, 400), _rect("Hall", 400, 0, 800, 400)])
+    den = [(t, "F", 1.0, 1.0, 0) for t in range(0, 3 * 3600 + 1, 60)]                 # three hours at (1 m, 1 m)
+    hall = [(t, "F", 6.0, 2.0, 0) for t in range(4 * 3600, 9 * 3600 + 1, 60)]         # an hour unheard, then five in the Hall
+    out = advice.pin_gaps(layout, {"cat": den + hall}, {"cat": [("F", 6.5, 2.0)]})    # the Hall place has a pin 0.5 m away
+    assert [(r["entity"], r["room"], r["hours"], r["x"], r["y"], r["nearest_pin_m"]) for r in out] == [("cat", "Den", 3.0, 100.0, 100.0, 5.6)]
+    both = advice.pin_gaps(layout, {"cat": den + hall}, {})
+    assert [(r["room"], r["hours"], r["nearest_pin_m"]) for r in both] == [("Hall", 5.0, None), ("Den", 3.0, None)]   # most hours first
+    # Places with a pin, and floors no longer on the plan, do not use up the thing's two rows.
+    attic = [(t, "Attic", 1.0, 1.0, 0) for t in range(10 * 3600, 20 * 3600 + 1, 60)]
+    desk = [(t, "F", 3.0, 3.0, 0) for t in range(21 * 3600, 25 * 3600 + 1, 60)]
+    bed = [(t, "F", 7.0, 3.5, 0) for t in range(26 * 3600, 32 * 3600 + 1, 60)]
+    out = advice.pin_gaps(layout, {"cat": den + hall + attic + desk + bed}, {"cat": [("F", 6.5, 2.0), ("F", 7.0, 3.0)]})
+    assert [(r["room"], r["hours"]) for r in out] == [("Den", 4.0), ("Den", 3.0)]
+
+
+def test_time_between_two_resting_places_is_counted_once():
+    layout = _layout([], [_rect("Den", 0, 0, 800, 800)])
+    # Ten hours at one place, two between, ten at the next: on one grid the
+    # two hours fall in with the first place, on a shifted grid with the second.
+    a = [(t, "F", 0.1, 0.1, 0) for t in range(0, 10 * 3600, 60)]
+    mid = [(t, "F", 1.1, 1.1, 0) for t in range(10 * 3600, 12 * 3600, 60)]
+    b = [(t, "F", 2.1, 2.1, 0) for t in range(12 * 3600, 22 * 3600 + 1, 60)]
+    out = advice.pin_gaps(layout, {"cat": a + mid + b}, {})
+    assert [r["hours"] for r in out] == [12.0, 10.0]
+
+
+def test_short_stays_silences_and_unknown_floors_are_not_resting_places():
+    layout = _layout([], [_rect("Den", 0, 0, 400, 400)])
+    hour = [(t, "F", 1.0, 1.0, 0) for t in range(0, 3601, 60)]
+    assert advice.pin_gaps(layout, {"cat": hour}, {}) == []                             # under REST_MIN_HOURS
+    quiet = [(0, "F", 1.0, 1.0, 0), (5 * 3600, "F", 1.0, 1.0, 0)]
+    assert advice.pin_gaps(layout, {"cat": quiet}, {}) == []                            # five hours unheard is not a stay
+    dropout = [(t, "F", 1.0, 1.0, 2) for t in range(0, 4 * 3600, 300)]
+    assert advice.pin_gaps(layout, {"cat": dropout}, {}) == []                          # nor are points across dropouts
+    gone = [(t, "Attic", 1.0, 1.0, 0) for t in range(0, 4 * 3600, 60)]
+    assert advice.pin_gaps(layout, {"cat": gone}, {}) == []                             # a floor no longer on the plan

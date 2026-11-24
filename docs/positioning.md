@@ -26,7 +26,7 @@ nearest room, unless it stays more than `outside_margin_m` beyond every room for
 in a room all the same (no proxy out there pulls it out): heard by no more
 than `outside_faint_prox` proxies with the nearest `outside_faint_m` or more
 away, for `outside_secs`, it reads **Outside** too, and comes back in once a
-proxy is within `outside_near_m`. Never for a cat. A fix in a no-go area is snapped out of it, to the room the
+proxy is within `outside_near_m`. And once no proxy hears her at all, a dog whose GPS tracker (her collar, set on the People card) says home reads **Outside** rather than home. Never for a cat. A fix in a no-go area is snapped out of it, to the room the
 thing is already in while that room's wall is within 1.5 m of the nearest one
 (a fix inside a void is no evidence for either side of it).
 
@@ -61,9 +61,17 @@ distances on this floor against the best competing floor; `gated`, or the
 weighted `geometric` mean of fit and proximity, see
 [`floor_proximity_blend`](tuning.md)) and by the floor's `bias`, then
 smoothed; a challenger must lead for `floor_switch_secs`, by a margin that
-grows with the incumbent's tenure. All the smoothing here (floors, rooms,
+grows with the incumbent's tenure, or by any amount without a break for four times as long. All the smoothing here (floors, rooms,
 spots) and the hold timers are per second of wall clock, tuned at the 15 s
 cycle, so a faster refresh gives more fixes rather than jumpier ones.
+
+A proxy mounted between storeys - a basement ceiling light a foot and a half
+under the floor above - hears the room overhead about as well as its own. Turn
+off *Use for floor choice* in its panel on the Edit page and it still helps
+place things on its own floor, but it no longer counts toward which floor wins:
+it is left out of the proximity term, of the nearest-proxy test that decides
+which floors are solved at all, and of the fit score's corroboration. A
+floor whose proxies are all position-only is scored on them anyway.
 
 **Bias fields.** A floor's `bias` is one prior for the whole plan, and a
 house is not uniform. Over a slab the floor below is attenuated and the
@@ -95,7 +103,21 @@ field, so a stroke can be graded against what really happened before it
 ships.
 `election_log_hours` on the Tuning page keeps those cycles on disk, and
 `tools/replay_floors.py` replays the whole election - margin, dwell,
-proximity weight - over them (see [Tuning](tuning.md)).
+proximity weight - over them (see [Tuning](tuning.md)). While it records,
+each floor's entry also carries `cross`: the fix that floor would have
+had with the other floors' proxies helping (their plan positions carried
+through the pins, the slant shortened by the storey between them, half
+weight, 6 m at most). It is logged only; nothing is placed by it yet.
+`tools/replay_cross_floor.py` reads the log and says which fix was
+steadier, more often in the published room, and closer to the proxy a
+thing was sitting on.
+`tools/receiver_report.py` reads the same log and lists, per receiver,
+how often it was in the elected floor's fix and how far its ranges sat
+from that fix (a steady bias means a misplaced or miscalibrated
+receiver), with the placed receivers that never took part. The Health
+page shows the same report for the last six hours under **Receivers
+against real fixes**. Finished hours of the log are gzipped; the tools
+read both.
 
 **Rooms.** Membership, not a point test: samples on the filter's error
 ellipse are attributed to rooms and the shares smoothed. The current room
@@ -114,8 +136,8 @@ twice `zone_unlock_secs`: the lock holds through jitter on a boundary, not
 through the thing being somewhere else.
 
 **Across a restart.** A cycle's state - each thing's filter, its room and
-spot elections with their smoothed probabilities and timers, and when it
-arrived where it is - is written to `.storage/sextant_runtime` every two
+spot elections with their smoothed probabilities and timers, the proxy it
+is anchored to, and when it arrived where it is - is written to `.storage/sextant_runtime` every two
 minutes and again on a clean stop. A restart reads it back and carries on,
 as a starting point the next readings can disagree with, so a thing keeps
 its room and its spot instead of re-earning them and a person does not
@@ -158,3 +180,9 @@ when both proxies have heights) solve a per-proxy multiplier, normalised so
 they never rescale everything at once. A multiplier is exactly a
 per-scanner RSSI offset in Bermuda's model, which is how
 `calibration_target: bermuda` writes it.
+
+## Routine: where a thing usually is
+
+Sextant counts the time each thing spends in each room, by weekday or weekend and hour of the day, from the rooms it is confident about, and forgets with a half-life of three weeks. A thing on the line between two rooms then switches a little more easily into the room it is usually in at that hour and a little less easily out of it (`habit_margin_gain`, 0.1: at most that much on the lead a challenger needs). It never overrides clear evidence, needs about 20 minutes in an hour slot before it says anything, and is kept in `.storage/sextant_habits`. Set `habit_margin_gain` to 0 to turn it off; delete that file to start over.
+
+The pull is set per class: in a thing's dialog on the Things page, "Routine pull for every <class>" (0 to 0.3). Blank uses `habit_margin_gain`, except pets, which default to none because a tag on a dog or cat has no routine to lean on. Every thing still learns its own history either way.

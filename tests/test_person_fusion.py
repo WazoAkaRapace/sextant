@@ -305,6 +305,19 @@ def test_wifi_stands_on_an_arrival_or_without_a_last_seen_time():
     assert not persons.wifi_outrun(_fix(zone="home"), NOW - 200, HOME)
 
 
+def test_heard_at_is_last_seen_less_idletime():
+    """For the person log: the garage AP reported a watch 3 s ago that it had not heard for minutes."""
+    from sextant import wifi
+    assert wifi.heard_at({"last_seen": NOW - 3, "idletime": 150}) == NOW - 153
+    assert wifi.heard_at({"last_seen": NOW - 3}) == NOW - 3              # no idletime: last_seen as before
+    assert wifi.heard_at({"last_seen": NOW - 3, "idletime": -1}) == NOW - 3
+    assert wifi.heard_at({"last_seen": NOW - 3, "idletime": True}) == NOW - 3
+    assert wifi.heard_at({"last_seen": NOW - 3, "idletime": 85000, "uptime": 300}) == NOW - 3   # idle longer than associated: not seconds
+    assert wifi.heard_at({"last_seen": NOW - 3, "idletime": 150, "uptime": 300}) == NOW - 153
+    assert wifi.heard_at({"idletime": 5}) is None
+    assert wifi.heard_at(None) is None
+
+
 # --- Events ----------------------------------------------------------------------
 
 D, M, J, CAT = "person.alex", "person.sam", "person.jamie", "person.meg"

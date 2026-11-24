@@ -2,7 +2,7 @@
 
 # Things
 
-![The Things page: every tracked thing with its class icon, where it is, its height and its reference trim](../img/screenshots/sextant-things.png)
+![The Things page: every tracked thing with its class icon and where it is](../img/screenshots/sextant-things.png)
 
 Bermuda's device management without its options flow. **Add a thing…** asks
 what you are adding, because how a thing is followed depends on whether its
@@ -16,14 +16,14 @@ Bluetooth address stays put:
 | Anything else | Nothing. An iBeacon, a fitness band or a tag with a fixed address simply appears below once a couple of proxies hear it. |
 
 The top list is what
-is tracked: click the name or the icon to open the thing dialog and set a
+is tracked, with its class and where it is: click the name or the icon to open the thing dialog and set a
 display name, a class (person, dog, cat, phone, watch, headphones, keys, tag and more,
 each with its icon on the map), pronouns (he, she, they or it: how the panel
 refers to it; left unset, a man is he, a woman she, a device it, and a
 person, child or pet they), who it belongs to (a Home Assistant person),
 a colour used everywhere it is drawn, a
 photo framed in a circle that replaces the icon, the height it is carried
-at, a reference-power trim, and its own position estimator. **Untrack** removes it from Bermuda and
+at, a reference-power trim (with Expert on), and its own position estimator. **Untrack** removes it from Bermuda and
 removes its five Sextant sensors and its device with it; a device untracked
 while Home Assistant was down is cleaned up on the next cycle.
 
@@ -52,7 +52,7 @@ FindMy accessory set up in Bermuda has not been heard since Bermuda started:
 Bermuda does not count it as tracked until then, and an AirTag that is only
 away must not lose its settings.
 
-Below is everything Bermuda hears but does not track, with the kind of
+Below, folded until you tap it (it opens by itself while nothing is tracked, after **Add a thing…** for a phone or a plain device, or with Find near on), is everything Bermuda hears but does not track, with the kind of
 device (iBeacon, Tile, Apple, IRK, plain address), what it appears to be
 (the Bermuda fork names families the Bluetooth SIG's lists cannot — a Govee
 sensor, a Samsung SmartTag — and says when that kind rotates its address,
@@ -65,19 +65,28 @@ proxies' own probe beacons are hidden. **Track…** opens the same dialog
 first, so you choose the name, class and height before Bermuda is told and
 reloads.
 
+To find which entry is the device in your hand, pick a proxy in **Find
+near** and hold the device against it. The list then shows only what that
+proxy hears, loudest first, and refreshes every 3 seconds, so the device
+rises to the top. Set Find near back to Off when you're done.
+
 ## People
 
 Give things an owner - **Belongs to**, a Home Assistant person - and two
 things follow. On Live, each owner gets a heading of their own (their
-picture, and where they are), which folds their things away with a click. And each owner gets three sensors of their own:
+picture, and where they are), which folds their things away with a click. And each owner gets four sensors of their own:
 `sensor.<person>_sextant_person_location` (the spot, or the room),
-`_sextant_person_room` and `_sextant_person_floor` (and a
+`_sextant_person_room`, `_sextant_person_floor` and `_sextant_person_sleep` (and a
 `device_tracker.<person>_sextant`), with `via` naming the
 thing they came from and `via_class` its class (`phone`, `watch`, `cat`...). Automations can then ask where Alex is rather than
 where his phone is.
 A pet's are named `sensor.<pet>_sextant_pet_location`, `_sextant_pet_room` and
 `_sextant_pet_floor` instead (a pet is one whose things are all cat, dog or
 paw tags); an existing pet's sensors are renamed on the next start.
+`_sextant_person_sleep` ("Slept In") is the room they spent most of the night in,
+22:00 to 06:00 by default (`sleep_start_hour`, `sleep_end_hour`); `minutes` has the
+time in each room ("Bedroom (Second Floor)"), `floor` the winner's floor, `night` the date the night began, and `tonight` is true while it is
+still counting (equal hours switch it off). It keeps last night's answer through the day and starts again at 22:00.
 
 Which thing speaks for a person: only things that **give their owner's
 location** count - by default a watch, a phone, or a person's or pet's own
@@ -92,8 +101,13 @@ watch on its charger since last night.
 
 A thing can also name an **On-charger sensor** - its battery state from
 iCloud3, the companion app, or any `binary_sensor` that is on while it
-charges. While that reads Charging, Charged or Full, the thing does not
+charges. While that reads Charging, the thing does not
 speak for its owner at all: a watch on its charger is on nobody's wrist.
+Once seen charging, a thing counts as on its charger until it moves away:
+a watch held at its charge limit reads "not charging" while it still sits
+on the puck. Charged and Full work the same way: they hold the thing only
+until it moves, because a sensor that refreshes rarely goes on saying
+Charged for hours after the watch is back on your wrist.
 Unavailable or unknown counts as not charging, so a sensor that has nothing
 to say never takes a thing out of the running. The location sensor's
 `considered` list marks a thing left out this way with `on_charger`.
@@ -154,7 +168,8 @@ Things page lines that map up with one of your floors:
    because the robot's millimetres are real ones. The card shows how well
    the rooms agree (a few tenths of a metre is good) and any room left out
    because the two maps disagree about it; a Foyer that is the front hall on
-   one map and the whole open ground floor on the other is typical.
+   one map and the whole open ground floor on the other is typical. The
+   fit's numbers, read counts and unmatched rooms are under **Details**.
 2. On Live, select the robot and use **Mark dock**
    (<ha-icon icon="mdi:home-import-outline"></ha-icon>), then tap where
    its dock is. The robot reports its dock itself, so it need not be on it.

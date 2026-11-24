@@ -10,7 +10,8 @@ administrator, and links to [Edit](edit.md) and
 
 The floor plan with every tracked thing drawn as an avatar in its own colour, the
 same colour as its row in the list. Click a thing (row or avatar) to
-focus it: everything else fades, it grows a halo, the panel switches to its
+focus it: the map zooms to its room, the other things fade and lose their names,
+it is drawn on top with a halo, the panel switches to its
 floor, and the side panel shows its room, spot, floor, the proxy it is
 anchored to if any, and every proxy that hears it with the distance. Click
 a **proxy** instead and a card says what it is and what it is doing: its
@@ -33,8 +34,8 @@ plan image, the labels, the trails, the spots, the proxies, the Wi-Fi
 access points placed on the plan, the solver's distance circles and the
 fingerprint fix; each lights up while it is on.
 Labels names the rooms and the things (and whichever proxy you point at); a room's name sits at its most open point, so an L-shaped room's label is never in a corner or outside it,
-while Proxies draws the proxies themselves, which a busy plan is often
-better without. In the corner, a countdown says how many seconds until the
+while Proxies and Wi-Fi (both off by default) draw the proxies and the access
+points themselves, which a busy plan is often better without. In the corner, a countdown says how many seconds until the
 next positioning cycle, and falls back to how long ago the last one was
 when a cycle is late. For an admin it is also a menu: pick 5 or 10 seconds
 to watch something move (or 30 or 60 to go easy on the box) and Sextant
@@ -101,11 +102,11 @@ point on every room and spot change.
 
 On a phone those buttons collapse behind a single options button so they
 never force sideways scrolling, the floor picker and the countdown move to
-a bar under the page, and a row of **quick actions** — self-test, and for an administrator, adding a
-thing and starting calibration — jumps straight to the right page
-without hunting through the tabs. The map takes about half the screen and
-can be put away: **Hide map** in the Things heading, which stays put as the
-list scrolls, or the button on the map itself. Picking a thing opens it
+a bar under the page. The page opens on the search box (or, with eight things or fewer, a count) and the list; for an
+administrator a pin button and, under it, a **+** to add a thing float at the
+bottom right. The map takes about half the screen: the map button beside the
+search box, which stays put as the list scrolls, shows and hides it, as does
+the button on the map itself. Picking a thing opens it
 again, under that thing's details. Editing the floor plan itself is still
 a desktop job.
 
@@ -118,6 +119,9 @@ for the thing its owner's location is being read from, an hourglass while
 it is late, a ghost once it is away.
 
 ## Grouped by person
+
+With more than eight things, a **Find a thing** box above the list narrows
+it by name or room.
 
 When things have owners (**Belongs to** on the Things page), each person
 gets a heading in the list - their picture, their name, and under it where
@@ -158,7 +162,10 @@ and fingerprint match and every reference gain, and shows how far each
 lands from your pin and how often it gets the room right. **Apply** on a
 row makes those the thing's settings (its blend weight, and a gain
 multiplier folded into its learned gain). One pin can overfit, so pin a
-thing in two or three rooms.
+thing in two or three rooms. Where the other floors' proxies heard the
+thing too, a line under the table says how far the fit would have landed
+with them helping, beside this floor's proxies alone. That is a comparison
+only: nothing is placed that way yet.
 
 A pin inside a spot is also evidence of being in that spot: a fix is the
 weighted blend of the pins and proxies it matched, and the share of that
@@ -210,12 +217,13 @@ week. Asking for more than is kept says how far back it goes.
 
 ## Signal lines
 
-With a thing selected, **Signal lines** (on by default) draws a line from it
+With a thing selected, **Signal lines** (off by default, an Expert layer) draws a line from it
 to every proxy the solver used for it this cycle. Each line is green when the
 proxy is close and red by ten metres, labelled with the distance, and thicker
 for the proxies the solver weighted most. A phone or watch also gets a dashed
 line to the Wi-Fi access point it is joined to, when its owner's Wi-Fi tracker
-of the same kind is on an access point placed on this floor.
+of the same kind is on an access point placed on this floor. The thing's
+[location pins](live.md#location-pins) carry their numbers while the lines are on.
 
 A key in the bottom-left corner says what the colours mean while the lines
 show. The thing's details list the same proxies under **In the solve**: each one's
@@ -314,3 +322,9 @@ Floors are placed through their anchors (Edit → Anchor), the same registration
 **Lining up** (admins): until the house has a site, it is drawn at the home location from Settings → System → General, unturned. Press **Line up the house**, drag the plan onto its footprint on the map, turn it with the rotate buttons (15° and 1° steps, about the middle of the house) until the walls match, and **Save**. The site is stored with the layout and restored with layout snapshots. **Cancel** puts it back.
 
 Drag to pan, scroll, pinch or use **+**/**−** to zoom (past the map's last tile level the photo is enlarged), and the house button brings the view back to the house.
+
+## Occupancy tab
+
+A read-only page beside Live: floors stacked top to bottom, a tile per room with the people and pets in it and an icon in its corner for why the room is on (Bluetooth, media playing, radar, door held; hover for the name; see [How occupancy works](occupancy.md)). Dashed tiles are pets only. It reads the room sensors, so it follows them live.
+
+A person's chip shows their first name (the full name is in the details), and a chip names the spot when the person or pet is in one ("Fry · Meg's Cafe"). Hover a chip, or tap it on a phone, for the details: room, spot, floor, confidence, how long ago it was heard, the source (Bluetooth, Wi-Fi or GPS) and, for Bluetooth, the receivers hearing it now with their distances. Tap again, tap elsewhere or press Escape to close.

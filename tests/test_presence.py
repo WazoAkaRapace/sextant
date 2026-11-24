@@ -229,3 +229,35 @@ def test_a_sensor_not_yet_in_home_assistant_keeps_the_value_without_writing():
     hass.data["sextant_sensors"] = {LOC: s}
     _write(hass, "Kitchen", "a", 1_000_000.0)
     assert s.writes == [] and s._state == "Kitchen" and s._attrs["last_heard"] == "a"
+
+
+def test_a_quiet_house_still_tells_people_they_left(monkeypatch):
+    """With fewer than three readings in the house the cycle cannot solve, and
+    used to skip presence too: everyone stayed "here" in their last room."""
+    ent = "phone"
+    hass = _hass_with_sensors(ent)
+    sextant._last_seen.clear(); sextant._presence_published.clear()
+    sextant._last_seen[ent] = {"updated": time.time() - 2000}
+    monkeypatch.setattr(sextant, "get_layout", lambda h: LAYOUT)
+    called = []
+    monkeypatch.setattr(sextant, "_update_person_sensors", lambda h: called.append("people"))
+    monkeypatch.setattr(sextant, "_maintain_rooms", lambda h: called.append("rooms"))
+    sextant._update_people(hass)
+    assert hass.data["sextant_sensors"][f"sensor.{ent}_sextant_location"]._attrs["presence"] == "away"
+    assert called == ["people", "rooms"]
+    import inspect
+    src = inspect.getsource(sextant.update_tracked_entities)
+    assert src.count("_update_people(hass)") == 2, "both too-few-readings branches publish people"
+
+
+def test_a_low_reading_cycle_counts_only_fresh_distances_as_heard(monkeypatch):
+    monkeypatch.setattr(sextant, "get_layout", lambda h: {"floor": [], "tuning": {}})
+    readings = {("phone", "a"): {"distance": 2.0, "age": 3}, ("gone", "a"): {"distance": 2.0, "age": 10_000},
+                ("none", "a"): {"distance": None, "age": 1}}
+    assert sextant._heard_now(make_hass(), readings, None) == {"phone"}
+
+
+def test_a_new_floor_map_is_taken_under_any_extension(tmp_path):
+    (tmp_path / "Attic.png").write_bytes(b"x")
+    assert sextant._map_taken(tmp_path, "attic.jpg") and sextant._map_taken(tmp_path, "Attic.png")
+    assert not sextant._map_taken(tmp_path, "Basement.png")

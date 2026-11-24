@@ -8,7 +8,7 @@ import logging
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.restore_state import RestoreEntity
 
-from .const import ACCURACY_ENTITY_ID, FIT_ATTRIBUTES, GLOBAL_ENTITY_IDS, PEOPLE_HOME_ENTITY_ID, UNTRACKED_ENTITY_ID  # single source of truth (shared with __init__)
+from .const import ACCURACY_ENTITY_ID, FIT_ATTRIBUTES, GLOBAL_ENTITY_IDS, HOUSEHOLD_FLOOR_ENTITY_ID, PEOPLE_HOME_ENTITY_ID, UNTRACKED_ENTITY_ID  # single source of truth (shared with __init__)
 from . import bermuda_source
 
 _LOGGER = logging.getLogger(__name__)
@@ -70,9 +70,10 @@ def migrate_renamed_sensor_kinds(hass):
 
 
 def find_bermuda_via_device(hass, entity):
-    """Identifier of the Bermuda device that owns this thing's distance_to
-    sensors, so the Sextant device can nest under it (via_device). None when it
-    can't be resolved (e.g. Bermuda not loaded yet) — the Sextant device then just
+    """Registry id of the Bermuda device that owns this thing's distance_to
+    sensors, so the Sextant device can nest under it (via_device_id; the
+    via_device identifier tuple goes in HA 2027.8). None when it can't be
+    resolved (e.g. Bermuda not loaded yet) — the Sextant device then just
     stands on its own.
     """
     ent_reg = er.async_get(hass)
@@ -81,11 +82,8 @@ def find_bermuda_via_device(hass, entity):
     for e in ent_reg.entities.values():
         if e.platform == "bermuda" and e.device_id and e.entity_id.startswith(prefix):
             dev = dev_reg.async_get(e.device_id)
-            if dev and dev.identifiers:
-                # Prefer a bermuda identifier so the link points at the thing
-                # device even if it carries identifiers from several integrations.
-                berm = [i for i in dev.identifiers if i[0] == "bermuda"]
-                return berm[0] if berm else next(iter(dev.identifiers))
+            if dev:
+                return dev.id
     return None
 
 
@@ -121,7 +119,7 @@ def thing_of_unique_id(unique_id):
     """The thing slug behind a per-thing Sextant unique_id, else None."""
     # A room's occupancy sensor is sextant_room_occupancy_<floor>_<room>: read
     # as a sextant_room sensor, the prune took 21 rooms for untracked things.
-    if not unique_id or unique_id.startswith("sextant_room_occupancy_"):
+    if not unique_id or unique_id.startswith(("sextant_room_occupancy_", "sextant_room_people_")):
         return None
     for suffix, _label in SENSOR_KINDS:
         if unique_id.startswith(suffix + "_"):
@@ -130,7 +128,7 @@ def thing_of_unique_id(unique_id):
 
 
 def _sextant_device(hass, dev_reg, thing):
-    """The ``<thing> (Sextant)`` device, looked up the way the running core wants.
+    """The ``<thing>`` device, looked up the way the running core wants.
 
     2026.9 deprecates async_get_device(identifiers=...) in favour of the
     per-config-entry lookup; older cores only have the former.
@@ -148,7 +146,7 @@ def _sextant_device(hass, dev_reg, thing):
 
 
 def _remove_sextant_device(hass, thing):
-    """Drop the ``<thing> (Sextant)`` device once none of its entities remain."""
+    """Drop the ``<thing>`` device once none of its entities remain."""
     dev_reg = dr.async_get(hass)
     device = _sextant_device(hass, dev_reg, thing)
     if device is None:
@@ -312,12 +310,15 @@ class CustomDistanceSensor(SensorEntity, RestoreEntity):
         if device_key:
             info = DeviceInfo(
                 identifiers={("sextant", device_key)},
-                name=f"{device_name or device_key} (Sextant)",
+                # A person is only Sextant's: just their name, so HA shows "David Coulson Room".
+                name=device_name or device_key,
                 manufacturer="Sextant",
                 model=model or "Tracked thing",
+                # "Visit" on the device page opens the Sextant panel.
+                configuration_url="homeassistant://sextant",
             )
             if via_device:
-                info["via_device"] = via_device
+                info["via_device_id"] = via_device
             self._attr_device_info = info
 
     async def async_added_to_hass(self):
@@ -415,6 +416,21 @@ class SextantPeopleHomeSensor(SensorEntity):
         return self._attrs
 
 
+class SextantHouseholdFloorSensor(SextantPeopleHomeSensor):
+    """The one floor everyone at home is on, else ``mixed``, ``unknown`` or
+    ``away`` (rooms.household_floor): "everyone has gone upstairs"."""
+
+    _attr_state_class = None
+    _attr_icon = "mdi:home-floor-a"
+
+    def __init__(self):
+        super().__init__()
+        self._attr_name = "Household Floor"
+        self._attr_unique_id = "sextant_household_floor"
+        self.entity_id = HOUSEHOLD_FLOOR_ENTITY_ID
+        self._attrs = {"floors": {}, "unplaced": []}
+
+
 class SextantAccuracySensor(SensorEntity):
     # Pushed by the positioning cycle; there is nothing for Home Assistant to poll.
     _attr_should_poll = False
@@ -481,7 +497,7 @@ def ensure_person_sensors(hass, people, pets=()):
     sensor.<pet>_sextant_pet_location / _room / _floor), grouped under a
     Sextant device for the person. "_person_" keeps them apart from a thing
     that shares the person's name (Meg the cat is person.meg and her tag meg).
-    The device is named for them ("Meg (Sextant)") and ``pets`` - the person
+    The device is named for them ("Meg") and ``pets`` - the person
     ids that are pets - get a pet's model rather than a person's.
     """
     from .persons import PERSON_SENSOR_KINDS, device_model, sensor_entity_id  # noqa: PLC0415
@@ -513,7 +529,7 @@ def ensure_person_sensors(hass, people, pets=()):
             sensors_cache[entity_id] = sensor
             new_sensors.append(sensor)
     if new_sensors:
-        _LOGGER.info("Creating Sextant location sensors for %d person(s)", len(new_sensors) // 3 or 1)
+        _LOGGER.info("Creating Sextant location sensors for %d person(s)", len(new_sensors) // len(PERSON_SENSOR_KINDS) or 1)
         add_entities(new_sensors, update_before_add=True)
         # An existing registry entry keeps its old id (sensor.fry_sextant_person_*): move a pet's.
         normalize_sextant_registry_entity_ids_from_cache(hass)
@@ -584,7 +600,7 @@ def _rename_registry_entities(hass, expected_by_uid, what):
         return
     entity_registry = er.async_get(hass)
     for entry in list(entity_registry.entities.values()):
-        expected_entity_id = expected_by_uid.get(entry.unique_id)
+        expected_entity_id = expected_by_uid.get(entry.unique_id) if entry.entity_id.startswith("sensor.") else None   # a binary_sensor may share a unique id
         if expected_entity_id and entry.entity_id != expected_entity_id:
             _LOGGER.info("%s of Sextant entity_id from %s to %s", what, entry.entity_id, expected_entity_id)
             try:
@@ -637,7 +653,9 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     # user's name, area and disabled flag with them.
     from .persons import PERSON_SENSOR_KINDS  # noqa: PLC0415
     # Not a thing's: the people's sensors and trackers, and the rooms' occupancy.
-    kept_prefixes = tuple(f"{suffix}_" for suffix, _label in PERSON_SENSOR_KINDS) + ("sextant_person_tracker_", "sextant_room_occupancy_")
+    person_prefixes = tuple(f"{suffix}_" for suffix, _label in PERSON_SENSOR_KINDS) + ("sextant_person_tracker_",)
+    room_prefixes = ("sextant_room_occupancy_", "sextant_room_people_", "sextant_floor_occupancy_", "sextant_floor_people_occupancy_", "sextant_house_occupancy", "sextant_house_people_occupancy")
+    force_prefix = "sextant_room_force_"     # the rooms' force switches (switch.py)
     entity_registry = er.async_get(hass)
     if expected_entity_ids:
         stale_sextant_ids = [
@@ -645,7 +663,10 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
             for entry in entity_registry.entities.values()
             if entry.platform == "sextant" and entry.entity_id not in expected_entity_ids
             and entry.entity_id not in GLOBAL_ENTITY_IDS  # keep the global sensors
-            and not (isinstance(entry.unique_id, str) and entry.unique_id.startswith(kept_prefixes))
+            and not (isinstance(entry.unique_id, str) and (
+                entry.unique_id.startswith(person_prefixes)
+                or (entry.unique_id.startswith(room_prefixes) and entry.entity_id.startswith("binary_sensor."))
+                or (entry.unique_id.startswith(force_prefix) and entry.entity_id.startswith("switch."))))
         ]
         for entity_id in stale_sextant_ids:
             _LOGGER.info("Removing stale Sextant registry entity: %s", entity_id)
@@ -672,6 +693,10 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         people_home = SextantPeopleHomeSensor()
         hass.data["sextant_sensors"][PEOPLE_HOME_ENTITY_ID] = people_home
         new_sensors.append(people_home)
+    if HOUSEHOLD_FLOOR_ENTITY_ID not in hass.data["sextant_sensors"]:
+        household = SextantHouseholdFloorSensor()
+        hass.data["sextant_sensors"][HOUSEHOLD_FLOOR_ENTITY_ID] = household
+        new_sensors.append(household)
     for entity in entities:
         ensure_sensors_for_entity(hass, entity, hass.data["sextant_sensors"], new_sensors)
 

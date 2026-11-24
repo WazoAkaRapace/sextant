@@ -35,7 +35,7 @@ class SextantPersonTracker(TrackerEntity):
         self._fix = {"location_name": "not_home", "source_type": "gps", "source": "none", "presence": "away"}
         self._attr_device_info = DeviceInfo(
             identifiers={("sextant", f"person_{slug}")},
-            name=f"{name} (Sextant)", manufacturer="Sextant", model=device_model(is_pet),
+            name=name, manufacturer="Sextant", model=device_model(is_pet),   # as the person's sensors name it
         )
 
         self._apply(self._fix)

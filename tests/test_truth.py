@@ -174,3 +174,64 @@ def test_the_buffer_holds_its_points_as_tuples_the_collector_ignores():
     gc.collect()
     assert not gc.is_tracked(fj["weighted"]) and not gc.is_tracked(fj["weighted"][0])
     assert not gc.is_tracked(fj["bounds"])
+
+
+def test_a_mark_scores_the_fit_with_the_other_floors_proxies_beside_it():
+    """Borrowed points are kept with the sample and re-solved as one extra,
+    unappliable row; only when asked, so "current settings" stays rows[0]."""
+    b = truth.Buffer()
+    S = 100.0
+    own = [(0.0, 0.0, 5.0 * S, 1.0, 5.0 * S), (600.0, 0.0, 5.0 * S, 1.0, 5.0 * S), (300.0, 800.0, 5.0 * S, 1.0, 5.0 * S)]
+    job = {"floor": "F", "weighted": own, "bounds": (-200, -200, 1000, 1000), "min_wr": 50.0, "scale": S}
+    below = ((300.0, 300.0, 0.5 * S, 0.5, 1.0 * S),)          # a light under the floor, right at the mark
+    for i in range(4):
+        b.remember("cat", [job], {}, 1.0, "geometric", now=i, cross={"F": (below, [["light", 0.5]])} if i else None)
+    samples = b.samples("cat")
+    assert "cross" not in samples[0]["floors"]["F"] and samples[1]["floors"]["F"]["cross"] == below
+    args = (samples, "F", (300.0, 300.0), S, lambda p: None, sextant._solve_floor_jobs, lambda gain: None)
+    assert all(not r.get("cross") for r in truth.evaluate(*args))
+    rows = truth.evaluate(*args, cross=True)
+    shadow = next(r for r in rows if r.get("cross"))
+    plain = next(r for r in rows if not r.get("cross"))
+    assert shadow["estimator"] == "cross-floor" and shadow["samples"] == 3 and plain["samples"] == 4
+    assert shadow["alone_m"] is not None and 0 <= shadow["alone_room_ok"] <= 1   # same three cycles, no borrowing
+    assert shadow["mean_m"] <= plain["mean_m"]
+
+
+def test_influencers_are_the_pins_the_match_leans_on():
+    refs = [{"slug": "mark:7", "address": None, "x": 100.0, "y": 100.0, "vector": {"a": 2.0, "b": 8.0}},
+            {"slug": "mark:9", "address": None, "x": 900.0, "y": 900.0, "vector": {"a": 8.0, "b": 2.0}},
+            {"slug": "r1", "address": "a", "x": 0.0, "y": 0.0, "vector": {"a": 0.5, "b": 7.0}}]
+    near7 = [{"thing_vec": {"a": 2.0, "b": 8.0}}] * 10 + [{"thing_vec": None}]
+    assert truth.influencers(near7, refs, k=3) == [7]           # 9 scores too far behind to be a neighbour
+    between = [{"thing_vec": {"a": 4.0, "b": 4.0}}] * 3
+    assert truth.influencers(between, refs, k=3) == [7, 9]      # receivers' own references are never pins
+    # A pin matched in one cycle out of eleven does not guide the thing.
+    assert truth.influencers(near7 + [{"thing_vec": {"a": 8.0, "b": 2.0}}], refs, k=1) == [7]
+    assert truth.influencers([], refs) == [] and truth.influencers(near7, None) == []
+
+
+def test_pin_health_flags_copies_far_pins_and_pins_that_hurt_their_neighbours():
+    def mark(i, entity="phone", x=1.0, took=10.0):
+        return {"id": i, "entity": entity, "floor": "F", "x": x, "y": 1.0, "t": took + 5, "samples": [{"t": took}]}
+    marks = [mark(1), mark(2),                  # 2 is 1 again, from the same cycles
+             mark(3, took=90.0),                # the same point another day is a second opinion, not a copy
+             mark(4, "tag", 2.0), mark(5, x=3.0), mark(6, x=4.0), mark(7, x=5.0), mark(8, x=6.0)]
+    effects = {
+        4: {"own_m": 7.0, "without": {}},                    # its own ranges solve 7 m away
+        6: {"own_m": 1.0, "without": {5: 1.2, 8: 0.6}},      # worse with 5 and with 8
+        7: {"own_m": 2.0, "without": {5: 0.4, 8: -0.6}},     # worse with 5, better with 8
+    }
+    rows = truth.pin_health(marks, effects)
+    assert [r["id"] for r in rows] == [5, 4, 2]              # 8 hurts one and helps one: not flagged
+    hurts, far, copy = rows
+    assert hurts["reasons"] == ["hurts"] and hurts["net_m"] == 0.8 and (hurts["hurts"], hurts["helps"], hurts["used_by"]) == (2, 0, 2)
+    assert hurts["worst"] == {"id": 6, "m": 1.2}
+    assert far["reasons"] == ["far"] and far["own_m"] == 7.0
+    assert copy["reasons"] == ["duplicate"] and copy["duplicate_of"] == 1
+    assert "samples" not in copy
+    # With few proxies every pin reads far: none stands out, so none is "far".
+    assert truth.pin_health(marks[3:5], {4: {"own_m": 7.0, "without": {}}, 5: {"own_m": 6.5, "without": {}}}) == []
+    # With two pins the usual error is the lower one, so the far one of the pair still shows.
+    assert [r["id"] for r in truth.pin_health(marks[3:5], {4: {"own_m": 10.0, "without": {}}, 5: {"own_m": 1.0, "without": {}}})] == [4]
+    assert truth.pin_health([], {}) == []

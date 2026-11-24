@@ -301,8 +301,9 @@ def _install_homeassistant_stubs():
     # exercise the cache/creation logic, never HA's entity machinery).
     _module("homeassistant.components.sensor", SensorEntity=type("SensorEntity", (), {}),  # a class, so RestoreEntity can follow it in an MRO
             SensorStateClass=types.SimpleNamespace(MEASUREMENT="measurement"))
-    _module("homeassistant.components.binary_sensor", BinarySensorEntity=object,
+    _module("homeassistant.components.binary_sensor", BinarySensorEntity=type("BinarySensorEntity", (), {}),
             BinarySensorDeviceClass=types.SimpleNamespace(OCCUPANCY="occupancy"))
+    _module("homeassistant.components.switch", SwitchEntity=type("SwitchEntity", (), {}))
     _module("homeassistant.helpers.entity", DeviceInfo=dict)
 
     class _RestoreEntity:
@@ -383,6 +384,9 @@ def make_hass(config_dir=None):
     hass._store_saves = []
     hass._store_delay_saves = []
     hass._store_raise_on_load = set()   # store keys whose async_load should raise
+    hass.states = types.SimpleNamespace(get=lambda entity_id: None)
+    hass.events = []                    # (name, data) of everything fired on the bus
+    hass.bus = types.SimpleNamespace(async_fire=lambda name, data=None: hass.events.append((name, data)))
 
     async def _executor(func, *args):
         # Run inline: the tests are single-threaded and only need the awaitable

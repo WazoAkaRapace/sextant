@@ -60,10 +60,53 @@ CARRY_PRIORITY = {"cat": 4, "dog": 4, "paw": 4, "watch": 3, "phone": 2, "headpho
 LOCATES_BY_DEFAULT = {"watch", "phone", "person", "man", "woman", "child", "cat", "dog", "paw"}
 # The sensors each person gets: (suffix, label).
 PERSON_SENSOR_KINDS = [
-    ("sextant_person_location", "Sextant Location"),
-    ("sextant_person_room", "Sextant Room"),
-    ("sextant_person_floor", "Sextant Floor"),
+    ("sextant_person_location", "Location"),
+    ("sextant_person_room", "Room"),
+    ("sextant_person_floor", "Floor"),
+    ("sextant_person_sleep", "Slept In"),
 ]
+SLEEP_MAX_STEP_S = 300.0   # a longer gap between cycles (a restart) counts no more than this
+
+
+def sleep_tally(tally, place, now, tz, start_h, end_h):
+    """The night's time in each room, for the "slept in" sensor.
+
+    ``tally`` is ``{"night", "rooms": {"Room (Floor)": secs}, "places": {key: [room, floor]}, "place", "at"}``
+    or None; ``place`` is (room, floor) or None (out, no room). Each interval counts for the place
+    seen at its start. The night is the local ``start_h`` to ``end_h`` window (equal hours: off),
+    named for the date it starts on. Outside the window the last night's tally stands; the first
+    cycle of a new night starts a fresh one.
+    """
+    from datetime import datetime, timedelta  # noqa: PLC0415
+    lt = datetime.fromtimestamp(now, tz)
+    h = lt.hour + lt.minute / 60.0
+    inside = (start_h <= h < end_h) if start_h < end_h else (h >= start_h or h < end_h) if start_h > end_h else False
+    night = ((lt - timedelta(days=1)) if start_h > end_h and h < end_h else lt).date().isoformat()
+    if inside and (not tally or tally.get("night") != night):
+        tally = {"night": night, "rooms": {}, "places": {}, "place": None, "at": None}
+    if not tally:
+        return tally
+    rooms, places = dict(tally["rooms"]), dict(tally["places"])
+    prev = tally.get("place")
+    if prev and tally.get("at"):
+        key = f"{prev[0]} ({prev[1]})"
+        rooms[key] = rooms.get(key, 0.0) + min(max(0.0, now - tally["at"]), SLEEP_MAX_STEP_S)
+        places[key] = list(prev)
+    if not inside:
+        return {**tally, "rooms": rooms, "places": places, "place": None, "at": None}
+    return {"night": night, "rooms": rooms, "places": places, "place": list(place) if place else None, "at": now}
+
+
+def sleep_state(tally):
+    """(state, attributes) for the "slept in" sensor: the room with the most of the night."""
+    tally = tally or {}
+    rooms, tonight = tally.get("rooms") or {}, tally.get("at") is not None
+    if not rooms:
+        return "unknown", {"night": tally.get("night"), "floor": None, "tonight": tonight, "minutes": {}}
+    key = max(rooms, key=rooms.get)
+    room, floor = tally["places"][key]
+    return room, {"night": tally["night"], "floor": floor, "tonight": tonight,
+                  "minutes": {k: round(v / 60.0) for k, v in sorted(rooms.items(), key=lambda kv: -kv[1])}}
 
 
 def owners(layout) -> dict[str, list[str]]:
@@ -138,6 +181,50 @@ def on_charger(state) -> bool:
     that has nothing to say must not take a thing out of the running.
     """
     return isinstance(state, str) and state.strip().lower() in CHARGER_STATES
+
+
+def charging_now(state) -> bool:
+    """Whether the sensor says it is drawing power right now. "Charged" and "Full"
+    do not: a source that refreshes rarely (iCloud3, Find My) goes on saying
+    "Charged" for hours after the watch is back on a wrist."""
+    return isinstance(state, str) and state.strip().lower() in {"charging", "on"}
+
+
+def last_charge_began(states):
+    """When a charger sensor's last charge began, from its recorded states (oldest
+    first, each with ``state`` and ``last_changed``); None if never. The START of
+    the last run of charging states: "Charging" then "Full" is one charge."""
+    began = None
+    for st in reversed(list(states or [])):
+        changed = getattr(st, "last_changed", None)
+        if on_charger(getattr(st, "state", None)) and changed is not None:
+            began = changed.timestamp()
+        elif began is not None:
+            break
+    return began
+
+
+def still_on_charger(charging: bool, arrived, last_charging, since: float, full: bool = False):
+    """(on the charger, when it last began charging).
+
+    A watch that reaches its charge limit reads "NotCharging" while it still
+    sits on the puck. So once seen charging, a thing stays on its charger
+    until it moves: until it arrived where it is after that charge began.
+    ``since`` is when the sensor's reading began, not now: a reading that
+    lags a watch already carried off must not hold it where it lands.
+    ``full`` is a "Charged"/"Full" reading: it was on a charger, and like
+    "NotCharging" it holds only until the thing moves.
+    """
+    if charging:
+        return True, since
+    if full:
+        # The full reading is itself a charge, from when it began: one finished while
+        # nobody watched (a restart, a sensor that skips "Charging") must still hold.
+        # shortcut: a late "Charged" can hold a watch already carried off until its next move; use the recorded charge start if that bites
+        last_charging = max(last_charging or 0, since)
+    held = (isinstance(last_charging, (int, float)) and isinstance(arrived, (int, float))
+            and arrived <= last_charging)
+    return held, last_charging
 
 
 def settled_since(points, here, radius=STAY_RADIUS_M, confirm_secs=MOVE_CONFIRM_SECS,
@@ -338,6 +425,20 @@ def choose_gps(get_state, layout, person, now, stale_secs=GPS_STALE_SECS):
     return chosen, ignored
 
 
+def has_exit(layout, floor, room) -> bool:
+    """Whether the room has an outside door (its zone's ``exit``, set on the Edit page)."""
+    for f in (layout or {}).get("floor") or []:
+        if isinstance(f, dict) and f.get("name") == floor:
+            return any(isinstance(z, dict) and z.get("entity_id") == room and z.get("exit") and not z.get("no_go")
+                       for z in f.get("zones") or [])
+    return False
+
+
+def held_by_exit(layout, held) -> bool:
+    """Whether a held place is at an outside door: its room, or the room its last fix fell in."""
+    return any(has_exit(layout, held.get("floor"), z) for z in (held.get("zone"), held.get("zone_raw")))
+
+
 def presence_of_things(presences) -> str:
     """A person is as present as their most present thing."""
     return min(presences, key=lambda p: _PRESENCE_RANK.get(p, 9)) if presences else "away"
@@ -462,7 +563,34 @@ def visit_events(before, after, pets=()) -> list:
     return out
 
 
-def fuse(best, why, presence, held, gps, ignored, home=None, wifi=None):
+def room_changes(baseline, pending, now, pets=()):
+    """``(baseline, pending, events)`` for ``sextant_person_room_changed``.
+
+    ``now`` maps a person to ``(room, floor)`` while a sensor puts them in a
+    room (None otherwise). A new place must read the same on two cycles in a
+    row before it counts, so one stray fix makes nothing; the event fires only
+    for a move from one place to another (arriving and leaving have their own
+    events), and a person new to the map just sets their baseline. People no
+    longer in ``now`` drop out of both maps."""
+    base, pend, out = {}, {}, []
+    for p in sorted(now):
+        place = now[p]
+        if p in pets:
+            continue
+        old = baseline.get(p)
+        if p not in baseline or place == old:
+            base[p] = place if p not in baseline else old
+        elif pending.get(p) == place:
+            base[p] = place
+            if old and place:
+                out.append(("sextant_person_room_changed", {"person": p, "from_room": old[0], "from_floor": old[1],
+                                                             "room": place[0], "floor": place[1]}))
+        else:
+            base[p], pend[p] = old, place
+    return base, pend, out
+
+
+def fuse(best, why, presence, held, gps, ignored, home=None, wifi=None, dog=False):
     """(suffix -> (state, attributes)) for a person's sensors, BLE, Wi-Fi and GPS fused.
 
     here: the thing that speaks for them (states). quiet: the place they were
@@ -471,7 +599,8 @@ def fuse(best, why, presence, held, gps, ignored, home=None, wifi=None):
     joined to a home access point, so they are home, in the room that access
     point most often means (wifi: {"entity", "home", "ap", "floor", "room",
     "area_id", "floor_id"}; see wifi.py). away: the GPS zone, or "away" with
-    nothing usable. The location sensor always carries the GPS side too
+    nothing usable; a dog (``dog``) whose collar says home while no proxy
+    hears her is in the garden: Outside. The location sensor always carries the GPS side too
     (zone, coordinates, distance from home), so a dashboard can show both.
     """
     gps_attrs = {"zone": None, "latitude": None, "longitude": None, "gps_accuracy": None, "tracker": None, "distance_m": None}
@@ -508,11 +637,29 @@ def fuse(best, why, presence, held, gps, ignored, home=None, wifi=None):
     else:
         state, source = "away", "none"
     blank = {"kind": "zone", "room": "unknown", "spot": None, "floor": "unknown", "area_id": None, "floor_id": None, "via": None}
+    if dog and state == "home":
+        state, blank = "Outside", {**blank, "kind": "outside", "room": "Outside"}
     return {
         "sextant_person_location": (state, {**blank, "source": source, **common, **gps_attrs, "considered": why or []}),
-        "sextant_person_room": ("unknown", {"area_id": None, "via": None, "source": source, "presence": presence}),
+        "sextant_person_room": (blank["room"], {"area_id": None, "via": None, "source": source, "presence": presence}),
         "sextant_person_floor": ("unknown", {"via": None, "source": source, "presence": presence}),
     }
+
+
+def keep_since(prev, attrs, arrived=None):
+    """A person's room and spot times are theirs, not the tracking thing's: when the
+    phone takes over from the watch in the same room, ``since`` stays when they came
+    in, not when the phone did. ``prev`` is the location sensor's last attributes;
+    a time from before ``arrived`` (this home visit) is an earlier visit's, held over."""
+    prev = prev or {}
+    if attrs.get("room") in (None, "unknown") or attrs.get("kind") == "outside":
+        return attrs
+    for key, same in (("since", ("floor", "room")), ("spot_since", ("floor", "room", "spot"))):
+        old = prev.get(key)
+        if (isinstance(old, (int, float)) and not (isinstance(arrived, (int, float)) and old < arrived) and all(prev.get(k) == attrs.get(k) for k in same)
+                and (key == "since" or attrs.get("spot"))):
+            attrs[key] = old
+    return attrs
 
 
 def wifi_gate(wifi, since, prev_visit, now, confirm_secs):

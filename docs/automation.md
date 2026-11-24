@@ -2,7 +2,7 @@
 
 # Sensors, card, services and API
 
-Each tracked device gets five sensors under its own `<device> (Sextant)`
+Each tracked device gets five sensors under its own `<device>`
 device, nested beneath its Bermuda device:
 
 | Sensor | State |
@@ -118,6 +118,13 @@ a departure, so the recorder gets one row per event: trigger on the
 attribute leaving `None` and the time is in the event
 ([recipe](recipes.md#when-someone-left)).
 
+`sensor.sextant_household_floor` is the one floor everyone at home is on:
+the floor's name, `mixed` when people are on more than one, `unknown` while
+anyone at home is on no floor (lost, outside, or held home by Wi-Fi alone)
+and `away` with nobody home. `floors` lists who is on each and `unplaced`
+who is on none. Pets do not count. "Everyone has been upstairs for 20
+minutes" is a state trigger on it, `to: Second Floor`, `for: "00:20:00"`.
+
 ### Events
 
 The same arrivals and departures are on the event bus, for a trigger that
@@ -127,6 +134,8 @@ needs no state to compare:
 |---|---|---|
 | `sextant_person_arrived` | a person's tracker goes from away to home | `person`, `source` (`ble`, `wifi` or `gps`), `time`, `people_home` |
 | `sextant_person_left` | a person's tracker goes from home to away | `person`, `source` (what last had them home), `time`, `people_home` |
+| `sextant_person_room_changed` | a person moves from one room to another while home (not on arriving or leaving) | `person`, `from_room`, `from_floor`, `room`, `floor` |
+| `sextant_room_occupancy_changed` | a room's occupancy `state` changes between `clear`, `occupied` and `extended` | `entity_id`, `room`, `floor`, `area_id`, `state`, `previous`, `people`, `pets`, `sources`, `mode`, `dark`, `asleep` |
 | `sextant_first_arrived` | an arrival into a house with nobody home | `person`, `source`, `time` |
 | `sextant_everyone_left` | a departure leaves nobody home | `person` (the last to leave), `source`, `time` |
 
@@ -146,6 +155,21 @@ triggers:
 ```
 
 ## Rooms
+
+[How occupancy works](occupancy.md) explains how a room turns on and
+off, with examples; this section lists the sensors and their attributes.
+
+Each room also gets `binary_sensor.<room>_sextant_people_occupancy`, the same
+answer without the pets: a cat's or dog's tag alone leaves it `off`, so
+lights can switch off on it while the pets stay put. Radars, other sensors
+and the force switch cannot tell a pet from a person, so they turn it `on`.
+
+After a Home Assistant restart a room that was `on` stays `on` for up to ten
+minutes while Sextant places things again, unless the first readings say it
+is occupied; both room sensors carry over this way.
+
+Floors and the house have people-only twins too: `binary_sensor.<floor>_sextant_floor_people_occupancy` and
+`binary_sensor.sextant_house_people_occupancy`, rolled up from the rooms' people-only sensors.
 
 Each room on the plan gets `binary_sensor.<room>_sextant_occupancy`
 (device class occupancy): `on` while Sextant places a person or a pet in
@@ -174,7 +198,7 @@ sensor:
 | `held` | `true` while the room is `on` only because its hold has not run out since the radar lost everyone |
 | `room`, `floor`, `area_id`, `floor_id` | the room, its floor, and the linked Home Assistant area and floor |
 
-The sensor sits on a `<Room> (Sextant)` device that is put in the room's
+The sensor sits on a `<Room>` device that is put in the room's
 linked area when it is first created, and left wherever you move it
 afterwards. Two floors with a room of the same name get the floor in the
 entity id (`binary_sensor.second_floor_office_sextant_occupancy`).
@@ -240,7 +264,7 @@ file in `config/sextant_maps/`) overrides the floor's plan.
   `history/get`, `history/clear`, `kpi`, `kpi/baselines`,
   `kpi/baseline/save`, `kpi/baseline/delete`, `tuning/set`,
   `thing/tune`, `selftest`, `truth/mark`, `truth/list`,
-  `truth/delete`, `truth/evaluate`, `truth/apply`, `proxy/info`, `advice`,
+  `truth/delete`, `truth/evaluate`, `truth/health`, `truth/apply`, `proxy/info`, `advice`,
   `snapshots/list`, `snapshots/restore`, `thing/forget`,
   `person/trackers/set`, and under `bermuda/`: `candidates`,
   `tracked`, `track`, `scanners`, `scanner_ranging`, `options`,
