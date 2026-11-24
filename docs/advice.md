@@ -43,6 +43,32 @@ top, each with the spot that needs it most.
 Like the self-test, the analysis works from the calibration sample window,
 so keep **Auto calibration** on for it to see every floor.
 
+## Location pins
+
+A location pin ("It's actually here…" on the [Live](live.md) page) is the
+best help a place can get: fixes within about 2 m of a pin land much
+closer. A pin in the wrong place does the opposite and pulls everything
+near it the wrong way. **Check pins** looks for both.
+
+**Pins to look at again** lists a pin when:
+
+- the pins it guides land further off with it than without it (half a
+  metre or more on average). One of the two is in the wrong place; the row
+  names the neighbour it disagrees with most, so you can tell which;
+- its own readings put the thing 6 m or more from the pin, and at least
+  twice as far as your pins usually read, so the thing was probably not
+  there for the whole time the pin was taken from;
+- it is a copy of another pin, made from the same readings.
+
+**Forget** removes a pin for good. A pin the check lists is worth a look,
+not proof: forget it if you are not sure the thing was there, and pin the
+place again next time.
+
+**Places without a pin** lists where a thing has spent two hours or more of
+the history Sextant keeps with no pin within 2 m. **Show on plan** rings the
+place. The ring is where Sextant put the thing, which is only roughly where
+it was, so pin it at its real spot the next time it is there.
+
 ## Scanners you leave off the plan on purpose
 
 A kiosk, a test board or an outdoor proxy shows up under "Heard but not

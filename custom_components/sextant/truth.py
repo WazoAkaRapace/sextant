@@ -103,6 +103,10 @@ class Buffer:
             if (since is None or s["t"] >= since) and (floor is None or floor in s["floors"])
         ]
 
+    def entities(self):
+        """The things with samples: the ones a pin can be made for."""
+        return [e for e, samples in self._by_entity.items() if samples]
+
     def forget(self, entity=None):
         if entity is None:
             self._by_entity.clear()
@@ -289,3 +293,85 @@ def summarize(rows_by_mark):
         acc["mean_m"] = round(acc["mean_m"] / acc["marks"], 2)
         acc["room_ok"] = round(acc["room_ok"] / acc["marks"], 2)
     return per_entity
+
+
+# --- pin health ("which pins should I look at again") -------------------------
+
+# A pin guides another when it is among that pin's matches in this share of its cycles.
+INFLUENCE_SHARE = 0.2
+# A neighbour counts as hurt (or helped) when the pin moves its error this far.
+HURT_M = 0.25
+# The pin is flagged when the pins it guides are this much worse with it, on average.
+SUSPECT_NET_M = 0.5
+# A pin whose own ranges solve this far from it, and this many times further
+# than the house's pins usually do: the thing was probably not there for the
+# whole window. The worst honest pin in a 100-proxy house reads 5 m; with three
+# proxies on a floor every pin can read further, which is why it is relative too.
+FAR_M = 6.0
+FAR_RATIO = 2.0
+
+
+def influencers(samples, refs, k=3, missing_m=12.0):
+    """Ids of the pins among ``refs`` that the fingerprint match picks in at
+    least INFLUENCE_SHARE of ``samples``: the pins whose removal could move
+    where these samples land."""
+    seen, n = {}, 0
+    for s in samples or []:
+        if not s.get("thing_vec"):
+            continue
+        n += 1
+        hit = fingerprint.match(s["thing_vec"], refs, k=k, missing_m=missing_m)
+        for slug, _score in (hit or {}).get("refs", ()):
+            if str(slug).startswith("mark:"):
+                seen[slug] = seen.get(slug, 0) + 1
+    return sorted(int(slug.split(":", 1)[1]) for slug, c in seen.items() if c >= INFLUENCE_SHARE * n)
+
+
+def pin_health(marks, effects):
+    """The pins worth a second look, worst first.
+
+    ``marks`` are the stored marks; ``effects`` is {mark id: {"own_m": the
+    mark's error by ranges alone (or None), "without": {pin id: metres this
+    mark's error is HIGHER with that pin as a reference than without it}}}.
+
+    A row carries ``reasons``, any of: "duplicate" (the same thing at the
+    same point from the same cycles as an older pin, ``duplicate_of``: copies
+    take every one of the k match slots and add nothing), "far" (its own
+    ranges put it ``own_m`` away, FAR_RATIO times what the pins usually read) and "hurts" (the ``used_by`` pins it guides
+    are ``net_m`` worse with it; ``hurts`` and ``helps`` count them, ``worst``
+    is the pin it hurts most and by how much). It is evidence, never proof:
+    the pin can be right and the neighbour wrong.
+    """
+    by_pin = {}
+    for mark_id, effect in effects.items():
+        for pin_id, delta in (effect.get("without") or {}).items():
+            by_pin.setdefault(pin_id, []).append((delta, mark_id))
+    owns = sorted(e["own_m"] for e in effects.values() if e.get("own_m") is not None)
+    usual = owns[len(owns) // 2] if owns else 0.0
+    first, rows = {}, []
+    for mark in sorted(marks, key=lambda m: m["id"]):
+        reasons = []
+        samples = mark.get("samples")
+        took = samples[0].get("t") if isinstance(samples, list) and samples else mark.get("t")
+        spot = (mark.get("entity"), mark.get("floor"), mark.get("x"), mark.get("y"), took)
+        if spot in first:
+            reasons.append("duplicate")
+        guided = by_pin.get(mark["id"], [])
+        net = sum(d for d, _ in guided) / len(guided) if guided else 0.0
+        hurts, helps = sum(d > HURT_M for d, _ in guided), sum(d < -HURT_M for d, _ in guided)
+        own = (effects.get(mark["id"]) or {}).get("own_m")
+        if own is not None and own >= max(FAR_M, FAR_RATIO * usual):
+            reasons.append("far")
+        if net >= SUSPECT_NET_M and hurts > helps:
+            reasons.append("hurts")
+        if reasons:
+            worst = max(guided, default=None)
+            rows.append({
+                "id": mark["id"], "entity": mark.get("entity"), "floor": mark.get("floor"), "t": mark.get("t"),
+                "reasons": reasons, "duplicate_of": first.get(spot), "own_m": own,
+                "net_m": round(net, 2), "hurts": hurts, "helps": helps, "used_by": len(guided),
+                "worst": {"id": worst[1], "m": worst[0]} if worst and worst[0] > 0 else None,
+            })
+        first.setdefault(spot, mark["id"])
+    rows.sort(key=lambda r: ("hurts" not in r["reasons"], "far" not in r["reasons"], -r["net_m"], r["id"]))
+    return rows

@@ -264,7 +264,7 @@ file in `config/sextant_maps/`) overrides the floor's plan.
   `history/get`, `history/clear`, `kpi`, `kpi/baselines`,
   `kpi/baseline/save`, `kpi/baseline/delete`, `tuning/set`,
   `thing/tune`, `selftest`, `truth/mark`, `truth/list`,
-  `truth/delete`, `truth/evaluate`, `truth/apply`, `proxy/info`, `advice`,
+  `truth/delete`, `truth/evaluate`, `truth/health`, `truth/apply`, `proxy/info`, `advice`,
   `snapshots/list`, `snapshots/restore`, `thing/forget`,
   `person/trackers/set`, and under `bermuda/`: `candidates`,
   `tracked`, `track`, `scanners`, `scanner_ranging`, `options`,
