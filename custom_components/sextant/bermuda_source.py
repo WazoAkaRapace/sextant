@@ -533,8 +533,14 @@ def async_get_tracked_unique_ids(hass) -> dict[str, str] | None:
     devices = async_get_tracked_devices(hass)
     if devices is None:
         return None
-    return {dev["slug"]: dev["unique_id"] for dev in devices.values()
-            if dev.get("slug") and dev.get("unique_id")}
+    out, clash = {}, set()
+    for dev in devices.values():
+        slug, uid = dev.get("slug"), dev.get("unique_id")
+        if slug and uid:
+            if out.get(slug, uid) != uid:
+                clash.add(slug)   # two devices under one slug: neither can be matched
+            out[slug] = uid
+    return {s: u for s, u in out.items() if s not in clash}
 
 
 async def async_set_tracked_devices(hass, add=(), remove=()) -> list | None:

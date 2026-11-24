@@ -3565,16 +3565,22 @@ async def carry_renamed_thing_settings(hass, tracked, ids):
     tracked = tracked if isinstance(tracked, set) else set(tracked)
 
     seated = {ent for table in _thing_settings_tables(layout).values() for ent in table}
+    # Matched by the identity each slug had when its settings were made (the
+    # memory, before this cycle's update): a slug another device has since
+    # taken still hands its settings to the device they belong to.
     by_uid: dict[str, list[str]] = {}
-    for slug, uid in {**known, **{s: u for s, u in ids.items() if u}}.items():
+    for slug, uid in {**{s: u for s, u in ids.items() if u}, **known}.items():
         by_uid.setdefault(uid, []).append(slug)
-    moves = {}
-    for slug in tracked & set(ids):
-        if slug in seated or not ids.get(slug):
-            continue   # it has settings of its own, or no identity to match by
-        donors = sorted(s for s in by_uid.get(ids[slug], ()) if s != slug and s not in tracked and s in seated)
+    shared = {u for u in ids.values() if u and list(ids.values()).count(u) > 1}
+    moves, taken = {}, set()
+    for slug in sorted(tracked & set(ids)):
+        if slug in seated or not ids.get(slug) or ids[slug] in shared:
+            continue   # it has settings of its own, no identity, or one two slugs claim
+        donors = sorted(s for s in by_uid.get(ids[slug], ()) if s != slug and s in seated and s not in taken
+                        and (s not in tracked or ids.get(s) != known.get(s)))
         if donors:
             moves[slug] = donors
+            taken.update(donors)
     if not fresh and not moves:
         return
     async with LAYOUT_LOCK:
@@ -3593,7 +3599,9 @@ async def carry_renamed_thing_settings(hass, tracked, ids):
                     if donor in settings:
                         settings[receiver] = settings.pop(donor)
             # The sighting and the learned scales are the same device's; the
-            # newest sighting wins if more than one old name carried one.
+            # newest sighting wins if more than one old name carried one. A
+            # donor still tracked is another device's now: its live state is that one's.
+            donors = [d for d in donors if d not in tracked]
             seen = max((_last_seen[d] for d in donors if d in _last_seen),
                        key=lambda s: s.get("updated") or 0, default=None)
             if seen is not None:

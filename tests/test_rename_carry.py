@@ -109,3 +109,26 @@ def test_pins_follow_the_rename(tmp_path):
     run(sextant.carry_renamed_thing_settings(hass, {"new_name"}, {"new_name": "irk_1"}))
     marks = run(st.load_truth(hass))["marks"]
     assert [m["entity"] for m in marks] == ["new_name", "phone"]
+
+
+def test_a_slug_another_device_took_hands_its_settings_to_their_device(tmp_path):
+    # old_name (irk_1) became new_name, and another device (irk_9) took old_name.
+    hass = _hass(tmp_path)
+    run(sextant.carry_renamed_thing_settings(hass, {"new_name", "old_name"}, {"new_name": "irk_1", "old_name": "irk_9"}))
+    lay = st.get_layout(hass)
+    assert lay["thing_names"] == {"new_name": "David"} and lay["thing_owners"] == {"new_name": "person.david"}
+    assert lay["thing_ids"]["old_name"] == "irk_9"
+    assert "old_name" in sextant._last_seen, "the device now on old_name keeps its own sighting"
+
+
+def test_two_slugs_claiming_one_device_carry_nothing(tmp_path):
+    hass = _hass(tmp_path)
+    run(sextant.carry_renamed_thing_settings(hass, {"a", "b"}, {"a": "irk_1", "b": "irk_1"}))
+    assert st.get_layout(hass)["thing_names"] == {"old_name": "David"}
+
+
+def test_two_devices_under_one_slug_have_no_identity(monkeypatch):
+    from sextant import bermuda_source
+    monkeypatch.setattr(bermuda_source, "async_get_tracked_devices", lambda h: {
+        "aa": {"slug": "tag", "unique_id": "u1"}, "bb": {"slug": "tag", "unique_id": "u2"}, "cc": {"slug": "p", "unique_id": "u3"}})
+    assert bermuda_source.async_get_tracked_unique_ids(None) == {"p": "u3"}
