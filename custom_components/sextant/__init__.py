@@ -1806,6 +1806,8 @@ async def update_tracked_entities(hass):
                 # remembers - before the sweep below could delete them.
                 ids = bermuda_source.async_get_tracked_unique_ids(hass)
                 if ids:
+                    # A slug Bermuda reports now is tracked, even one the cached set has not caught up with.
+                    full_tracked |= set(ids)
                     await carry_renamed_thing_settings(hass, full_tracked, ids)
                 # And what the sensors' reconcile cannot reach - the settings of
                 # a slug Bermuda has left for good - goes too, once the grace in
@@ -3596,7 +3598,8 @@ async def carry_renamed_thing_settings(hass, tracked, ids):
         table.update(fresh)
         # Read again under the lock: a name set since the check above stands.
         seated = {ent for t in _thing_settings_tables(layout).values() for ent in t}
-        moves = {r: d for r, d in moves.items() if r not in seated}
+        # And a donor whose settings went meanwhile (a restore) has nothing left to hand over.
+        moves = {r: left for r, d in moves.items() if r not in seated and (left := [x for x in d if x in seated])}
         # A slug whose old settings do move out now is the newcomer's from now on.
         table.update({d: ids[d] for donors in moves.values() for d in donors if d in tracked and ids.get(d)})
         layout["thing_ids"] = table

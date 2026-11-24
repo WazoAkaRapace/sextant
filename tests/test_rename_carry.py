@@ -172,3 +172,22 @@ def test_a_name_set_while_waiting_keeps_the_old_slug_s_identity(tmp_path, monkey
     run(sextant.carry_renamed_thing_settings(hass, {"old_name", "new_name"}, {"old_name": "irk_9", "new_name": "irk_1"}))
     lay = st.get_layout(hass)
     assert lay["thing_ids"]["old_name"] == "irk_1" and lay["thing_names"]["old_name"] == "David"
+
+
+def test_settings_gone_while_waiting_move_nothing(tmp_path, monkeypatch):
+    # A restore took old_name's settings while the carry waited for the lock:
+    # nothing is left to hand over, so its identity and its pins stay put.
+    hass = _hass(tmp_path)
+    run(st.save_truth(hass, {"marks": [{"id": 1, "entity": "old_name", "floor": "F", "x": 1.0, "y": 2.0}], "next_id": 2}))
+    real = sextant.get_layout_for_edit
+    def restored(h):
+        lay = real(h)
+        for table in sextant._thing_settings_tables(lay).values():
+            table.pop("old_name", None)
+        return lay
+    monkeypatch.setattr(sextant, "get_layout_for_edit", restored)
+    run(sextant.carry_renamed_thing_settings(hass, {"old_name", "new_name"}, {"old_name": "irk_9", "new_name": "irk_1"}))
+    lay = st.get_layout(hass)
+    assert lay["thing_ids"]["old_name"] == "irk_1" and "new_name" not in lay.get("thing_names", {})
+    assert [m["entity"] for m in run(st.load_truth(hass))["marks"]] == ["old_name"]
+
