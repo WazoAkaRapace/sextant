@@ -607,9 +607,10 @@ def _mark_setup(hass, core, mark, exclude=()):
 async def _mark_guides(hass, core, mark):
     """Ids of the pins the fingerprint match leans on for this mark's samples."""
     layout, _scale, _zone_of, base_gain, refs_for_gain = _mark_setup(hass, core, mark)
+    refs = refs_for_gain(base_gain)   # here, not in the executor: the reference cache belongs to the loop
     return await hass.async_add_executor_job(
         lambda: truth_mod.influencers(
-            core._rebased_samples(layout, mark), refs_for_gain(base_gain),
+            core._rebased_samples(layout, mark), refs,
             core._tuning(layout, "fingerprint_k"), core._tuning(layout, "fingerprint_missing_m")))
 
 
@@ -663,22 +664,22 @@ async def ws_truth_mark(hass, connection, msg):
     async with TRUTH_LOCK:
         store = await load_truth(hass)
         x, y = round(float(msg["x"]), 2), round(float(msg["y"]), 2)
-        # The same thing pinned at the same point again from cycles the pin
-        # already holds (a repeated submit) refreshes that pin: copies of one
-        # pin take every one of the k match slots and add nothing.
+        # The same thing pinned at the same point from the very same cycles (a
+        # repeated submit) is that pin, untouched, not a copy of it: copies
+        # take every one of the k match slots and add nothing. New cycles make
+        # a new pin, so Undo on the Live page only ever removes what it added.
+        span = (samples[0].get("t"), samples[-1].get("t"))
         mark = next((
             m for m in store.get("marks", [])
             if (m.get("entity"), m.get("floor"), m.get("x"), m.get("y")) == (msg["entity"], msg["floor"], x, y)
-            and m.get("samples") and m["samples"][-1].get("t", 0) >= samples[0].get("t", math.inf)
+            and m.get("samples") and (m["samples"][0].get("t"), m["samples"][-1].get("t")) == span
         ), None)
-        if mark is not None:
-            mark.update(t=time.time(), samples=samples)
-        else:
+        if mark is None:
             mark = {"id": int(store.get("next_id") or 1), "entity": msg["entity"], "floor": msg["floor"], "x": x, "y": y, "t": time.time(), "samples": samples}
             store["next_id"] = mark["id"] + 1
             store.setdefault("marks", []).append(mark)
-        await save_truth(hass, store)
-        _refresh_mark_refs(core, store)
+            await save_truth(hass, store)
+            _refresh_mark_refs(core, store)
     rows = await _evaluate_mark(hass, core, mark)
     connection.send_result(msg["id"], {"mark": _mark_public(mark), "rows": rows, "current_weight": _current_weight(core, get_layout(hass), mark["entity"])})
 
@@ -752,7 +753,8 @@ async def ws_truth_health(hass, connection, msg):
             continue
         for pin_id in await _mark_guides(hass, core, mark):
             without = await _evaluate_mark(hass, core, mark, weights=(w,), gains=(1.0,), exclude=(pin_id,))
-            if without:
+            # Only the same cycles compare: one that cannot be placed without the pin would skew the mean.
+            if without and without[0]["samples"] == rows[w]["samples"]:
                 effect["without"][pin_id] = round(rows[w]["mean_m"] - without[0]["mean_m"], 2)
     connection.send_result(msg["id"], {"pins": truth_mod.pin_health(marks, effects), "checked": len(marks), **await _pin_gaps(hass, core, data)})
 
@@ -765,7 +767,9 @@ async def _pin_gaps(hass, core, layout):
         return {"gaps": [], "history_hours": 0.0}
     hist, now = core.get_position_history(hass), time.time()
     # Copies of the tracks (cheap on the loop), read in the executor. Only the
-    # things Bluetooth places: a robot rests on its dock and takes no pin.
+    # things Bluetooth places: a robot rests on its dock and takes no pin. A
+    # thing on the geometric fit alone is listed too: its first pin is how it
+    # finds out whether the fingerprint would place it better (Apply best fit).
     wins = {ent: win[0] for ent in core._truth_buffer.entities() if (win := hist.window(ent, 0.0, now))}
     scales = {f.get("name"): f.get("scale") for f in layout.get("floor", [])}
     pins = {

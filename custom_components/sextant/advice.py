@@ -241,6 +241,9 @@ def advise(layout, selftest, unplaced=None):
 # --- where a location pin would help -------------------------------------------
 
 REST_CELL_M = 2.0        # stays are pooled in cells this size: a resting thing's fix wanders about this far
+# Four grids, each shifted half a cell: a place on one grid's line sits inside a
+# cell of another, so a stay is never split in two and missed.
+_REST_GRIDS = ((0.0, 0.0), (0.5, 0.0), (0.0, 0.5), (0.5, 0.5))
 REST_MIN_HOURS = 2.0     # a place counts once a thing has spent this long there in the history kept
 REST_MAX_STEP_S = 600.0  # two points further apart than this are a silence, not a stay
 PIN_NEAR_M = 2.0         # a pin this near already covers the place (measured: a pin helps within about 2 m)
@@ -266,31 +269,29 @@ def pin_gaps(layout, tracks, pins):
     for entity, points in tracks.items():
         cells, last = {}, None
         for t, floor, x, y, gap in points:
-            if last is not None and not gap and floor == last[1] and 0 < t - last[0] <= REST_MAX_STEP_S:
+            # A stay is a step that ends where it began: the time of a trip
+            # between two places belongs to neither.
+            if (last is not None and not gap and floor == last[1] and 0 < t - last[0] <= REST_MAX_STEP_S
+                    and math.hypot(x - last[2], y - last[3]) < REST_CELL_M):
                 dt = t - last[0]
-                # The stay belongs to where it started: the point before this one.
-                acc = cells.setdefault((floor, math.floor(last[2] / REST_CELL_M), math.floor(last[3] / REST_CELL_M)), [0.0, 0.0, 0.0])
-                acc[0] += dt
-                acc[1] += last[2] * dt
-                acc[2] += last[3] * dt
+                for ox, oy in _REST_GRIDS:
+                    acc = cells.setdefault((floor, ox, oy, math.floor(last[2] / REST_CELL_M + ox), math.floor(last[3] / REST_CELL_M + oy)), [0.0, 0.0, 0.0])
+                    acc[0] += dt
+                    acc[1] += last[2] * dt
+                    acc[2] += last[3] * dt
             last = (t, floor, x, y)
-        # shortcut: a stay on a cell edge is split between the cells and may miss the
-        # threshold; pool neighbouring cells if real resting places go unreported.
-        places, found = [], 0
-        for (floor, _cx, _cy), (secs, sx, sy) in sorted(cells.items(), key=lambda kv: -kv[1][0]):
-            if secs < REST_MIN_HOURS * 3600 or found >= REST_PER_THING:
+        places = []
+        for (floor, *_cell), (secs, sx, sy) in sorted(cells.items(), key=lambda kv: -kv[1][0]):
+            if secs < REST_MIN_HOURS * 3600 or len(places) >= REST_PER_THING:
                 break
             if floor not in floors:
                 continue
             x, y = sx / secs, sy / secs
-            # A stay split over neighbouring cells is one place.
-            if any(f == floor and math.hypot(x - px, y - py) < PIN_NEAR_M for f, px, py in places):
+            near = min((math.hypot(x - px, y - py) for f, px, py in pins.get(entity) or () if f == floor), default=None)
+            # Covered by a pin, or a place already listed, seen through another grid.
+            if (near is not None and near < PIN_NEAR_M) or any(f == floor and math.hypot(x - px, y - py) < PIN_NEAR_M for f, px, py in places):
                 continue
             places.append((floor, x, y))
-            near = min((math.hypot(x - px, y - py) for f, px, py in pins.get(entity) or () if f == floor), default=None)
-            if near is not None and near < PIN_NEAR_M:
-                continue
-            found += 1
             scale = floors[floor]["scale"]
             at = Point(x * scale, y * scale)
             rows.append({

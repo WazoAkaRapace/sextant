@@ -48,17 +48,21 @@ so keep **Auto calibration** on for it to see every floor.
 A location pin ("It's actually here…" on the [Live](live.md) page) is the
 best help a place can get: fixes within about 2 m of a pin land much
 closer. A pin in the wrong place does the opposite and pulls everything
-near it the wrong way. **Check pins** looks for both.
+near it the wrong way. **Check pins** looks for both. (A pin only guides a
+thing whose position uses the fingerprint match. **Apply best fit** after
+pinning turns that on when it lands closer.)
 
 **Pins to look at again** lists a pin when:
 
 - the pins it guides land further off with it than without it (half a
-  metre or more on average). One of the two is in the wrong place; the row
-  names the neighbour it disagrees with most, so you can tell which;
+  metre or more on average, and more of them worse than better). One of
+  the two may be in the wrong place, or the two places may look alike to
+  Bluetooth; the row names the neighbour it disagrees with most, so check
+  both;
 - its own readings put the thing 6 m or more from the pin, and at least
   twice as far as your pins usually read, so the thing was probably not
   there for the whole time the pin was taken from;
-- it is a copy of another pin, made from the same readings.
+- it is a copy of another pin, made from exactly the same readings.
 
 **Forget** removes a pin for good. A pin the check lists is worth a look,
 not proof: forget it if you are not sure the thing was there, and pin the

@@ -335,12 +335,13 @@ def pin_health(marks, effects):
     mark's error is HIGHER with that pin as a reference than without it}}}.
 
     A row carries ``reasons``, any of: "duplicate" (the same thing at the
-    same point from the same cycles as an older pin, ``duplicate_of``: copies
+    same point from exactly the same cycles as an older pin, ``duplicate_of``: copies
     take every one of the k match slots and add nothing), "far" (its own
     ranges put it ``own_m`` away, FAR_RATIO times what the pins usually read) and "hurts" (the ``used_by`` pins it guides
     are ``net_m`` worse with it; ``hurts`` and ``helps`` count them, ``worst``
     is the pin it hurts most and by how much). It is evidence, never proof:
-    the pin can be right and the neighbour wrong.
+    the pin can be right and the neighbour wrong, or both right in two places
+    that look alike to Bluetooth.
     """
     by_pin = {}
     for mark_id, effect in effects.items():
@@ -352,7 +353,7 @@ def pin_health(marks, effects):
     for mark in sorted(marks, key=lambda m: m["id"]):
         reasons = []
         samples = mark.get("samples")
-        took = samples[0].get("t") if isinstance(samples, list) and samples else mark.get("t")
+        took = (samples[0].get("t"), samples[-1].get("t")) if isinstance(samples, list) and samples else mark.get("t")
         spot = (mark.get("entity"), mark.get("floor"), mark.get("x"), mark.get("y"), took)
         if spot in first:
             reasons.append("duplicate")
