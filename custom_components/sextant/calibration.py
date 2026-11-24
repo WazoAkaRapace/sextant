@@ -1007,12 +1007,16 @@ async def _auto_solve_and_apply_locked(hass, cal: dict) -> None:
             changed = True
             _LOGGER.info("Auto-calibration applied on %s: %s", floor_name, reason)
         elif action == "revert":
-            for receiver in floor.get("receivers", []):
-                receiver.pop("correction", None)
-            floor["calibration"] = {**(floor.get("calibration") or {}), "applied_at": now_iso, "auto": True, "reverted": True}
+            # Kept with the layout (and its snapshots): why they went, and what
+            # they were, so a removal can be explained and undone afterwards.
+            # Not a proxy taken out of calibration: its correction is the user's.
+            removed = {str(r.get("entity_id")): r.pop("correction") for r in floor.get("receivers", [])
+                       if "correction" in r and r.get("calibrate") is not False}
+            floor["calibration"] = {**(floor.get("calibration") or {}), "applied_at": now_iso, "auto": True, "reverted": True,
+                                    "reason": reason, "selftest": result.get("selftest"), "removed": removed}
             cal["applied"].pop(floor_name, None)
             changed = True
-            _LOGGER.info("Auto-calibration removed its corrections on %s: %s", floor_name, reason)
+            _LOGGER.warning("Auto-calibration removed its %d corrections on %s: %s", len(removed), floor_name, reason)
         else:
             _LOGGER.info("Auto-calibration held back on %s: %s", floor_name, reason)
 
