@@ -3560,11 +3560,14 @@ async def carry_renamed_thing_settings(hass, tracked, ids):
     if not isinstance(layout, dict):
         return
     # shortcut: thing_ids keeps every slug ever seen and never shrinks; prune it if a layout ever nears MAX_ITEMS_PER_LIST-sized tables.
-    known = dict(layout.get("thing_ids") or {})
-    fresh = {slug: uid for slug, uid in ids.items() if uid and known.get(slug) != uid}
+    known = {s: u for s, u in (layout.get("thing_ids") or {}).items() if isinstance(s, str) and isinstance(u, str)}
     tracked = tracked if isinstance(tracked, set) else set(tracked)
 
     seated = {ent for table in _thing_settings_tables(layout).values() for ent in table}
+    # A slug still holding another device's settings keeps that device's
+    # identity until they have moved: relabelling it would hand them to the newcomer.
+    fresh = {slug: uid for slug, uid in ids.items()
+             if uid and known.get(slug) != uid and not (slug in seated and slug in known)}
     # Matched by the identity each slug had when its settings were made (the
     # memory, before this cycle's update): a slug another device has since
     # taken still hands its settings to the device they belong to.
@@ -3577,7 +3580,7 @@ async def carry_renamed_thing_settings(hass, tracked, ids):
         if slug in seated or not ids.get(slug) or ids[slug] in shared:
             continue   # it has settings of its own, no identity, or one two slugs claim
         donors = sorted(s for s in by_uid.get(ids[slug], ()) if s != slug and s in seated and s not in taken
-                        and (s not in tracked or ids.get(s) != known.get(s)))
+                        and (s not in tracked or (ids.get(s) and ids[s] != known.get(s))))
         if donors:
             moves[slug] = donors
             taken.update(donors)
@@ -3589,6 +3592,8 @@ async def carry_renamed_thing_settings(hass, tracked, ids):
             return
         table = dict(layout.get("thing_ids") or {})
         table.update(fresh)
+        # A slug whose old settings move out this cycle is the newcomer's from now on.
+        table.update({d: ids[d] for donors in moves.values() for d in donors if d in tracked and ids.get(d)})
         layout["thing_ids"] = table
         # Read again under the lock: a name set since the check above stands.
         seated = {ent for t in _thing_settings_tables(layout).values() for ent in t}
@@ -3623,6 +3628,7 @@ async def carry_renamed_thing_settings(hass, tracked, ids):
             for m in hit:
                 m["entity"] = renamed[m["entity"]]
             if hit:
+                # shortcut: a failed write here leaves these pins on the old slug for good (the layout has already moved); add a retry if it is ever seen.
                 await save_truth(hass, store)
                 _set_truth_marks(store["marks"])
 

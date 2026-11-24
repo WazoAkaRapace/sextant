@@ -130,5 +130,30 @@ def test_two_slugs_claiming_one_device_carry_nothing(tmp_path):
 def test_two_devices_under_one_slug_have_no_identity(monkeypatch):
     from sextant import bermuda_source
     monkeypatch.setattr(bermuda_source, "async_get_tracked_devices", lambda h: {
-        "aa": {"slug": "tag", "unique_id": "u1"}, "bb": {"slug": "tag", "unique_id": "u2"}, "cc": {"slug": "p", "unique_id": "u3"}})
+        "aa": {"slug": "tag", "unique_id": "u1"}, "bb": {"slug": "tag", "unique_id": "u2"}, "cc": {"slug": "p", "unique_id": "u3"},
+        "dd": {"slug": "q", "unique_id": "u4"}, "ee": {"slug": "q"}})
     assert bermuda_source.async_get_tracked_unique_ids(None) == {"p": "u3"}
+
+
+def test_a_newcomer_on_the_old_slug_before_the_rename_shows_takes_nothing(tmp_path):
+    # Cycle 1: another device (irk_9) takes old_name; the device itself (irk_1) is not heard yet.
+    hass = _hass(tmp_path)
+    run(sextant.carry_renamed_thing_settings(hass, {"old_name"}, {"old_name": "irk_9"}))
+    assert st.get_layout(hass)["thing_ids"]["old_name"] == "irk_1", "the memory waits for the settings to move"
+    # Cycle 2: irk_1 shows up as new_name and gets its settings; old_name is irk_9's from now on.
+    run(sextant.carry_renamed_thing_settings(hass, {"old_name", "new_name"}, {"old_name": "irk_9", "new_name": "irk_1"}))
+    lay = st.get_layout(hass)
+    assert lay["thing_names"] == {"new_name": "David"} and lay["thing_ids"]["old_name"] == "irk_9"
+
+
+def test_a_slug_two_devices_share_is_never_a_donor(tmp_path):
+    # old_name (irk_1) is now shared by two devices, so Bermuda's ids leave it out.
+    hass = _hass(tmp_path)
+    run(sextant.carry_renamed_thing_settings(hass, {"old_name", "new_name"}, {"new_name": "irk_1"}))
+    assert st.get_layout(hass)["thing_names"] == {"old_name": "David"}
+
+
+def test_a_damaged_identity_memory_is_ignored(tmp_path):
+    hass = _hass(tmp_path)
+    run(st.save_layout(hass, {**st.get_layout(hass), "thing_ids": {"old_name": [], "x": "irk_3"}}))
+    run(sextant.carry_renamed_thing_settings(hass, {"new_name"}, {"new_name": "irk_1"}))
